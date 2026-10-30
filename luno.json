@@ -1,0 +1,35 @@
+{
+  "name": "QuoraToys",
+  "version": "1.1.0",
+  "description": "QuoraToys: Interactive puzzle solvers, optical comparators, and answer solution studio for Quora challenges",
+  "type": "luno-web-app",
+  "mainClass": "QuoraToys",
+  "entrypoint": {
+    "file": "js/QuoraToys.js",
+    "class": "QuoraToys",
+    "method": "run"
+  },
+  "main": [
+    "js/QuoraToys.js"
+  ],
+  "library": [
+    "DomBasics.js",
+    "UITools.js"
+  ],
+  "styles": [
+    "css/basicsWithDialogBox.css"
+  ],
+  "processedCountSinceCheckpoint": 5,
+  "changedMethods": {
+    "QuoraToys/js/QuoraToys.js": "2026-10-30T06:45:00.000Z",
+    "QuoraToys/css/basicsWithDialogBox.css": "2026-10-30T06:45:00.000Z",
+    "QuoraToys/luno.json": "2026-10-30T06:45:00.000Z",
+    "css/basicsWithDialogBox.css": "2026-10-30T06:43:40.918Z",
+    "index.html": "2026-10-30T06:43:40.918Z",
+    "index_legacy_recursi.html": "2026-10-30T06:43:40.918Z",
+    "js/QuoraToys.js": "2026-10-30T06:43:40.918Z",
+    "luno.json": "2026-10-30T06:43:40.918Z"
+  },
+  "lastCheckpointTime": "2026-10-30T06:45:00.000Z",
+  "pendingCheckpointDescription": "Single circle diff selection and comprehensive Quora onboarding documentation"
+}
