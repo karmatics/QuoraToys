@@ -712,7 +712,7 @@ document.addEventListener('selectionchange', () => {
   if (document.activeElement === editor) handleCaretActivity();
 });
 
-// ── Init ───────────────────────────────────────────────────
+// ── Init ────���──────────────────────────────────────────────
 setupRecognition();
 setupPopupUI();
 updateUI();
