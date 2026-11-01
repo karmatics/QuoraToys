@@ -36,47 +36,64 @@ function performInjection(tabId, className) {
   const files = classBundles[className];
   if (!files) return Promise.reject(new Error('Unknown class: ' + className));
 
-  return chrome.scripting.executeScript({
-    target: { tabId },
-    files: files,
-    world: 'MAIN'
-  }).then(() => {
+  // Ensure styles are injected first
+  const cssPromises = [];
+  if (className === 'QuoraToys') {
+    cssPromises.push(
+      chrome.scripting.insertCSS({
+        target: { tabId },
+        files: ['css/quoraToys.css']
+      }).catch(() => {})
+    );
+  }
+
+  return Promise.all(cssPromises).then(() => {
     return chrome.scripting.executeScript({
       target: { tabId },
-      world: 'MAIN',
-      func: (cls, dictationUrl) => {
-        if (cls === 'QuoraToys') {
-          if (typeof QuoraToys !== 'undefined') {
-            QuoraToys.launchBookmarklet();
+      files: files,
+      world: 'MAIN'
+    }).then(() => {
+      return chrome.scripting.executeScript({
+        target: { tabId },
+        world: 'MAIN',
+        func: (cls, dictationUrl) => {
+          if (cls === 'QuoraToys') {
+            if (typeof QuoraToys !== 'undefined') {
+              if (typeof QuoraToys.launchInSitu === 'function') {
+                QuoraToys.launchInSitu();
+              } else if (typeof QuoraToys.launchBookmarklet === 'function') {
+                QuoraToys.launchBookmarklet();
+              }
+            }
+            return;
           }
-          return;
-        }
-        if (cls === 'Aardvark') {
-          if (!window.aardvarkInstance && typeof Aardvark !== 'undefined') {
-            window.aardvarkInstance = new Aardvark();
-            window.aardvarkInstance.init();
-          } else if (window.aardvarkInstance) {
-            window.aardvarkInstance.wakeUp();
+          if (cls === 'Aardvark') {
+            if (!window.aardvarkInstance && typeof Aardvark !== 'undefined') {
+              window.aardvarkInstance = new Aardvark();
+              window.aardvarkInstance.init();
+            } else if (window.aardvarkInstance) {
+              window.aardvarkInstance.wakeUp();
+            }
+            return;
           }
-          return;
-        }
-        if (cls === 'DrawingTool') {
-          if (window.drawingToolInstance) {
-            window.drawingToolInstance.quit();
-            window.drawingToolInstance = null;
-          } else if (typeof DrawingTool !== 'undefined') {
-            window.drawingToolInstance = new DrawingTool();
+          if (cls === 'DrawingTool') {
+            if (window.drawingToolInstance) {
+              window.drawingToolInstance.quit();
+              window.drawingToolInstance = null;
+            } else if (typeof DrawingTool !== 'undefined') {
+              window.drawingToolInstance = new DrawingTool();
+            }
+            return;
           }
-          return;
-        }
-        if (cls === 'Dictation') {
-          if (typeof AardvarkDictation !== 'undefined') {
-            AardvarkDictation.launchAt(dictationUrl);
+          if (cls === 'Dictation') {
+            if (typeof AardvarkDictation !== 'undefined') {
+              AardvarkDictation.launchAt(dictationUrl);
+            }
+            return;
           }
-          return;
-        }
-      },
-      args: [className, chrome.runtime.getURL('dictation.html')]
+        },
+        args: [className, chrome.runtime.getURL('dictation.html')]
+      });
     });
   });
 }
@@ -95,21 +112,21 @@ chrome.runtime.onInstalled.addListener(() => {
       contexts: ["all"]
     });
     chrome.contextMenus.create({
-      id: "qt-aardvark",
+      id: "qt-draw",
       parentId: "quoratoys-parent",
-      title: "🔍 Aardvark (DOM Tool)",
+      title: "✏️ Draw, Arrows & Text Balloons",
       contexts: ["all"]
     });
     chrome.contextMenus.create({
-      id: "qt-draw",
+      id: "qt-aardvark",
       parentId: "quoratoys-parent",
-      title: "✏️ Draw / Annotate",
+      title: "🔍 Aardvark DOM Inspector",
       contexts: ["all"]
     });
     chrome.contextMenus.create({
       id: "qt-dictate",
       parentId: "quoratoys-parent",
-      title: "🎙️ Dictation",
+      title: "🎙️ Voice Dictation",
       contexts: ["all"]
     });
   });
@@ -118,8 +135,8 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (!tab || !tab.id) return;
   if (info.menuItemId === "qt-spot-diff") performInjection(tab.id, "QuoraToys");
-  if (info.menuItemId === "qt-aardvark") performInjection(tab.id, "Aardvark");
   if (info.menuItemId === "qt-draw") performInjection(tab.id, "DrawingTool");
+  if (info.menuItemId === "qt-aardvark") performInjection(tab.id, "Aardvark");
   if (info.menuItemId === "qt-dictate") performInjection(tab.id, "Dictation");
 });
 

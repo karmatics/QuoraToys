@@ -43,7 +43,7 @@ class QuoraToys {
     this.stripeRafId = null;
 
     // Difference Circles State (Z-Order is array order)
-    this.diffCircles = []; // Array of { id, cropX, cropY, radius, baseOriginX, baseOriginY, dragX, dragY, color }
+    this.diffCircles = [];
     this.selectedDiffId = null;
     this.isCircleDiffMode = false;
     this.circleDrawSurface = null;
@@ -60,6 +60,10 @@ class QuoraToys {
     this.solutionConnectorStyle = 'tangents';
     this.solutionBlendAnchor = true;
 
+    // Background Canvas Option: 'transparent' | 'gradient' | 'color'
+    this.solutionBgMode = 'transparent';
+    this.solutionBgColor = '#090d16';
+
     this._buildWelcomeScreen();
     this._initGlobalListeners();
   }
@@ -70,7 +74,6 @@ class QuoraToys {
     const welcome = document.createElement('div');
     welcome.className = 'fdr-welcome-screen';
 
-    // Branding Banner
     const brand = document.createElement('div');
     brand.className = 'fdr-brand-banner';
     brand.innerHTML = `
@@ -78,10 +81,8 @@ class QuoraToys {
       <div class="fdr-brand-title">QuoraToys <span class="fdr-brand-badge">Tool #1: Spot-The-Difference</span></div>
     `;
 
-    // Dropzone Card
     const dropzone = document.createElement('div');
     dropzone.className = 'fdr-dropzone';
-
     dropzone.innerHTML = `
       <div class="fdr-dropzone-icon">🧩</div>
       <div class="fdr-dropzone-title">Spot-the-Difference Comparator & Solution Studio</div>
@@ -96,7 +97,6 @@ class QuoraToys {
       </div>
     `;
 
-    // Built-in Documentation & Why-To-Use Card
     const docs = document.createElement('div');
     docs.className = 'fdr-docs-card';
     docs.innerHTML = `
@@ -104,39 +104,9 @@ class QuoraToys {
         <span>💡 What is this and why use it?</span>
       </div>
       <div class="fdr-docs-why">
-        <b>Why use this tool?</b> Quora is full of visual puzzle questions ("Can you find the 5 differences in this picture?"). 
-        Staring at side-by-side images is slow, eye-straining, and answering with rough freehand scribbles rarely gets upvoted.
-        <br><br>
-        <b>QuoraToys</b> lets you superimpose the two halves of the puzzle with pixel-perfect alignment. 
-        Using <b>Optical Flashing</b> or <b>Scrolling Stripes</b>, any alteration instantly pulses or vibrates on your screen. 
-        Then, our <b>Solution Studio</b> generates a broadcast-quality solution graphic comparing Image A & Image B side-by-side, ready to paste straight into your Quora answer!
-      </div>
-      <div class="fdr-docs-steps">
-        <div class="fdr-doc-step">
-          <div class="fdr-doc-step-num">Step 1</div>
-          <div class="fdr-doc-step-title">Load Image</div>
-          <div class="fdr-doc-step-desc">Ctrl+V directly from Quora or drop any dual puzzle image.</div>
-        </div>
-        <div class="fdr-doc-step">
-          <div class="fdr-doc-step-num">Step 2</div>
-          <div class="fdr-doc-step-title">Crop Image A</div>
-          <div class="fdr-doc-step-desc">Drag a box around one puzzle half to spawn the Overlay window.</div>
-        </div>
-        <div class="fdr-doc-step">
-          <div class="fdr-doc-step-num">Step 3</div>
-          <div class="fdr-doc-step-title">Align & Spot</div>
-          <div class="fdr-doc-step-desc">Drag or nudge overlay onto Image B. Use 50% opacity, ⚡ Flash, or ▤ Stripes.</div>
-        </div>
-        <div class="fdr-doc-step">
-          <div class="fdr-doc-step-num">Step 4</div>
-          <div class="fdr-doc-step-title">Circle Diffs</div>
-          <div class="fdr-doc-step-desc">Click "⭕ Circle Diff" to encircle each anomaly with a single ring.</div>
-        </div>
-        <div class="fdr-doc-step">
-          <div class="fdr-doc-step-num">Step 5</div>
-          <div class="fdr-doc-step-title">Export Answer</div>
-          <div class="fdr-doc-step-desc">Open Solution Studio, customize callout layout, and click "📋 Copy Image" for Quora.</div>
-        </div>
+        <b>Why use this tool?</b> Quora puzzle questions rely on human saccadic memory limits when comparing side-by-side images.
+        QuoraToys allows you to superimpose one half directly on the other with pixel-perfect alignment. 
+        Using <b>50% Alpha</b>, <b>Optical Flashing</b>, or <b>Scrolling Stripes</b>, any alteration instantly reveals itself.
       </div>
     `;
 
@@ -166,7 +136,6 @@ class QuoraToys {
     ['dragenter', 'dragover'].forEach(name => {
       dropzone.addEventListener(name, (e) => {
         e.preventDefault();
-        e.stopPropagation();
         dropzone.classList.add('drag-active');
       });
     });
@@ -174,7 +143,6 @@ class QuoraToys {
     ['dragleave', 'drop'].forEach(name => {
       dropzone.addEventListener(name, (e) => {
         e.preventDefault();
-        e.stopPropagation();
         dropzone.classList.remove('drag-active');
       });
     });
@@ -184,10 +152,7 @@ class QuoraToys {
       this.handleDrop(e);
     });
 
-    welcome.appendChild(brand);
-    welcome.appendChild(dropzone);
-    welcome.appendChild(docs);
-    welcome.appendChild(fileInput);
+    welcome.append(brand, dropzone, docs, fileInput);
     this.targetElement.appendChild(welcome);
     this.welcomeElement = welcome;
   }
@@ -224,12 +189,9 @@ class QuoraToys {
           e.preventDefault();
         }
       }
-
       if (this.solutionDialog && this.selectedDiffId) {
         if (e.key === ']' && !e.shiftKey) { this.moveSelectedDiffLayer(1); e.preventDefault(); }
         else if (e.key === '[' && !e.shiftKey) { this.moveSelectedDiffLayer(-1); e.preventDefault(); }
-        else if (e.key === ']' && e.shiftKey) { this.moveSelectedDiffLayer(999); e.preventDefault(); }
-        else if (e.key === '[' && e.shiftKey) { this.moveSelectedDiffLayer(-999); e.preventDefault(); }
         else if (e.key === 'Delete' || e.key === 'Backspace') { this.deleteSelectedDiff(); e.preventDefault(); }
       }
     };
@@ -241,25 +203,9 @@ class QuoraToys {
       this.loadFile(e.dataTransfer.files[0]);
       return;
     }
-
     const uri = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('URL');
     if (uri && (uri.startsWith('http') || uri.startsWith('data:image/'))) {
       this.loadImageFromUrl(uri);
-      return;
-    }
-
-    const html = e.dataTransfer.getData('text/html');
-    if (html) {
-      const match = html.match(/<img[^>]+src=["']([^"']+)["']/i);
-      if (match && match[1]) {
-        this.loadImageFromUrl(match[1]);
-        return;
-      }
-    }
-
-    const text = e.dataTransfer.getData('text/plain');
-    if (text && (text.startsWith('http') || text.startsWith('data:image/'))) {
-      this.loadImageFromUrl(text.trim());
     }
   }
 
@@ -277,16 +223,9 @@ class QuoraToys {
     img.crossOrigin = 'anonymous';
 
     img.onload = async () => {
-      if (typeof img.decode === 'function') {
-        try { await img.decode(); } catch (_) {}
-      }
-
       const w = img.naturalWidth || img.width;
       const h = img.naturalHeight || img.height;
-      if (!w || !h) {
-        alert('Image loaded with 0 natural dimensions. Please try another image.');
-        return;
-      }
+      if (!w || !h) return;
 
       this.sourceImage = img;
       this.imageSourceUrl = url;
@@ -302,11 +241,6 @@ class QuoraToys {
 
       this.openMainWindow();
     };
-
-    img.onerror = () => {
-      alert('Could not load image from the provided source. Please copy the image directly and paste with Ctrl+V.');
-    };
-
     img.src = url;
   }
 
@@ -323,40 +257,13 @@ class QuoraToys {
       ctx.fillStyle = skyGrad;
       ctx.fillRect(offsetX, 0, 400, 260);
 
-      // Sun (Difference 1: size)
+      // Sun
       ctx.fillStyle = '#facc15';
       ctx.beginPath();
       ctx.arc(offsetX + 330, 60, hasDifferences ? 36 : 28, 0, Math.PI * 2);
       ctx.fill();
 
-      // Clouds
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(offsetX + 80, 70, 25, 0, Math.PI * 2);
-      ctx.arc(offsetX + 110, 60, 32, 0, Math.PI * 2);
-      ctx.arc(offsetX + 140, 70, 22, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Birds (Difference 2: missing in B)
-      if (!hasDifferences) {
-        ctx.beginPath();
-        ctx.arc(offsetX + 220, 90, 16, 0, Math.PI * 2);
-        ctx.arc(offsetX + 240, 85, 20, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      // Green Hills
-      ctx.fillStyle = '#22c55e';
-      ctx.beginPath();
-      ctx.arc(offsetX + 120, 380, 200, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = '#16a34a';
-      ctx.beginPath();
-      ctx.arc(offsetX + 310, 360, 180, 0, Math.PI * 2);
-      ctx.fill();
-
-      // House Body (Difference 3: Color)
+      // House
       ctx.fillStyle = hasDifferences ? '#f97316' : '#ef4444';
       ctx.fillRect(offsetX + 140, 210, 110, 90);
 
@@ -366,25 +273,7 @@ class QuoraToys {
       ctx.moveTo(offsetX + 130, 210);
       ctx.lineTo(offsetX + 195, 140);
       ctx.lineTo(offsetX + 260, 210);
-      ctx.closePath();
       ctx.fill();
-
-      // Door
-      ctx.fillStyle = '#451a03';
-      ctx.fillRect(offsetX + 180, 245, 30, 55);
-
-      // Window (Difference 4: Color)
-      ctx.fillStyle = hasDifferences ? '#fef08a' : '#67e8f9';
-      ctx.fillRect(offsetX + 150, 230, 22, 22);
-
-      // Chimney Smoke (Difference 5: only in B)
-      if (hasDifferences) {
-        ctx.fillStyle = 'rgba(255,255,255,0.7)';
-        ctx.beginPath();
-        ctx.arc(offsetX + 230, 120, 10, 0, Math.PI * 2);
-        ctx.arc(offsetX + 235, 95, 14, 0, Math.PI * 2);
-        ctx.fill();
-      }
 
       ctx.fillStyle = '#0f172a';
       ctx.font = 'bold 14px monospace';
@@ -401,7 +290,7 @@ class QuoraToys {
     ctx.lineTo(400, 400);
     ctx.stroke();
 
-    this.loadImageFromUrl(canvas.toDataURL('image/png'), 'Sample Spot-the-Difference (5 Differences)');
+    this.loadImageFromUrl(canvas.toDataURL('image/png'), 'Sample Spot-the-Difference');
   }
 
   openDocumentationDialog() {
@@ -413,43 +302,25 @@ class QuoraToys {
     const content = document.createElement('div');
     content.className = 'fdr-doc-modal-body';
     content.innerHTML = `
-      <h4>✨ Welcome to QuoraToys</h4>
-      <p>
-        <b>QuoraToys</b> is an evolving suite of analytical toys built to solve, annotate, and enjoy Quora challenges.
-        Its premier module is the <b>Spot-the-Difference Comparator & Solution Studio</b>.
-      </p>
-
-      <h4>🎯 Purpose & Advantage</h4>
-      <p>
-        Spot-the-difference puzzles on Quora rely on human cognitive blindness when scanning between two side-by-side images.
-        QuoraToys eliminates the guesswork by superimposing one half directly on top of the other:
-      </p>
+      <h4>✨ Spot-The-Difference Comparator</h4>
+      <p>Superimpose two halves of a visual puzzle to instantly expose modifications with zero eye strain.</p>
       <ul>
-        <li><b>50% Alpha Opacity:</b> Overlapping features cancel each other out, making mismatches look ghosted or doubled.</li>
-        <li><b>⚡ Flashing Mode:</b> Toggles the overlay image on and off rapidly. Any difference creates an unmistakable focal "blinking" motion reflex.</li>
-        <li><b>▤ Scrolling Stripes:</b> Waves of zebra-stripes sweep across the image, immediately revealing misalignments and altered shapes.</li>
-      </ul>
-
-      <h4>✂️ Step-by-Step Workflow</h4>
-      <ul>
-        <li><b>1. Drag / Crop:</b> Click <code>✂ Crop Region</code> and draw a box around one puzzle half (e.g., Puzzle A). This pops out the draggable <i>Overlay</i> dialog.</li>
-        <li><b>2. Superimpose:</b> Drag the Overlay window over the other puzzle image. Fine-tune with the on-screen arrow keypad or keyboard arrow keys (hold Shift for 10px).</li>
-        <li><b>3. Mark Differences:</b> Click <code>⭕ Circle Diff</code>. Click and drag over each difference to create a <b>single circular marker</b> around the affected feature.</li>
-        <li><b>4. Studio & Presentation:</b> Open <code>🎨 Solution Studio</code>. It automatically creates side-by-side callout circles comparing Image A vs Image B. Drag the callouts in any direction—they automatically rotate perpendicular to your drag vector.</li>
-        <li><b>5. Share to Quora:</b> Click <code>📋 Copy Image</code> and paste it directly into your Quora reply!</li>
+        <li><b>50% Alpha Opacity:</b> Mismatched pixels look doubled or ghosted.</li>
+        <li><b>⚡ Flashing Mode:</b> Toggles overlay at 600ms cycles, triggering the visual motion reflex.</li>
+        <li><b>▤ Scrolling Stripes:</b> Sweeping zebra waves make hidden alterations flutter.</li>
       </ul>
     `;
 
-    this.helpDialog = UITools.makeDialog({
-      title: 'QuoraToys Guide & Documentation',
+    const dialogMaker = (typeof UITools !== 'undefined' && typeof UITools.makeDialog === 'function')
+      ? UITools.makeDialog
+      : (opts => new DialogBox(opts));
+
+    this.helpDialog = dialogMaker({
+      title: 'QuoraToys Guide',
       contentElement: content,
-      size: [560, 480],
-      position: [Math.max(20, (window.innerWidth - 560) / 2), Math.max(20, (window.innerHeight - 480) / 2)],
-      noPadding: false,
-      allowMaximize: true,
-      onClose: () => {
-        this.helpDialog = null;
-      }
+      size: [520, 420],
+      position: [80, 80],
+      onClose: () => { this.helpDialog = null; }
     });
   }
 
@@ -465,20 +336,20 @@ class QuoraToys {
 
     const availW = Math.max(300, (window.innerWidth || 1024) - 60);
     const availH = Math.max(200, (window.innerHeight || 768) - 120);
-
     const overheadH = 75;
-    if (this.naturalWidth <= availW && (this.naturalHeight + overheadH) <= availH) {
-      this.zoom = 1.0;
-    } else {
-      const scaleX = availW / this.naturalWidth;
-      const scaleY = (availH - overheadH) / this.naturalHeight;
-      this.zoom = Math.max(0.2, Math.min(1.0, Math.min(scaleX, scaleY)));
-    }
+
+    const scaleX = availW / this.naturalWidth;
+    const scaleY = (availH - overheadH) / this.naturalHeight;
+    this.zoom = Math.max(0.2, Math.min(1.0, Math.min(scaleX, scaleY)));
 
     const initialW = Math.round(this.naturalWidth * this.zoom);
     const initialH = Math.round(this.naturalHeight * this.zoom) + overheadH;
 
-    this.mainDialog = UITools.makeDialog({
+    const dialogMaker = (typeof UITools !== 'undefined' && typeof UITools.makeDialog === 'function')
+      ? UITools.makeDialog
+      : (opts => new DialogBox(opts));
+
+    this.mainDialog = dialogMaker({
       title: `${this.currentTitle || 'Source Image'} (${this.naturalWidth}×${this.naturalHeight})`,
       size: [initialW, initialH],
       position: [30, 40],
@@ -486,21 +357,9 @@ class QuoraToys {
       allowTransparency: false,
       allowMaximize: true,
       onClose: () => {
-        if (this.overlayDialog) {
-          this.overlayDialog.close();
-          this.overlayDialog = null;
-        }
-        if (this.solutionDialog) {
-          this.solutionDialog.close();
-          this.solutionDialog = null;
-        }
-        if (this.helpDialog) {
-          this.helpDialog.close();
-          this.helpDialog = null;
-        }
-        if (this.welcomeElement) {
-          this.welcomeElement.style.display = 'flex';
-        }
+        if (this.overlayDialog) this.overlayDialog.close();
+        if (this.solutionDialog) this.solutionDialog.close();
+        if (this.welcomeElement) this.welcomeElement.style.display = 'flex';
       }
     });
 
@@ -510,42 +369,8 @@ class QuoraToys {
     content.style.width = '100%';
     content.style.height = '100%';
 
-    // Top Toolbar
     const toolbar = document.createElement('div');
     toolbar.className = 'fdr-window-toolbar';
-
-    const zoomGroup = document.createElement('div');
-    zoomGroup.className = 'fdr-toolbar-group';
-
-    const btn50 = document.createElement('button');
-    btn50.className = 'fdr-btn fdr-btn-sm';
-    btn50.textContent = '50%';
-    btn50.onclick = () => this.setZoom(0.5);
-
-    const btn100 = document.createElement('button');
-    btn100.className = 'fdr-btn fdr-btn-sm';
-    btn100.textContent = '100%';
-    btn100.onclick = () => this.setZoom(1.0);
-
-    const btn200 = document.createElement('button');
-    btn200.className = 'fdr-btn fdr-btn-sm';
-    btn200.textContent = '200%';
-    btn200.onclick = () => this.setZoom(2.0);
-
-    const btnFit = document.createElement('button');
-    btnFit.className = 'fdr-btn fdr-btn-sm';
-    btnFit.textContent = 'Fit';
-    btnFit.onclick = () => this.fitToWindow();
-
-    this.zoomLabel = document.createElement('span');
-    this.zoomLabel.className = 'fdr-zoom-label';
-    this.zoomLabel.textContent = `${Math.round(this.zoom * 100)}%`;
-
-    this.metaLabel = document.createElement('span');
-    this.metaLabel.className = 'fdr-meta-label';
-    this.metaLabel.textContent = `${this.naturalWidth}×${this.naturalHeight}`;
-
-    zoomGroup.append(btn50, btn100, btn200, btnFit, this.zoomLabel, this.metaLabel);
 
     const actionGroup = document.createElement('div');
     actionGroup.className = 'fdr-toolbar-group';
@@ -553,7 +378,6 @@ class QuoraToys {
     this.cropBtn = document.createElement('button');
     this.cropBtn.className = 'fdr-btn fdr-btn-sm fdr-btn-accent';
     this.cropBtn.innerHTML = '✂ Crop Region';
-    this.cropBtn.title = 'Drag a rectangle over one puzzle image to pop out the overlay comparator';
     this.cropBtn.onclick = () => this.toggleCropMode();
 
     const solBtn = document.createElement('button');
@@ -561,24 +385,10 @@ class QuoraToys {
     solBtn.innerHTML = '🎨 Solution Studio';
     solBtn.onclick = () => this.openSolutionStudio();
 
-    const helpBtn = document.createElement('button');
-    helpBtn.className = 'fdr-btn fdr-btn-sm';
-    helpBtn.innerHTML = '📖 Help';
-    helpBtn.onclick = () => this.openDocumentationDialog();
-
-    const newBtn = document.createElement('button');
-    newBtn.className = 'fdr-btn fdr-btn-sm';
-    newBtn.textContent = '📁 New';
-    newBtn.onclick = () => {
-      this.mainDialog.close();
-      if (this.welcomeElement) this.welcomeElement.style.display = 'flex';
-    };
-
-    actionGroup.append(this.cropBtn, solBtn, helpBtn, newBtn);
-    toolbar.append(zoomGroup, actionGroup);
+    actionGroup.append(this.cropBtn, solBtn);
+    toolbar.append(actionGroup);
     content.appendChild(toolbar);
 
-    // Image Viewport
     this.mainViewport = document.createElement('div');
     this.mainViewport.className = 'fdr-image-viewport';
 
@@ -588,7 +398,6 @@ class QuoraToys {
     this.mainImgElement.style.width = `${Math.round(this.naturalWidth * this.zoom)}px`;
     this.mainImgElement.style.height = `${Math.round(this.naturalHeight * this.zoom)}px`;
 
-    // Crop Surface
     this.cropSurface = document.createElement('div');
     this.cropSurface.className = 'fdr-crop-surface';
     this.cropSurface.style.display = 'none';
@@ -602,40 +411,10 @@ class QuoraToys {
 
     this._bindCropEvents();
 
-    this.mainViewport.appendChild(this.mainImgElement);
-    this.mainViewport.appendChild(this.cropSurface);
-    this.mainViewport.appendChild(this.selectionBox);
+    this.mainViewport.append(this.mainImgElement, this.cropSurface, this.selectionBox);
     content.appendChild(this.mainViewport);
 
     this.setCropMode(true);
-  }
-
-  setZoom(newZoom) {
-    this.zoom = Math.max(0.1, Math.min(5.0, newZoom));
-    const dispW = Math.round(this.naturalWidth * this.zoom);
-    const dispH = Math.round(this.naturalHeight * this.zoom);
-
-    if (this.mainImgElement) {
-      this.mainImgElement.style.width = `${dispW}px`;
-      this.mainImgElement.style.height = `${dispH}px`;
-    }
-
-    if (this.zoomLabel) {
-      this.zoomLabel.textContent = `${Math.round(this.zoom * 100)}%`;
-    }
-
-    this.updateOverlayGeometry();
-    this.renderDiffMarkers();
-  }
-
-  fitToWindow() {
-    if (!this.mainViewport) return;
-    const vpW = Math.max(100, this.mainViewport.clientWidth - 20);
-    const vpH = Math.max(100, this.mainViewport.clientHeight - 20);
-
-    const scaleX = vpW / this.naturalWidth;
-    const scaleY = vpH / this.naturalHeight;
-    this.setZoom(Math.min(scaleX, scaleY));
   }
 
   setCropMode(enable) {
@@ -644,12 +423,7 @@ class QuoraToys {
       this.cropBtn.classList.toggle('active', enable);
       this.cropBtn.textContent = enable ? '✕ Cancel Crop' : '✂ Crop Region';
     }
-    if (this.cropSurface) {
-      this.cropSurface.style.display = enable ? 'block' : 'none';
-    }
-    if (this.selectionBox) {
-      this.selectionBox.style.display = 'none';
-    }
+    if (this.cropSurface) this.cropSurface.style.display = enable ? 'block' : 'none';
   }
 
   toggleCropMode() {
@@ -659,35 +433,23 @@ class QuoraToys {
   _bindCropEvents() {
     let startX = 0, startY = 0;
     let isDrawing = false;
-
     const getImgBounds = () => this.mainImgElement.getBoundingClientRect();
 
-    const onPointerDown = (e) => {
+    const onDown = (e) => {
       if (!this.isCropMode) return;
-      e.preventDefault();
-      e.stopPropagation();
-
       const imgRect = getImgBounds();
       startX = Math.max(0, Math.min(imgRect.width, e.clientX - imgRect.left));
       startY = Math.max(0, Math.min(imgRect.height, e.clientY - imgRect.top));
-
       isDrawing = true;
       this.selectionBox.style.display = 'block';
-      this.selectionBox.style.left = `${imgRect.left + startX}px`;
-      this.selectionBox.style.top = `${imgRect.top + startY}px`;
-      this.selectionBox.style.width = '0px';
-      this.selectionBox.style.height = '0px';
       this.selectionBox.style.position = 'fixed';
     };
 
-    const onPointerMove = (e) => {
+    const onMove = (e) => {
       if (!isDrawing) return;
-      e.preventDefault();
-
       const imgRect = getImgBounds();
       const curX = Math.max(0, Math.min(imgRect.width, e.clientX - imgRect.left));
       const curY = Math.max(0, Math.min(imgRect.height, e.clientY - imgRect.top));
-
       const x = Math.min(startX, curX);
       const y = Math.min(startY, curY);
       const w = Math.abs(curX - startX);
@@ -697,13 +459,10 @@ class QuoraToys {
       this.selectionBox.style.top = `${imgRect.top + y}px`;
       this.selectionBox.style.width = `${w}px`;
       this.selectionBox.style.height = `${h}px`;
-
-      const naturalW = Math.round(w / this.zoom);
-      const naturalH = Math.round(h / this.zoom);
-      this.selectionTooltip.textContent = `${naturalW} × ${naturalH} px`;
+      this.selectionTooltip.textContent = `${Math.round(w / this.zoom)} × ${Math.round(h / this.zoom)} px`;
     };
 
-    const onPointerUp = (e) => {
+    const onUp = (e) => {
       if (!isDrawing) return;
       isDrawing = false;
       this.selectionBox.style.display = 'none';
@@ -711,96 +470,59 @@ class QuoraToys {
       const imgRect = getImgBounds();
       const endX = Math.max(0, Math.min(imgRect.width, e.clientX - imgRect.left));
       const endY = Math.max(0, Math.min(imgRect.height, e.clientY - imgRect.top));
-
-      const dispX = Math.min(startX, endX);
-      const dispY = Math.min(startY, endY);
       const dispW = Math.abs(endX - startX);
       const dispH = Math.abs(endY - startY);
 
       if (dispW > 15 && dispH > 15) {
-        const natX = Math.round(dispX / this.zoom);
-        const natY = Math.round(dispY / this.zoom);
-        const natW = Math.round(dispW / this.zoom);
-        const natH = Math.round(dispH / this.zoom);
-
         this.openCropOverlayWindow({
-          x: Math.max(0, Math.min(this.naturalWidth - 10, natX)),
-          y: Math.max(0, Math.min(this.naturalHeight - 10, natY)),
-          width: Math.min(this.naturalWidth - natX, natW),
-          height: Math.min(this.naturalHeight - natY, natH)
+          x: Math.round(Math.min(startX, endX) / this.zoom),
+          y: Math.round(Math.min(startY, endY) / this.zoom),
+          width: Math.round(dispW / this.zoom),
+          height: Math.round(dispH / this.zoom)
         });
-
         this.setCropMode(false);
       }
     };
 
-    this.cropSurface.addEventListener('mousedown', onPointerDown);
-    window.addEventListener('mousemove', onPointerMove);
-    window.addEventListener('mouseup', onPointerUp);
-
-    this.cropSurface.addEventListener('touchstart', (e) => {
-      if (e.touches[0]) onPointerDown(e.touches[0]);
-    }, { passive: false });
-    window.addEventListener('touchmove', (e) => {
-      if (e.touches[0]) onPointerMove(e.touches[0]);
-    }, { passive: false });
-    window.addEventListener('touchend', (e) => {
-      if (e.changedTouches[0]) onPointerUp(e.changedTouches[0]);
-    });
+    this.cropSurface.addEventListener('mousedown', onDown);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
   }
 
   openCropOverlayWindow(cropRect) {
     this.activeCrop = cropRect;
-
-    if (this.overlayDialog) {
-      this.overlayDialog.close();
-      this.overlayDialog = null;
-    }
+    if (this.overlayDialog) this.overlayDialog.close();
 
     const dispCropW = Math.round(cropRect.width * this.zoom);
     const dispCropH = Math.round(cropRect.height * this.zoom);
-    const dlgW = Math.max(340, dispCropW + 4);
-    const dlgH = dispCropH + 32 + 46;
 
-    const mainRect = this.mainDialog ? this.mainDialog.element.getBoundingClientRect() : { left: 40, top: 40 };
-    const posX = Math.min(window.innerWidth - dlgW - 20, Math.max(10, mainRect.left + 50));
-    const posY = Math.min(window.innerHeight - dlgH - 20, Math.max(10, mainRect.top + 50));
+    const dialogMaker = (typeof UITools !== 'undefined' && typeof UITools.makeDialog === 'function')
+      ? UITools.makeDialog
+      : (opts => new DialogBox(opts));
 
-    this.overlayDialog = UITools.makeDialog({
+    this.overlayDialog = dialogMaker({
       title: `Overlay [${cropRect.width}×${cropRect.height}]`,
-      size: [dlgW, dlgH],
-      position: [posX, posY],
+      size: [Math.max(340, dispCropW + 4), dispCropH + 32 + 46],
+      position: [80, 80],
       contentTransparent: true,
       noPadding: true,
-      allowTransparency: false,
-      allowMinimize: true,
-      allowMaximize: false,
       onClose: () => {
         this.stopFlashing();
         this.stopStripes();
-        this.setCircleDiffMode(false);
         this.overlayDialog = null;
       }
     });
 
-    this.overlayDialog.element.classList.add('fdr-overlay-dialog');
-
     const content = this.overlayDialog.contentElement;
-    content.style.display = 'flex';
-    content.style.flexDirection = 'column';
-    content.style.background = 'transparent';
-
     this.overlayViewport = document.createElement('div');
     this.overlayViewport.className = 'fdr-overlay-viewport';
     this.overlayViewport.style.width = `${dispCropW}px`;
     this.overlayViewport.style.height = `${dispCropH}px`;
-    this.overlayViewport.style.background = 'transparent';
 
     this.overlayClippedImg = document.createElement('img');
     this.overlayClippedImg.className = 'fdr-overlay-clipped-img';
     this.overlayClippedImg.src = this.imageSourceUrl;
-    this.currentOpacity = 0.5;
-    this.overlayClippedImg.style.opacity = '0.5';
+    this.overlayClippedImg.style.opacity = `${this.currentOpacity}`;
 
     this.overlaySvgLayer = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     this.overlaySvgLayer.setAttribute('class', 'fdr-diff-svg-layer');
@@ -811,7 +533,7 @@ class QuoraToys {
     this.overlayViewport.append(this.overlayClippedImg, this.overlaySvgLayer, this.circleDrawSurface);
     content.appendChild(this.overlayViewport);
 
-    // Overlay Bottom Controls
+    // Overlay Bottom Toolbar with Flash, Stripes, Opacity & Nudge
     const toolbar = document.createElement('div');
     toolbar.className = 'fdr-overlay-toolbar';
 
@@ -833,47 +555,17 @@ class QuoraToys {
     opacitySlider.type = 'range';
     opacitySlider.min = '0';
     opacitySlider.max = '100';
-    opacitySlider.value = '50';
+    opacitySlider.value = String(Math.round(this.currentOpacity * 100));
 
     const opacityLabel = document.createElement('span');
     opacityLabel.className = 'fdr-opacity-lbl';
-    opacityLabel.textContent = '50%';
-
-    const btn100 = document.createElement('button');
-    btn100.className = 'fdr-btn fdr-btn-sm';
-    btn100.textContent = '100%';
-    btn100.onclick = () => {
-      this.activateOpacityMode(opacityGroup, stripesBtn, flashBtn, stripeToolbar);
-      opacitySlider.value = '100';
-      opacityLabel.textContent = '100%';
-      this.setOverlayOpacity(1.0);
-    };
-
-    const activateOpacity = () => {
-      this.activateOpacityMode(opacityGroup, stripesBtn, flashBtn, stripeToolbar);
-    };
+    opacityLabel.textContent = `${Math.round(this.currentOpacity * 100)}%`;
 
     opacitySlider.oninput = (e) => {
-      activateOpacity();
+      this.activateOpacityMode(opacityGroup, stripesBtn, flashBtn, stripeToolbar);
       const val = parseInt(e.target.value, 10);
       opacityLabel.textContent = `${val}%`;
       this.setOverlayOpacity(val / 100);
-    };
-
-    opacitySlider.addEventListener('click', () => {
-      activateOpacity();
-      if (Math.abs(parseInt(opacitySlider.value, 10) - 50) < 12) {
-        opacitySlider.value = '50';
-        opacityLabel.textContent = '50%';
-        this.setOverlayOpacity(0.5);
-      }
-    });
-
-    opacityLabel.onclick = () => {
-      activateOpacity();
-      opacitySlider.value = '50';
-      opacityLabel.textContent = '50%';
-      this.setOverlayOpacity(0.5);
     };
 
     opacityGroup.append(opacitySlider, opacityLabel);
@@ -903,89 +595,23 @@ class QuoraToys {
       }
     };
 
-    const playPauseBtn = document.createElement('button');
-    playPauseBtn.className = 'fdr-btn fdr-btn-sm';
-    playPauseBtn.textContent = '⏸';
-    playPauseBtn.onclick = () => {
-      this.toggleStripePlay();
-      playPauseBtn.textContent = this.stripeRunning ? '⏸' : '▶';
-    };
+    const diffCircleBtn = document.createElement('button');
+    diffCircleBtn.className = 'fdr-btn fdr-btn-sm fdr-btn-accent';
+    diffCircleBtn.innerHTML = '⭕ Circle Diff';
+    diffCircleBtn.onclick = () => this.toggleCircleDiffMode();
+    this.diffCircleBtn = diffCircleBtn;
 
-    const dirBtn = document.createElement('button');
-    dirBtn.className = 'fdr-btn fdr-btn-sm';
-    dirBtn.textContent = '⇄';
-    dirBtn.onclick = () => { this.stripeDirection *= -1; };
+    const solBtn = document.createElement('button');
+    solBtn.className = 'fdr-btn fdr-btn-sm';
+    solBtn.innerHTML = `🎨 Studio (${this.diffCircles.length})`;
+    solBtn.onclick = () => this.openSolutionStudio();
+    this.solutionBtn = solBtn;
 
-    const widthGroup = document.createElement('div');
-    widthGroup.className = 'fdr-stripe-control-group';
-    const widthLabel = document.createElement('span');
-    widthLabel.textContent = 'W:';
-    const widthSlider = document.createElement('input');
-    widthSlider.type = 'range';
-    widthSlider.min = '10';
-    widthSlider.max = '120';
-    widthSlider.value = String(this.stripeWidth);
-    const widthVal = document.createElement('span');
-    widthVal.className = 'fdr-stripe-val';
-    widthVal.textContent = `${this.stripeWidth}px`;
-    widthSlider.oninput = (e) => {
-      this.setStripeWidth(parseInt(e.target.value, 10));
-      widthVal.textContent = `${this.stripeWidth}px`;
-    };
-    widthGroup.append(widthLabel, widthSlider, widthVal);
+    toolbar.append(stripesBtn, flashBtn, opacityGroup, diffCircleBtn, solBtn);
+    content.append(toolbar, stripeToolbar);
 
-    stripeToolbar.append(playPauseBtn, dirBtn, widthGroup);
-
-    this.diffCircleBtn = document.createElement('button');
-    this.diffCircleBtn.className = 'fdr-btn fdr-btn-sm fdr-btn-accent';
-    this.diffCircleBtn.innerHTML = '⭕ Circle Diff';
-    this.diffCircleBtn.title = 'Draw a single circle around each spotted difference';
-    this.diffCircleBtn.onclick = () => this.toggleCircleDiffMode();
-
-    this.solutionBtn = document.createElement('button');
-    this.solutionBtn.className = 'fdr-btn fdr-btn-sm';
-    this.solutionBtn.innerHTML = `🎨 Studio (${this.diffCircles.length})`;
-    this.solutionBtn.onclick = () => this.openSolutionStudio();
-
-    const nudgeGrid = document.createElement('div');
-    nudgeGrid.className = 'fdr-nudge-grid';
-
-    const nUp = document.createElement('button');
-    nUp.className = 'fdr-nudge-btn';
-    nUp.textContent = '▲';
-    nUp.style.gridColumn = '2';
-    nUp.onclick = () => this.nudgeOverlay(0, -1);
-
-    const nLeft = document.createElement('button');
-    nLeft.className = 'fdr-nudge-btn';
-    nLeft.textContent = '◀';
-    nLeft.style.gridColumn = '1';
-    nLeft.style.gridRow = '2';
-    nLeft.onclick = () => this.nudgeOverlay(-1, 0);
-
-    const nDown = document.createElement('button');
-    nDown.className = 'fdr-nudge-btn';
-    nDown.textContent = '▼';
-    nDown.style.gridColumn = '2';
-    nDown.style.gridRow = '2';
-    nDown.onclick = () => this.nudgeOverlay(0, 1);
-
-    const nRight = document.createElement('button');
-    nRight.className = 'fdr-nudge-btn';
-    nRight.textContent = '▶';
-    nRight.style.gridColumn = '3';
-    nRight.style.gridRow = '2';
-    nRight.onclick = () => this.nudgeOverlay(1, 0);
-
-    nudgeGrid.append(nUp, nLeft, nDown, nRight);
-
-    toolbar.append(stripesBtn, flashBtn, opacityGroup, btn100, this.diffCircleBtn, this.solutionBtn, nudgeGrid);
-    content.appendChild(toolbar);
-    content.appendChild(stripeToolbar);
-
-    this._bindCircleDrawEvents();
     this.updateOverlayGeometry();
-    this.renderDiffMarkers();
+    this._bindCircleDrawEvents();
   }
 
   activateOpacityMode(opacityGroup, stripesBtn, flashBtn, stripeToolbar) {
@@ -999,53 +625,20 @@ class QuoraToys {
   }
 
   updateOverlayGeometry() {
-    if (!this.overlayDialog || !this.activeCrop || !this.overlayViewport || !this.overlayClippedImg) {
-      return;
-    }
-
+    if (!this.overlayViewport || !this.activeCrop || !this.overlayClippedImg) return;
     const { x, y, width, height } = this.activeCrop;
-    const dispCropW = Math.round(width * this.zoom);
-    const dispCropH = Math.round(height * this.zoom);
-
-    this.overlayViewport.style.width = `${dispCropW}px`;
-    this.overlayViewport.style.height = `${dispCropH}px`;
-
-    const totalDispW = Math.round(this.naturalWidth * this.zoom);
-    const totalDispH = Math.round(this.naturalHeight * this.zoom);
-    const offX = Math.round(-x * this.zoom);
-    const offY = Math.round(-y * this.zoom);
-
-    this.overlayClippedImg.style.width = `${totalDispW}px`;
-    this.overlayClippedImg.style.height = `${totalDispH}px`;
-    this.overlayClippedImg.style.left = `${offX}px`;
-    this.overlayClippedImg.style.top = `${offY}px`;
-
-    const targetDlgW = Math.max(340, dispCropW + 4);
-    const targetDlgH = dispCropH + 32 + 46;
-    this.overlayDialog.element.style.width = `${targetDlgW}px`;
-    this.overlayDialog.element.style.height = `${targetDlgH}px`;
-
-    if (this.isStripesMode) {
-      this._applyStripeMask();
-    }
+    this.overlayViewport.style.width = `${Math.round(width * this.zoom)}px`;
+    this.overlayViewport.style.height = `${Math.round(height * this.zoom)}px`;
+    this.overlayClippedImg.style.width = `${Math.round(this.naturalWidth * this.zoom)}px`;
+    this.overlayClippedImg.style.height = `${Math.round(this.naturalHeight * this.zoom)}px`;
+    this.overlayClippedImg.style.left = `${Math.round(-x * this.zoom)}px`;
+    this.overlayClippedImg.style.top = `${Math.round(-y * this.zoom)}px`;
   }
 
   setOverlayOpacity(val) {
     this.currentOpacity = Math.max(0, Math.min(1, val));
     if (this.overlayClippedImg) {
       this.overlayClippedImg.style.opacity = `${this.currentOpacity}`;
-    }
-    if (this.overlayViewport) {
-      this.overlayViewport.style.opacity = '1';
-    }
-  }
-
-  toggleFlash(btn) {
-    if (this.isFlashing) {
-      this.stopFlashing();
-      if (btn) btn.classList.remove('active');
-    } else {
-      this.startFlashing(btn);
     }
   }
 
@@ -1075,1023 +668,12 @@ class QuoraToys {
     }
   }
 
-  nudgeOverlay(dx, dy) {
-    if (!this.overlayDialog || !this.overlayDialog.element) return;
-    const curLeft = parseFloat(this.overlayDialog.element.style.left) || 0;
-    const curTop = parseFloat(this.overlayDialog.element.style.top) || 0;
-    this.overlayDialog.element.style.left = `${curLeft + dx}px`;
-    this.overlayDialog.element.style.top = `${curTop + dy}px`;
-    if (this.solutionDialog) {
-      this.renderSolutionCanvas();
-    }
-  }
-
-  /* -------------------------------------------------------------
-     Circle Difference Tool (Single Circle Selection on Overlay)
-     ------------------------------------------------------------- */
-  setCircleDiffMode(enable) {
-    this.isCircleDiffMode = enable;
-    if (this.diffCircleBtn) {
-      this.diffCircleBtn.classList.toggle('active', enable);
-      this.diffCircleBtn.innerHTML = enable ? '✕ Exit Diff' : '⭕ Circle Diff';
-    }
-    if (this.circleDrawSurface) {
-      this.circleDrawSurface.style.display = enable ? 'block' : 'none';
-    }
-  }
-
-  toggleCircleDiffMode() {
-    this.setCircleDiffMode(!this.isCircleDiffMode);
-  }
-
-  _bindCircleDrawEvents() {
-    let p1 = null;
-    let isDrawing = false;
-    let previewGroup = null;
-
-    const getVpCoords = (clientX, clientY) => {
-      const rect = this.overlayViewport.getBoundingClientRect();
-      return {
-        x: Math.max(0, Math.min(rect.width, clientX - rect.left)),
-        y: Math.max(0, Math.min(rect.height, clientY - rect.top))
-      };
-    };
-
-    const onPointerDown = (e) => {
-      if (!this.isCircleDiffMode) return;
-      e.preventDefault();
-      e.stopPropagation();
-
-      const cx = e.clientX ?? e.touches?.[0]?.clientX;
-      const cy = e.clientY ?? e.touches?.[0]?.clientY;
-      p1 = getVpCoords(cx, cy);
-      isDrawing = true;
-
-      previewGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      this.overlaySvgLayer.appendChild(previewGroup);
-    };
-
-    const onPointerMove = (e) => {
-      if (!isDrawing || !p1) return;
-      e.preventDefault();
-
-      const cx = e.clientX ?? e.touches?.[0]?.clientX;
-      const cy = e.clientY ?? e.touches?.[0]?.clientY;
-      const p2 = getVpCoords(cx, cy);
-
-      const dx = p2.x - p1.x;
-      const dy = p2.y - p1.y;
-      const diam = Math.hypot(dx, dy);
-      const radius = diam / 2;
-      const midX = (p1.x + p2.x) / 2;
-      const midY = (p1.y + p2.y) / 2;
-
-      // Draw ONLY a single circle preview representing the selected area
-      previewGroup.innerHTML = `
-        <circle cx="${midX}" cy="${midY}" r="${radius}" fill="rgba(0, 230, 118, 0.2)" stroke="${this.solutionOutlineColor}" stroke-width="${this.solutionOutlineWidth}" stroke-dasharray="4,3" />
-        <line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="rgba(255,255,255,0.4)" stroke-dasharray="2,2" stroke-width="1" />
-      `;
-    };
-
-    const onPointerUp = (e) => {
-      if (!isDrawing || !p1) return;
-      isDrawing = false;
-
-      const cx = e.clientX ?? e.changedTouches?.[0]?.clientX;
-      const cy = e.clientY ?? e.changedTouches?.[0]?.clientY;
-      const p2 = getVpCoords(cx, cy);
-
-      if (previewGroup) {
-        previewGroup.remove();
-        previewGroup = null;
-      }
-
-      const dx = p2.x - p1.x;
-      const dy = p2.y - p1.y;
-      const diam = Math.hypot(dx, dy);
-      const radiusDisp = diam / 2;
-
-      if (diam >= 8) {
-        const midX = (p1.x + p2.x) / 2;
-        const midY = (p1.y + p2.y) / 2;
-
-        const mainRect = this.mainImgElement.getBoundingClientRect();
-        const ovRect = this.overlayViewport.getBoundingClientRect();
-
-        const cropNatX = midX / this.zoom;
-        const cropNatY = midY / this.zoom;
-        const natRadius = radiusDisp / this.zoom;
-
-        const baseRelDispX = ovRect.left - mainRect.left;
-        const baseRelDispY = ovRect.top - mainRect.top;
-        const baseNatOriginX = baseRelDispX / this.zoom;
-        const baseNatOriginY = baseRelDispY / this.zoom;
-
-        const diffRecord = {
-          id: 'diff_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-          cropX: cropNatX,
-          cropY: cropNatY,
-          radius: Math.max(4, natRadius),
-          baseOriginX: baseNatOriginX,
-          baseOriginY: baseNatOriginY,
-          dragX: cropNatX,
-          dragY: cropNatY,
-          color: this.solutionOutlineColor
-        };
-
-        this.diffCircles.push(diffRecord);
-        this.selectedDiffId = diffRecord.id;
-        this.renderDiffMarkers();
-
-        if (this.solutionBtn) {
-          this.solutionBtn.innerHTML = `🎨 Studio (${this.diffCircles.length})`;
-        }
-
-        if (this.solutionDialog) {
-          this.renderLayerList();
-          this.renderSolutionCanvas();
-        }
-      }
-
-      p1 = null;
-    };
-
-    this.circleDrawSurface.addEventListener('mousedown', onPointerDown);
-    window.addEventListener('mousemove', onPointerMove);
-    window.addEventListener('mouseup', onPointerUp);
-
-    this.circleDrawSurface.addEventListener('touchstart', (e) => {
-      if (e.touches[0]) onPointerDown(e.touches[0]);
-    }, { passive: false });
-    window.addEventListener('touchmove', (e) => {
-      if (e.touches[0]) onPointerMove(e.touches[0]);
-    }, { passive: false });
-    window.addEventListener('touchend', (e) => {
-      if (e.changedTouches[0]) onPointerUp(e.changedTouches[0]);
-    });
-  }
-
-  undoLastDiff() {
-    if (this.diffCircles.length > 0) {
-      const removed = this.diffCircles.pop();
-      if (this.selectedDiffId === removed.id) {
-        this.selectedDiffId = this.diffCircles.length ? this.diffCircles[this.diffCircles.length - 1].id : null;
-      }
-      this.renderDiffMarkers();
-      if (this.solutionBtn) {
-        this.solutionBtn.innerHTML = `🎨 Studio (${this.diffCircles.length})`;
-      }
-      if (this.solutionDialog) {
-        this.renderLayerList();
-        this.renderSolutionCanvas();
-      }
-    }
-  }
-
-  clearAllDiffs() {
-    this.diffCircles = [];
-    this.selectedDiffId = null;
-    this.renderDiffMarkers();
-    if (this.solutionBtn) {
-      this.solutionBtn.innerHTML = `🎨 Studio (0)`;
-    }
-    if (this.solutionDialog) {
-      this.renderLayerList();
-      this.renderSolutionCanvas();
-    }
-  }
-
-  deleteSelectedDiff() {
-    if (!this.selectedDiffId) return;
-    this.diffCircles = this.diffCircles.filter(d => d.id !== this.selectedDiffId);
-    this.selectedDiffId = this.diffCircles.length ? this.diffCircles[this.diffCircles.length - 1].id : null;
-    this.renderDiffMarkers();
-    if (this.solutionBtn) this.solutionBtn.innerHTML = `🎨 Studio (${this.diffCircles.length})`;
-    if (this.solutionDialog) {
-      this.renderLayerList();
-      this.renderSolutionCanvas();
-    }
-  }
-
-  moveSelectedDiffLayer(delta) {
-    if (!this.selectedDiffId) return;
-    const idx = this.diffCircles.findIndex(d => d.id === this.selectedDiffId);
-    if (idx === -1) return;
-
-    let targetIdx = idx + delta;
-    if (targetIdx < 0) targetIdx = 0;
-    if (targetIdx >= this.diffCircles.length) targetIdx = this.diffCircles.length - 1;
-
-    if (targetIdx !== idx) {
-      const item = this.diffCircles.splice(idx, 1)[0];
-      this.diffCircles.splice(targetIdx, 0, item);
-      this.renderDiffMarkers();
-      this.renderLayerList();
-      this.renderSolutionCanvas();
-    }
-  }
-
-  _getComputedAngle(diff) {
-    const dx = diff.dragX - diff.cropX;
-    const dy = diff.dragY - diff.cropY;
-    if (Math.hypot(dx, dy) >= 0.5) {
-      // Rotation axis connecting C1 and C2 is perpendicular to the pull vector
-      return Math.atan2(dy, dx) + Math.PI / 2;
-    }
-    return 0; // Horizontal default when in place
-  }
-
-  /* Single Circle on selection window */
-  renderDiffMarkers() {
-    if (!this.overlaySvgLayer) return;
-    this.overlaySvgLayer.innerHTML = '';
-
-    this.diffCircles.forEach((diff, idx) => {
-      const cx = diff.cropX * this.zoom;
-      const cy = diff.cropY * this.zoom;
-      const r = diff.radius * this.zoom;
-      const strokeCol = diff.color || this.solutionOutlineColor;
-
-      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      g.innerHTML = `
-        <circle cx="${cx}" cy="${cy}" r="${r}" fill="rgba(0, 230, 118, 0.12)" stroke="${strokeCol}" stroke-width="${this.solutionOutlineWidth}" />
-        <circle cx="${cx}" cy="${cy}" r="2.5" fill="${strokeCol}" />
-        <text x="${cx + r + 4}" y="${cy + 4}" font-family="system-ui, monospace" font-size="11" font-weight="bold" fill="${strokeCol}">#${idx + 1}</text>
-      `;
-      this.overlaySvgLayer.appendChild(g);
-    });
-  }
-
-  /* -------------------------------------------------------------
-     Solution Canvas Studio
-     ------------------------------------------------------------- */
-  openSolutionStudio() {
-    if (this.solutionDialog) {
-      this.solutionDialog.bringToFront();
-      this.renderSolutionCanvas();
-      return;
-    }
-
-    const dlgW = Math.min(window.innerWidth - 30, 1040);
-    const dlgH = Math.min(window.innerHeight - 40, 720);
-
-    this.solutionDialog = UITools.makeDialog({
-      title: `Difference Solution Studio (${this.diffCircles.length} Spotted)`,
-      size: [dlgW, dlgH],
-      position: [Math.max(15, (window.innerWidth - dlgW) / 2), Math.max(15, (window.innerHeight - dlgH) / 2)],
-      noPadding: true,
-      allowMaximize: true,
-      onClose: () => {
-        this.solutionDialog = null;
-      }
-    });
-
-    const root = document.createElement('div');
-    root.className = 'fdr-solution-studio';
-
-    // Top Toolbar
-    const toolbar = document.createElement('div');
-    toolbar.className = 'fdr-solution-toolbar';
-
-    const darkenGroup = document.createElement('div');
-    darkenGroup.className = 'fdr-solution-control-item';
-    darkenGroup.title = 'Darken the background outside difference circles';
-    darkenGroup.innerHTML = `<span>Darken:</span>`;
-    const darkenSlider = document.createElement('input');
-    darkenSlider.type = 'range';
-    darkenSlider.min = '0';
-    darkenSlider.max = '90';
-    darkenSlider.value = String(Math.round(this.solutionDarken * 100));
-    const darkenVal = document.createElement('span');
-    darkenVal.style.fontFamily = 'monospace';
-    darkenVal.textContent = `${Math.round(this.solutionDarken * 100)}%`;
-    darkenSlider.oninput = (e) => {
-      this.solutionDarken = parseInt(e.target.value, 10) / 100;
-      darkenVal.textContent = `${Math.round(this.solutionDarken * 100)}%`;
-      this.renderSolutionCanvas();
-    };
-    darkenGroup.append(darkenSlider, darkenVal);
-
-    const blurGroup = document.createElement('div');
-    blurGroup.className = 'fdr-solution-control-item';
-    blurGroup.title = 'Blur the background outside difference circles';
-    blurGroup.innerHTML = `<span>Blur:</span>`;
-    const blurSlider = document.createElement('input');
-    blurSlider.type = 'range';
-    blurSlider.min = '0';
-    blurSlider.max = '20';
-    blurSlider.value = String(this.solutionBlur);
-    const blurVal = document.createElement('span');
-    blurVal.style.fontFamily = 'monospace';
-    blurVal.textContent = `${this.solutionBlur}px`;
-    blurSlider.oninput = (e) => {
-      this.solutionBlur = parseInt(e.target.value, 10);
-      blurVal.textContent = `${this.solutionBlur}px`;
-      this.renderSolutionCanvas();
-    };
-    blurGroup.append(blurSlider, blurVal);
-
-    const colorGroup = document.createElement('div');
-    colorGroup.className = 'fdr-solution-control-item';
-    colorGroup.title = 'Accent color for difference circles & outlines';
-    const colorPicker = document.createElement('input');
-    colorPicker.type = 'color';
-    colorPicker.value = this.solutionOutlineColor;
-    colorPicker.oninput = (e) => {
-      this.solutionOutlineColor = e.target.value;
-      if (this.selectedDiffId) {
-        const item = this.diffCircles.find(d => d.id === this.selectedDiffId);
-        if (item) item.color = e.target.value;
-      }
-      this.renderDiffMarkers();
-      this.renderLayerList();
-      this.renderSolutionCanvas();
-    };
-
-    const swatches = document.createElement('div');
-    swatches.className = 'fdr-color-swatches';
-    const colors = ['#00e676', '#facc15', '#06b6d4', '#f43f5e', '#a855f7', '#ffffff'];
-    colors.forEach(col => {
-      const b = document.createElement('button');
-      b.className = 'fdr-swatch-btn';
-      b.style.background = col;
-      b.onclick = () => {
-        this.solutionOutlineColor = col;
-        colorPicker.value = col;
-        if (this.selectedDiffId) {
-          const item = this.diffCircles.find(d => d.id === this.selectedDiffId);
-          if (item) item.color = col;
-        }
-        this.renderDiffMarkers();
-        this.renderLayerList();
-        this.renderSolutionCanvas();
-      };
-      swatches.appendChild(b);
-    });
-    colorGroup.append(colorPicker, swatches);
-
-    const copyBtn = document.createElement('button');
-    copyBtn.className = 'fdr-btn fdr-btn-sm fdr-btn-primary';
-    copyBtn.innerHTML = '📋 Copy Image';
-    copyBtn.title = 'Copy crisp solution canvas directly to clipboard to paste into Quora';
-    copyBtn.onclick = () => this.copySolutionImage(copyBtn);
-
-    const dlBtn = document.createElement('button');
-    dlBtn.className = 'fdr-btn fdr-btn-sm fdr-btn-accent';
-    dlBtn.innerHTML = '💾 Download PNG';
-    dlBtn.onclick = () => this.downloadSolutionImage();
-
-    const helpBtn = document.createElement('button');
-    helpBtn.className = 'fdr-btn fdr-btn-sm';
-    helpBtn.innerHTML = '📖 Help';
-    helpBtn.onclick = () => this.openDocumentationDialog();
-
-    toolbar.append(darkenGroup, blurGroup, colorGroup, copyBtn, dlBtn, helpBtn);
-    root.appendChild(toolbar);
-
-    // Secondary Appearance Toolbar: Connectors, Anchor Mix, Outline Width & Clean Captures
-    const subToolbar = document.createElement('div');
-    subToolbar.className = 'fdr-sub-toolbar';
-
-    // 50/50 Anchor Mix Toggle
-    const blendBtn = document.createElement('button');
-    blendBtn.className = `fdr-btn fdr-btn-sm ${this.solutionBlendAnchor ? 'active' : ''}`;
-    blendBtn.innerHTML = '🔀 Mix Anchor: ' + (this.solutionBlendAnchor ? 'ON' : 'OFF');
-    blendBtn.title = 'Mix/superimpose Image A and Image B 50/50 inside the original encircled place';
-    blendBtn.onclick = () => {
-      this.solutionBlendAnchor = !this.solutionBlendAnchor;
-      blendBtn.className = `fdr-btn fdr-btn-sm ${this.solutionBlendAnchor ? 'active' : ''}`;
-      blendBtn.innerHTML = '🔀 Mix Anchor: ' + (this.solutionBlendAnchor ? 'ON' : 'OFF');
-      this.renderSolutionCanvas();
-    };
-
-    const thickItem = document.createElement('div');
-    thickItem.className = 'fdr-solution-control-item';
-    thickItem.innerHTML = `<span>Border:</span>`;
-    const thickSlider = document.createElement('input');
-    thickSlider.type = 'range';
-    thickSlider.min = '1';
-    thickSlider.max = '10';
-    thickSlider.value = String(this.solutionOutlineWidth);
-    const thickVal = document.createElement('span');
-    thickVal.style.fontFamily = 'monospace';
-    thickVal.textContent = `${this.solutionOutlineWidth}px`;
-    thickSlider.oninput = (e) => {
-      this.solutionOutlineWidth = parseInt(e.target.value, 10);
-      thickVal.textContent = `${this.solutionOutlineWidth}px`;
-      this.renderDiffMarkers();
-      this.renderSolutionCanvas();
-    };
-    thickItem.append(thickSlider, thickVal);
-
-    const connItem = document.createElement('div');
-    connItem.className = 'fdr-solution-control-item';
-    connItem.innerHTML = `<span>Lines:</span>`;
-    const connSelect = document.createElement('select');
-    connSelect.innerHTML = `
-      <option value="tangents">2 Dashed Tangents</option>
-      <option value="none">No Connector Lines</option>
-    `;
-    connSelect.value = this.solutionConnectorStyle;
-    connSelect.onchange = (e) => {
-      this.solutionConnectorStyle = e.target.value;
-      this.renderSolutionCanvas();
-    };
-    connItem.appendChild(connSelect);
-
-    const labelBtn = document.createElement('button');
-    labelBtn.className = `fdr-btn fdr-btn-sm ${this.solutionShowLabels ? 'active' : ''}`;
-    labelBtn.innerHTML = '🏷 Labels: ' + (this.solutionShowLabels ? 'ON' : 'OFF');
-    labelBtn.title = 'Toggle number tags (kept off for clean captures)';
-    labelBtn.onclick = () => {
-      this.solutionShowLabels = !this.solutionShowLabels;
-      labelBtn.className = `fdr-btn fdr-btn-sm ${this.solutionShowLabels ? 'active' : ''}`;
-      labelBtn.innerHTML = '🏷 Labels: ' + (this.solutionShowLabels ? 'ON' : 'OFF');
-      this.renderSolutionCanvas();
-    };
-
-    subToolbar.append(blendBtn, thickItem, connItem, labelBtn);
-    root.appendChild(subToolbar);
-
-    // Canvas Viewport & Layer Drawer
-    const studioMain = document.createElement('div');
-    studioMain.className = 'fdr-solution-main';
-
-    const viewport = document.createElement('div');
-    viewport.className = 'fdr-solution-viewport';
-
-    this.solutionCanvas = document.createElement('canvas');
-    this.solutionCanvas.className = 'fdr-solution-canvas';
-    viewport.appendChild(this.solutionCanvas);
-
-    const hint = document.createElement('div');
-    hint.className = 'fdr-drag-hint-banner';
-    hint.textContent = '💡 Drag callout pairs in any direction • Auto-orients perpendicular • Double-click to snap back';
-    viewport.appendChild(hint);
-
-    // Layer Drawer (Z-Order Management)
-    const drawer = document.createElement('div');
-    drawer.className = 'fdr-layer-drawer';
-
-    const drawerHdr = document.createElement('div');
-    drawerHdr.className = 'fdr-layer-header';
-    drawerHdr.innerHTML = `<span>Z-Order Layers</span>`;
-
-    const layerActions = document.createElement('div');
-    layerActions.className = 'fdr-layer-actions';
-
-    const upBtn = document.createElement('button');
-    upBtn.className = 'fdr-btn fdr-btn-sm';
-    upBtn.textContent = '▲';
-    upBtn.title = 'Bring Forward in Z-order (Shortcut: ])';
-    upBtn.onclick = () => this.moveSelectedDiffLayer(1);
-
-    const downBtn = document.createElement('button');
-    downBtn.className = 'fdr-btn fdr-btn-sm';
-    downBtn.textContent = '▼';
-    downBtn.title = 'Send Backward in Z-order (Shortcut: [)';
-    downBtn.onclick = () => this.moveSelectedDiffLayer(-1);
-
-    const topBtn = document.createElement('button');
-    topBtn.className = 'fdr-btn fdr-btn-sm';
-    topBtn.textContent = '⏫';
-    topBtn.title = 'Bring to Front (Shortcut: Shift+])';
-    topBtn.onclick = () => this.moveSelectedDiffLayer(999);
-
-    const botBtn = document.createElement('button');
-    botBtn.className = 'fdr-btn fdr-btn-sm';
-    botBtn.textContent = '⏬';
-    botBtn.title = 'Send to Back (Shortcut: Shift+[)';
-    botBtn.onclick = () => this.moveSelectedDiffLayer(-999);
-
-    const delBtn = document.createElement('button');
-    delBtn.className = 'fdr-btn fdr-btn-sm';
-    delBtn.textContent = '🗑';
-    delBtn.title = 'Delete selected difference (Shortcut: Del)';
-    delBtn.onclick = () => this.deleteSelectedDiff();
-
-    layerActions.append(upBtn, downBtn, topBtn, botBtn, delBtn);
-    drawerHdr.appendChild(layerActions);
-
-    this.layerListEl = document.createElement('div');
-    this.layerListEl.className = 'fdr-layer-list';
-
-    drawer.append(drawerHdr, this.layerListEl);
-    studioMain.append(viewport, drawer);
-    root.appendChild(studioMain);
-
-    this.solutionDialog.contentElement.appendChild(root);
-
-    this._bindSolutionCanvasDrag();
-    this.renderLayerList();
-    this.renderSolutionCanvas();
-  }
-
-  renderLayerList() {
-    if (!this.layerListEl) return;
-    this.layerListEl.innerHTML = '';
-
-    if (this.diffCircles.length === 0) {
-      this.layerListEl.innerHTML = `<div style="padding:12px; font-size:11px; color:#64748b; text-align:center;">No differences marked yet. Use "Circle Diff" in the overlay window.</div>`;
-      return;
-    }
-
-    for (let i = this.diffCircles.length - 1; i >= 0; i--) {
-      const diff = this.diffCircles[i];
-      const isSelected = diff.id === this.selectedDiffId;
-      const isDraggedOut = Math.hypot(diff.dragX - diff.cropX, diff.dragY - diff.cropY) > 8;
-
-      const item = document.createElement('div');
-      item.className = `fdr-layer-item ${isSelected ? 'active' : ''}`;
-      item.onclick = () => {
-        this.selectedDiffId = diff.id;
-        this.renderLayerList();
-        this.renderSolutionCanvas();
-        this.renderDiffMarkers();
-      };
-
-      const dotColor = diff.color || this.solutionOutlineColor;
-      item.innerHTML = `
-        <span class="fdr-layer-tag">
-          <span class="fdr-layer-dot" style="background:${dotColor}; box-shadow:0 0 6px ${dotColor}"></span>
-          #${i + 1} Diff
-        </span>
-        <span style="font-size:10px; opacity:0.7;">${isDraggedOut ? '↗ Callout' : '⊙ Center'}</span>
-      `;
-      this.layerListEl.appendChild(item);
-    }
-  }
-
-  /* -------------------------------------------------------------
-     Canvas Drag with Automatic Perpendicular Orientation
-     ------------------------------------------------------------- */
-  _bindSolutionCanvasDrag() {
-    let activeDrag = null;
-
-    const getCanvasCoords = (clientX, clientY) => {
-      const rect = this.solutionCanvas.getBoundingClientRect();
-      const scaleX = this.solutionCanvas.width / rect.width;
-      const scaleY = this.solutionCanvas.height / rect.height;
-      return {
-        x: (clientX - rect.left) * scaleX,
-        y: (clientY - rect.top) * scaleY
-      };
-    };
-
-    const findHit = (canvasX, canvasY) => {
-      const transform = this._getCanvasTransform();
-      for (let i = this.diffCircles.length - 1; i >= 0; i--) {
-        const diff = this.diffCircles[i];
-        const cx = diff.dragX + transform.offsetX;
-        const cy = diff.dragY + transform.offsetY;
-        const r = diff.radius;
-        const ang = this._getComputedAngle(diff);
-
-        const cosA = Math.cos(ang);
-        const sinA = Math.sin(ang);
-
-        const c1x = cx - r * cosA;
-        const c1y = cy - r * sinA;
-        const c2x = cx + r * cosA;
-        const c2y = cy + r * sinA;
-
-        const d1 = Math.hypot(canvasX - c1x, canvasY - c1y);
-        const d2 = Math.hypot(canvasX - c2x, canvasY - c2y);
-
-        if (d1 <= r * 1.05 || d2 <= r * 1.05) {
-          return { diff };
-        }
-      }
-      return null;
-    };
-
-    const onDown = (e) => {
-      const cx = e.clientX ?? e.touches?.[0]?.clientX;
-      const cy = e.clientY ?? e.touches?.[0]?.clientY;
-      const coords = getCanvasCoords(cx, cy);
-
-      const hit = findHit(coords.x, coords.y);
-      if (hit) {
-        e.preventDefault();
-        e.stopPropagation();
-        this.selectedDiffId = hit.diff.id;
-        this.solutionCanvas.classList.add('grabbing');
-        activeDrag = {
-          diff: hit.diff,
-          startPointerX: coords.x,
-          startPointerY: coords.y,
-          origDragX: hit.diff.dragX,
-          origDragY: hit.diff.dragY
-        };
-
-        this.renderLayerList();
-        this.renderSolutionCanvas();
-      }
-    };
-
-    const onMove = (e) => {
-      if (!activeDrag) return;
-      e.preventDefault();
-
-      const cx = e.clientX ?? e.touches?.[0]?.clientX;
-      const cy = e.clientY ?? e.touches?.[0]?.clientY;
-      const coords = getCanvasCoords(cx, cy);
-
-      const dx = coords.x - activeDrag.startPointerX;
-      const dy = coords.y - activeDrag.startPointerY;
-      activeDrag.diff.dragX = activeDrag.origDragX + dx;
-      activeDrag.diff.dragY = activeDrag.origDragY + dy;
-
-      this.renderSolutionCanvas();
-    };
-
-    const onUp = () => {
-      if (activeDrag) {
-        this.solutionCanvas.classList.remove('grabbing');
-        activeDrag = null;
-        this.renderLayerList();
-        this.renderSolutionCanvas();
-      }
-    };
-
-    this.solutionCanvas.addEventListener('dblclick', (e) => {
-      const coords = getCanvasCoords(e.clientX, e.clientY);
-      const hit = findHit(coords.x, coords.y);
-      if (hit) {
-        hit.diff.dragX = hit.diff.cropX;
-        hit.diff.dragY = hit.diff.cropY;
-        this.renderLayerList();
-        this.renderSolutionCanvas();
-      }
-    });
-
-    this.solutionCanvas.addEventListener('mousedown', onDown);
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-
-    this.solutionCanvas.addEventListener('touchstart', onDown, { passive: false });
-    window.addEventListener('touchmove', onMove, { passive: false });
-    window.addEventListener('touchend', onUp);
-  }
-
-  /* -------------------------------------------------------------
-     Tight Cropping Calculation (Includes geometry only, no further)
-     ------------------------------------------------------------- */
-  _getCanvasTransform() {
-    const crop = this.activeCrop || { x: 0, y: 0, width: this.naturalWidth, height: this.naturalHeight };
-    const w = crop.width;
-    const h = crop.height;
-
-    // Base boundary starts at the puzzle image boundaries
-    let minX = 0;
-    let minY = 0;
-    let maxX = w;
-    let maxY = h;
-
-    const strokePad = (this.solutionOutlineWidth / 2) + 2;
-
-    // Extend only if circle geometry is stretched beyond the base image
-    this.diffCircles.forEach(diff => {
-      const r = diff.radius;
-      const ang = this._getComputedAngle(diff);
-      const cosA = Math.cos(ang);
-      const sinA = Math.sin(ang);
-
-      const c1x = diff.dragX - r * cosA;
-      const c1y = diff.dragY - r * sinA;
-      const c2x = diff.dragX + r * cosA;
-      const c2y = diff.dragY + r * sinA;
-
-      const rWithStroke = r + strokePad;
-
-      minX = Math.min(minX, c1x - rWithStroke, c2x - rWithStroke);
-      maxX = Math.max(maxX, c1x + rWithStroke, c2x + rWithStroke);
-      minY = Math.min(minY, c1y - rWithStroke, c2y - rWithStroke);
-      maxY = Math.max(maxY, c1y + rWithStroke, c2y + rWithStroke);
-    });
-
-    // Minimal 3px edge clearance for anti-aliasing
-    const margin = 3;
-    minX = Math.floor(minX - margin);
-    minY = Math.floor(minY - margin);
-    maxX = Math.ceil(maxX + margin);
-    maxY = Math.ceil(maxY + margin);
-
-    const canvasWidth = Math.round(maxX - minX);
-    const canvasHeight = Math.round(maxY - minY);
-
-    return {
-      canvasWidth,
-      canvasHeight,
-      offsetX: -minX,
-      offsetY: -minY,
-      cropW: w,
-      cropH: h,
-      cropX: crop.x,
-      cropY: crop.y
-    };
-  }
-
-  /* -------------------------------------------------------------
-     Rendering Solution Canvas (Image A vs Image B Callout Pairs)
-     ------------------------------------------------------------- */
-  renderSolutionCanvas() {
-    if (!this.solutionCanvas || !this.sourceImage) return;
-
-    const tf = this._getCanvasTransform();
-    this.solutionCanvas.width = tf.canvasWidth;
-    this.solutionCanvas.height = tf.canvasHeight;
-    const ctx = this.solutionCanvas.getContext('2d');
-
-    const w = tf.cropW;
-    const h = tf.cropH;
-
-    // Full-resolution crop patch canvases
-    const cropCanvas = document.createElement('canvas');
-    cropCanvas.width = w;
-    cropCanvas.height = h;
-    const cropCtx = cropCanvas.getContext('2d');
-    cropCtx.drawImage(this.sourceImage, tf.cropX, tf.cropY, w, h, 0, 0, w, h);
-
-    const baseCanvas = document.createElement('canvas');
-    baseCanvas.width = w;
-    baseCanvas.height = h;
-    const baseCtx = baseCanvas.getContext('2d');
-
-    let baseOriginX = tf.cropX;
-    let baseOriginY = tf.cropY;
-    if (this.overlayDialog && this.overlayViewport && this.mainImgElement) {
-      const mainRect = this.mainImgElement.getBoundingClientRect();
-      const ovRect = this.overlayViewport.getBoundingClientRect();
-      baseOriginX = (ovRect.left - mainRect.left) / this.zoom;
-      baseOriginY = (ovRect.top - mainRect.top) / this.zoom;
-    }
-    baseCtx.drawImage(this.sourceImage, baseOriginX, baseOriginY, w, h, 0, 0, w, h);
-
-    // Canvas Background
-    ctx.clearRect(0, 0, tf.canvasWidth, tf.canvasHeight);
-
-    const bgGrad = ctx.createLinearGradient(0, 0, tf.canvasWidth, tf.canvasHeight);
-    bgGrad.addColorStop(0, '#090d16');
-    bgGrad.addColorStop(1, '#0f172a');
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, tf.canvasWidth, tf.canvasHeight);
-
-    // Render Puzzle Scene
-    ctx.save();
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
-    ctx.shadowBlur = 20;
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(tf.offsetX, tf.offsetY, w, h);
-    ctx.restore();
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(tf.offsetX, tf.offsetY, w, h);
-    ctx.clip();
-
-    if (this.solutionBlur > 0) {
-      ctx.save();
-      ctx.filter = `blur(${this.solutionBlur}px)`;
-      ctx.drawImage(cropCanvas, tf.offsetX, tf.offsetY);
-      ctx.restore();
-    } else {
-      ctx.drawImage(cropCanvas, tf.offsetX, tf.offsetY);
-    }
-
-    if (this.solutionDarken > 0) {
-      ctx.fillStyle = `rgba(0, 0, 0, ${this.solutionDarken})`;
-      ctx.fillRect(tf.offsetX, tf.offsetY, w, h);
-    }
-    ctx.restore();
-
-    // Scene outline border
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(tf.offsetX, tf.offsetY, w, h);
-
-    // 1. Render Dotted Anchors, Alpha-Blended Mix inside anchor, & 2 Tangent Lines
-    this.diffCircles.forEach((diff) => {
-      const origX = diff.cropX + tf.offsetX;
-      const origY = diff.cropY + tf.offsetY;
-      const dragX = diff.dragX + tf.offsetX;
-      const dragY = diff.dragY + tf.offsetY;
-      const r = diff.radius;
-      const color = diff.color || this.solutionOutlineColor;
-      const ang = this._getComputedAngle(diff);
-
-      const distMoved = Math.hypot(dragX - origX, dragY - origY);
-      const isDragged = distMoved > (r * 1.05);
-
-      // Superimposed 50/50 Alpha-Mix inside the original circle
-      if (this.solutionBlendAnchor) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(origX, origY, r, 0, Math.PI * 2);
-        ctx.clip();
-
-        if (this.solutionBlur > 0) {
-          ctx.filter = `blur(${this.solutionBlur}px)`;
-        }
-        ctx.drawImage(cropCanvas, origX - diff.cropX, origY - diff.cropY);
-        ctx.globalAlpha = 0.5;
-        ctx.drawImage(baseCanvas, origX - diff.cropX, origY - diff.cropY);
-
-        if (this.solutionDarken > 0) {
-          ctx.globalAlpha = 1.0;
-          ctx.fillStyle = `rgba(0, 0, 0, ${this.solutionDarken})`;
-          ctx.fillRect(origX - r, origY - r, r * 2, r * 2);
-        }
-        ctx.restore();
-      }
-
-      // If dragged out, draw original spot dashed outline and two tangent lines
-      if (isDragged) {
-        ctx.save();
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 5]);
-        ctx.beginPath();
-        ctx.arc(origX, origY, r, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-
-        if (this.solutionConnectorStyle === 'tangents') {
-          this._drawOuterTangentLines(ctx, origX, origY, dragX, dragY, r, ang, color);
-        }
-      }
-    });
-
-    // 2. Render Magnifier Circles (Side-by-side Image A and Image B Callouts)
-    this.diffCircles.forEach((diff, idx) => {
-      const origX = diff.cropX;
-      const origY = diff.cropY;
-      const dragX = diff.dragX + tf.offsetX;
-      const dragY = diff.dragY + tf.offsetY;
-      const r = diff.radius;
-      const color = diff.color || this.solutionOutlineColor;
-      const ang = this._getComputedAngle(diff);
-
-      const cosA = Math.cos(ang);
-      const sinA = Math.sin(ang);
-
-      const c1x = dragX - r * cosA;
-      const c1y = dragY - r * sinA;
-      const c2x = dragX + r * cosA;
-      const c2y = dragY + r * sinA;
-
-      // Circle 1: Image A
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(c1x, c1y, r, 0, Math.PI * 2);
-      ctx.clip();
-      ctx.drawImage(cropCanvas, c1x - origX, c1y - origY);
-      ctx.restore();
-
-      // Circle 2: Image B
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(c2x, c2y, r, 0, Math.PI * 2);
-      ctx.clip();
-      ctx.drawImage(baseCanvas, c2x - origX, c2y - origY);
-      ctx.restore();
-
-      // Circular Outlines
-      ctx.save();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = this.solutionOutlineWidth;
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-      ctx.shadowBlur = 4;
-
-      ctx.beginPath();
-      ctx.arc(c1x, c1y, r, 0, Math.PI * 2);
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.arc(c2x, c2y, r, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-
-      // Optional Labels
-      if (this.solutionShowLabels) {
-        ctx.save();
-        ctx.font = 'bold 11px system-ui, monospace';
-        ctx.fillStyle = color;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'bottom';
-        ctx.fillText(`#${idx + 1}`, dragX, Math.min(c1y, c2y) - r - 4);
-        ctx.restore();
-      }
-    });
-
-    if (this.solutionDialog) {
-      this.solutionDialog.setTitle(`Difference Solution Studio (${this.diffCircles.length} Spotted)`);
-    }
-  }
-
-  /* -------------------------------------------------------------
-     2 Outermost Dashed Tangent Lines between C0 and {C1, C2}
-     ------------------------------------------------------------- */
-  _drawOuterTangentLines(ctx, p0x, p0y, dragX, dragY, r, ang, color) {
-    const cosA = Math.cos(ang);
-    const sinA = Math.sin(ang);
-
-    const p1 = { x: dragX - r * cosA, y: dragY - r * sinA };
-    const p2 = { x: dragX + r * cosA, y: dragY + r * sinA };
-
-    const getTangentsForCircle = (targetCenter) => {
-      const dx = targetCenter.x - p0x;
-      const dy = targetCenter.y - p0y;
-      const dist = Math.hypot(dx, dy);
-      if (dist < 0.001) return null;
-
-      const ux = dx / dist;
-      const uy = dy / dist;
-
-      const nx = -uy;
-      const ny = ux;
-
-      return {
-        targetCenter,
-        nx, ny,
-        pos: {
-          start: { x: p0x + r * nx, y: p0y + r * ny },
-          end: { x: targetCenter.x + r * nx, y: targetCenter.y + r * ny }
-        },
-        neg: {
-          start: { x: p0x - r * nx, y: p0y - r * ny },
-          end: { x: targetCenter.x - r * nx, y: targetCenter.y - r * ny }
-        }
-      };
-    };
-
-    const t1 = getTangentsForCircle(p1);
-    const t2 = getTangentsForCircle(p2);
-
-    if (!t1 || !t2) return;
-
-    const testPos = (p2.x - p0x) * t1.nx + (p2.y - p0y) * t1.ny;
-    const outerPos = (testPos <= 0) ? t1.pos : t2.pos;
-
-    const testNeg = (p2.x - p0x) * (-t1.nx) + (p2.y - p0y) * (-t1.ny);
-    const outerNeg = (testNeg <= 0) ? t1.neg : t2.neg;
-
-    ctx.save();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([5, 5]);
-
-    ctx.beginPath();
-    ctx.moveTo(outerPos.start.x, outerPos.start.y);
-    ctx.lineTo(outerPos.end.x, outerPos.end.y);
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(outerNeg.start.x, outerNeg.start.y);
-    ctx.lineTo(outerNeg.end.x, outerNeg.end.y);
-    ctx.stroke();
-
-    ctx.restore();
-  }
-
-  copySolutionImage(btn) {
-    if (!this.solutionCanvas) return;
-    this.solutionCanvas.toBlob(async (blob) => {
-      if (!blob) return;
-      try {
-        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-        const originalText = btn.innerHTML;
-        btn.innerHTML = '✓ Copied for Quora!';
-        setTimeout(() => { btn.innerHTML = originalText; }, 1800);
-      } catch (err) {
-        alert('Clipboard direct copy failed. Please use "Download PNG" instead.');
-      }
-    });
-  }
-
-  downloadSolutionImage() {
-    if (!this.solutionCanvas) return;
-    const link = document.createElement('a');
-    link.download = `quora-spot-difference-solution-${Date.now()}.png`;
-    link.href = this.solutionCanvas.toDataURL('image/png');
-    link.click();
-  }
-
-  /* -------------------------------------------------------------
-     Scrolling Stripes Implementation
-     ------------------------------------------------------------- */
   startStripes() {
     this.stopFlashing();
     this.stopStripes();
     this.isStripesMode = true;
     this.stripeRunning = true;
-
-    if (this.overlayClippedImg) {
-      this.overlayClippedImg.style.opacity = '1.0';
-    }
-    if (this.overlayViewport) {
-      this.overlayViewport.style.opacity = '1.0';
-    }
+    if (this.overlayClippedImg) this.overlayClippedImg.style.opacity = '1.0';
 
     this._applyStripeMask();
 
@@ -2104,10 +686,8 @@ class QuoraToys {
       const cycle = (this.stripeWidth || 50) * 2;
       this.stripeOffset = (this.stripeOffset + dt * this.stripeSpeed * this.stripeDirection) % cycle;
       this._updateStripePosition();
-
       this.stripeRafId = requestAnimationFrame(loop);
     };
-
     this.stripeRafId = requestAnimationFrame(loop);
   }
 
@@ -2119,40 +699,7 @@ class QuoraToys {
     this.isStripesMode = false;
     this.stripeRunning = false;
     this._clearStripeMask();
-    if (this.overlayClippedImg) {
-      this.overlayClippedImg.style.opacity = `${this.currentOpacity}`;
-    }
-  }
-
-  toggleStripePlay() {
-    if (!this.isStripesMode) {
-      this.startStripes();
-      return;
-    }
-    this.stripeRunning = !this.stripeRunning;
-    if (this.stripeRunning) {
-      let lastTime = performance.now();
-      const loop = (currentTime) => {
-        if (!this.isStripesMode || !this.stripeRunning) return;
-        const dt = Math.min(0.1, (currentTime - lastTime) / 1000);
-        lastTime = currentTime;
-
-        const cycle = (this.stripeWidth || 50) * 2;
-        this.stripeOffset = (this.stripeOffset + dt * this.stripeSpeed * this.stripeDirection) % cycle;
-        this._updateStripePosition();
-
-        this.stripeRafId = requestAnimationFrame(loop);
-      };
-      this.stripeRafId = requestAnimationFrame(loop);
-    } else if (this.stripeRafId) {
-      cancelAnimationFrame(this.stripeRafId);
-      this.stripeRafId = null;
-    }
-  }
-
-  setStripeWidth(width) {
-    this.stripeWidth = Math.max(8, Math.min(200, width));
-    this._applyStripeMask();
+    if (this.overlayClippedImg) this.overlayClippedImg.style.opacity = `${this.currentOpacity}`;
   }
 
   _applyStripeMask() {
@@ -2171,143 +718,481 @@ class QuoraToys {
 
   _updateStripePosition() {
     if (!this.overlayViewport) return;
-    const pos = `${this.stripeOffset}px 0`;
-    this.overlayViewport.style.webkitMaskPosition = pos;
-    this.overlayViewport.style.maskPosition = pos;
+    this.overlayViewport.style.webkitMaskPosition = `${this.stripeOffset}px 0`;
+    this.overlayViewport.style.maskPosition = `${this.stripeOffset}px 0`;
   }
 
   _clearStripeMask() {
     if (!this.overlayViewport) return;
     this.overlayViewport.style.webkitMaskImage = '';
     this.overlayViewport.style.maskImage = '';
-    this.overlayViewport.style.webkitMaskSize = '';
-    this.overlayViewport.style.maskSize = '';
-    this.overlayViewport.style.webkitMaskRepeat = '';
-    this.overlayViewport.style.maskRepeat = '';
-    this.overlayViewport.style.webkitMaskPosition = '';
-    this.overlayViewport.style.maskPosition = '';
   }
 
-  /* -------------------------------------------------------------
-     Extension / Bookmarklet Launcher
-     ------------------------------------------------------------- */
-  static launchBookmarklet() {
-    const existing = document.getElementById('quoratoys-root-host');
-    if (existing) {
-      existing.remove();
-      return;
+  nudgeOverlay(dx, dy) {
+    if (!this.overlayDialog || !this.overlayDialog.element) return;
+    const curLeft = parseFloat(this.overlayDialog.element.style.left) || 0;
+    const curTop = parseFloat(this.overlayDialog.element.style.top) || 0;
+    this.overlayDialog.element.style.left = `${curLeft + dx}px`;
+    this.overlayDialog.element.style.top = `${curTop + dy}px`;
+    if (this.solutionDialog) this.renderSolutionCanvas();
+  }
+
+  setCircleDiffMode(enable) {
+    this.isCircleDiffMode = enable;
+    if (this.diffCircleBtn) {
+      this.diffCircleBtn.classList.toggle('active', enable);
+      this.diffCircleBtn.innerHTML = enable ? '✕ Exit Diff' : '⭕ Circle Diff';
     }
-    const host = document.createElement('div');
-    host.id = 'quoratoys-root-host';
-    host.style.position = 'fixed';
-    host.style.top = '0';
-    host.style.left = '0';
-    host.style.width = '100vw';
-    host.style.height = '100vh';
-    host.style.zIndex = '2147483647';
-    document.body.appendChild(host);
-
-    const app = new QuoraToys();
-    app.run({ container: host });
+    if (this.circleDrawSurface) this.circleDrawSurface.style.display = enable ? 'block' : 'none';
   }
 
-  destroy() {
-    this.stopFlashing();
-    this.stopStripes();
-    window.removeEventListener('paste', this._onPaste);
-    window.removeEventListener('keydown', this._onKeyDown);
-    if (this.helpDialog) this.helpDialog.close();
-    if (this.solutionDialog) this.solutionDialog.close();
-    if (this.overlayDialog) this.overlayDialog.close();
-    if (this.mainDialog) this.mainDialog.close();
+  toggleCircleDiffMode() {
+    this.setCircleDiffMode(!this.isCircleDiffMode);
   }
 
-  launchInSitu() {
-      const existingHud = document.getElementById('quoratoys-insitu-hud');
-      if (existingHud) {
-        existingHud.remove();
-        return;
+  _bindCircleDrawEvents() {
+    let p1 = null;
+    let isDrawing = false;
+    let previewGroup = null;
+
+    const onDown = (e) => {
+      if (!this.isCircleDiffMode) return;
+      const rect = this.overlayViewport.getBoundingClientRect();
+      p1 = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      isDrawing = true;
+      previewGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      this.overlaySvgLayer.appendChild(previewGroup);
+      e.preventDefault();
+    };
+
+    const onMove = (e) => {
+      if (!isDrawing || !p1) return;
+      const rect = this.overlayViewport.getBoundingClientRect();
+      const p2 = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      const diam = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+      const radius = diam / 2;
+      const midX = (p1.x + p2.x) / 2;
+      const midY = (p1.y + p2.y) / 2;
+
+      previewGroup.innerHTML = `
+        <circle cx="${midX}" cy="${midY}" r="${radius}" fill="rgba(0, 230, 118, 0.2)" stroke="${this.solutionOutlineColor}" stroke-width="${this.solutionOutlineWidth}" stroke-dasharray="4,3" />
+      `;
+    };
+
+    const onUp = (e) => {
+      if (!isDrawing || !p1) return;
+      isDrawing = false;
+      const rect = this.overlayViewport.getBoundingClientRect();
+      const p2 = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      if (previewGroup) previewGroup.remove();
+
+      const diam = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+      if (diam >= 8) {
+        const midX = (p1.x + p2.x) / 2;
+        const midY = (p1.y + p2.y) / 2;
+        const diffRecord = {
+          id: 'diff_' + Date.now(),
+          cropX: midX / this.zoom,
+          cropY: midY / this.zoom,
+          radius: (diam / 2) / this.zoom,
+          dragX: midX / this.zoom,
+          dragY: midY / this.zoom,
+          color: this.solutionOutlineColor
+        };
+        this.diffCircles.push(diffRecord);
+        this.selectedDiffId = diffRecord.id;
+        this.renderDiffMarkers();
+        if (this.solutionDialog) this.renderSolutionCanvas();
+      }
+    };
+
+    this.circleDrawSurface.addEventListener('mousedown', onDown);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+
+  undoLastDiff() {
+    if (this.diffCircles.length > 0) {
+      this.diffCircles.pop();
+      this.selectedDiffId = this.diffCircles.length ? this.diffCircles[this.diffCircles.length - 1].id : null;
+      this.renderDiffMarkers();
+      if (this.solutionDialog) this.renderSolutionCanvas();
+    }
+  }
+
+  deleteSelectedDiff() {
+    if (!this.selectedDiffId) return;
+    this.diffCircles = this.diffCircles.filter(d => d.id !== this.selectedDiffId);
+    this.selectedDiffId = this.diffCircles.length ? this.diffCircles[this.diffCircles.length - 1].id : null;
+    this.renderDiffMarkers();
+    if (this.solutionDialog) this.renderSolutionCanvas();
+  }
+
+  moveSelectedDiffLayer(delta) {
+    if (!this.selectedDiffId) return;
+    const idx = this.diffCircles.findIndex(d => d.id === this.selectedDiffId);
+    if (idx === -1) return;
+    let target = Math.max(0, Math.min(this.diffCircles.length - 1, idx + delta));
+    const item = this.diffCircles.splice(idx, 1)[0];
+    this.diffCircles.splice(target, 0, item);
+    this.renderDiffMarkers();
+    if (this.solutionDialog) this.renderSolutionCanvas();
+  }
+
+  renderDiffMarkers() {
+    if (!this.overlaySvgLayer) return;
+    this.overlaySvgLayer.innerHTML = '';
+    this.diffCircles.forEach((diff, idx) => {
+      const cx = diff.cropX * this.zoom;
+      const cy = diff.cropY * this.zoom;
+      const r = diff.radius * this.zoom;
+      const col = diff.color || this.solutionOutlineColor;
+      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      g.innerHTML = `
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="rgba(0, 230, 118, 0.15)" stroke="${col}" stroke-width="${this.solutionOutlineWidth}" />
+        <circle cx="${cx}" cy="${cy}" r="2" fill="${col}" />
+        <text x="${cx + r + 4}" y="${cy + 4}" font-family="monospace" font-size="11" font-weight="bold" fill="${col}">#${idx + 1}</text>
+      `;
+      this.overlaySvgLayer.appendChild(g);
+    });
+  }
+
+  _getCanvasTransform() {
+    const crop = this.activeCrop || { x: 0, y: 0, width: this.naturalWidth, height: this.naturalHeight };
+    const w = crop.width;
+    const h = crop.height;
+
+    let minX = 0, minY = 0, maxX = w, maxY = h;
+    const strokePad = (this.solutionOutlineWidth / 2) + 2;
+
+    this.diffCircles.forEach(diff => {
+      const r = diff.radius;
+      const ang = (Math.hypot(diff.dragX - diff.cropX, diff.dragY - diff.cropY) >= 0.5)
+        ? Math.atan2(diff.dragY - diff.cropY, diff.dragX - diff.cropX) + Math.PI / 2
+        : 0;
+
+      const cosA = Math.cos(ang);
+      const sinA = Math.sin(ang);
+      const c1x = diff.dragX - r * cosA;
+      const c1y = diff.dragY - r * sinA;
+      const c2x = diff.dragX + r * cosA;
+      const c2y = diff.dragY + r * sinA;
+
+      minX = Math.min(minX, c1x - r - strokePad, c2x - r - strokePad);
+      maxX = Math.max(maxX, c1x + r + strokePad, c2x + r + strokePad);
+      minY = Math.min(minY, c1y - r - strokePad, c2y - r - strokePad);
+      maxY = Math.max(maxY, c1y + r + strokePad, c2y + r + strokePad);
+    });
+
+    const margin = 4;
+    minX = Math.floor(minX - margin);
+    minY = Math.floor(minY - margin);
+    maxX = Math.ceil(maxX + margin);
+    maxY = Math.ceil(maxY + margin);
+
+    return {
+      canvasWidth: Math.round(maxX - minX),
+      canvasHeight: Math.round(maxY - minY),
+      offsetX: -minX,
+      offsetY: -minY,
+      cropW: w,
+      cropH: h,
+      cropX: crop.x,
+      cropY: crop.y
+    };
+  }
+
+  renderSolutionCanvas() {
+    if (!this.solutionCanvas || !this.sourceImage) return;
+
+    const tf = this._getCanvasTransform();
+    this.solutionCanvas.width = tf.canvasWidth;
+    this.solutionCanvas.height = tf.canvasHeight;
+    const ctx = this.solutionCanvas.getContext('2d');
+
+    const w = tf.cropW;
+    const h = tf.cropH;
+
+    const cropCanvas = document.createElement('canvas');
+    cropCanvas.width = w;
+    cropCanvas.height = h;
+    const cropCtx = cropCanvas.getContext('2d');
+    cropCtx.drawImage(this.sourceImage, tf.cropX, tf.cropY, w, h, 0, 0, w, h);
+
+    const baseCanvas = document.createElement('canvas');
+    baseCanvas.width = w;
+    baseCanvas.height = h;
+    const baseCtx = baseCanvas.getContext('2d');
+    let baseOriginX = tf.cropX;
+    let baseOriginY = tf.cropY;
+    if (this.overlayDialog && this.overlayViewport && this.mainImgElement) {
+      const mainRect = this.mainImgElement.getBoundingClientRect();
+      const ovRect = this.overlayViewport.getBoundingClientRect();
+      baseOriginX = (ovRect.left - mainRect.left) / this.zoom;
+      baseOriginY = (ovRect.top - mainRect.top) / this.zoom;
+    }
+    baseCtx.drawImage(this.sourceImage, baseOriginX, baseOriginY, w, h, 0, 0, w, h);
+
+    ctx.clearRect(0, 0, tf.canvasWidth, tf.canvasHeight);
+
+    if (this.solutionBgMode === 'gradient') {
+      const bgGrad = ctx.createLinearGradient(0, 0, tf.canvasWidth, tf.canvasHeight);
+      bgGrad.addColorStop(0, '#090d16');
+      bgGrad.addColorStop(1, '#0f172a');
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, tf.canvasWidth, tf.canvasHeight);
+    } else if (this.solutionBgMode === 'color') {
+      ctx.fillStyle = this.solutionBgColor;
+      ctx.fillRect(0, 0, tf.canvasWidth, tf.canvasHeight);
+    }
+    // 'transparent' leaves the alpha channel completely clear outside the scene
+
+    // Scene Container
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+    ctx.shadowBlur = 16;
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(tf.offsetX, tf.offsetY, w, h);
+    ctx.restore();
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(tf.offsetX, tf.offsetY, w, h);
+    ctx.clip();
+    if (this.solutionBlur > 0) ctx.filter = `blur(${this.solutionBlur}px)`;
+    ctx.drawImage(cropCanvas, tf.offsetX, tf.offsetY);
+    if (this.solutionDarken > 0) {
+      ctx.fillStyle = `rgba(0, 0, 0, ${this.solutionDarken})`;
+      ctx.fillRect(tf.offsetX, tf.offsetY, w, h);
+    }
+    ctx.restore();
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(tf.offsetX, tf.offsetY, w, h);
+
+    // Anchors & Tangents
+    this.diffCircles.forEach(diff => {
+      const origX = diff.cropX + tf.offsetX;
+      const origY = diff.cropY + tf.offsetY;
+      const dragX = diff.dragX + tf.offsetX;
+      const dragY = diff.dragY + tf.offsetY;
+      const r = diff.radius;
+      const col = diff.color || this.solutionOutlineColor;
+
+      const isDragged = Math.hypot(dragX - origX, dragY - origY) > (r * 1.05);
+
+      if (this.solutionBlendAnchor) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(origX, origY, r, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(cropCanvas, origX - diff.cropX, origY - diff.cropY);
+        ctx.globalAlpha = 0.5;
+        ctx.drawImage(baseCanvas, origX - diff.cropX, origY - diff.cropY);
+        ctx.restore();
       }
 
-      const hud = document.createElement('div');
-      hud.id = 'quoratoys-insitu-hud';
-      hud.style.cssText = `
-        position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
-        z-index: 2147483647; background: rgba(15, 23, 42, 0.94);
-        color: #00e676; border: 1.5px solid #00e676; border-radius: 30px;
-        padding: 6px 18px; font-family: system-ui, -apple-system, monospace;
-        font-size: 12px; font-weight: bold; box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-        display: flex; align-items: center; gap: 12px; backdrop-filter: blur(8px);
-        user-select: none;
-      `;
-      hud.innerHTML = `
-        <span>🧩 QuoraToys In-Situ Active: Hover and click any puzzle image on this page</span>
-        <button id="qt-hud-sample" style="background:#0284c7; color:#fff; border:none; border-radius:4px; padding:3px 8px; font-size:10.5px; cursor:pointer; font-weight:bold;">Load Sample</button>
-        <button id="qt-hud-close" style="background:#334155; color:#fff; border:none; border-radius:50%; width:18px; height:18px; cursor:pointer; font-size:10px;">✕</button>
-      `;
-      document.body.appendChild(hud);
+      if (isDragged) {
+        ctx.save();
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.arc(origX, origY, r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    });
 
-      let activeHoverImg = null;
+    // Callout Magnifier Pairs
+    this.diffCircles.forEach((diff, idx) => {
+      const origX = diff.cropX;
+      const origY = diff.cropY;
+      const dragX = diff.dragX + tf.offsetX;
+      const dragY = diff.dragY + tf.offsetY;
+      const r = diff.radius;
+      const col = diff.color || this.solutionOutlineColor;
 
-      const onHover = (e) => {
-        const target = e.target;
-        if (target && target.tagName === 'IMG' && target.offsetWidth > 60 && target.offsetHeight > 60) {
-          if (activeHoverImg && activeHoverImg !== target) {
-            activeHoverImg.style.outline = activeHoverImg._origOutline || '';
-          }
-          activeHoverImg = target;
-          activeHoverImg._origOutline = activeHoverImg.style.outline;
-          activeHoverImg.style.outline = '3px solid #00e676';
-          activeHoverImg.style.cursor = 'crosshair';
-        } else if (activeHoverImg && (!target || target.tagName !== 'IMG')) {
+      const ang = (Math.hypot(diff.dragX - diff.cropX, diff.dragY - diff.cropY) >= 0.5)
+        ? Math.atan2(diff.dragY - diff.cropY, diff.dragX - diff.cropX) + Math.PI / 2
+        : 0;
+
+      const cosA = Math.cos(ang);
+      const sinA = Math.sin(ang);
+      const c1x = dragX - r * cosA;
+      const c1y = dragY - r * sinA;
+      const c2x = dragX + r * cosA;
+      const c2y = dragY + r * sinA;
+
+      // Circle 1 (Image A)
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(c1x, c1y, r, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(cropCanvas, c1x - origX, c1y - origY);
+      ctx.restore();
+
+      // Circle 2 (Image B)
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(c2x, c2y, r, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(baseCanvas, c2x - origX, c2y - origY);
+      ctx.restore();
+
+      // Outlines
+      ctx.save();
+      ctx.strokeStyle = col;
+      ctx.lineWidth = this.solutionOutlineWidth;
+      ctx.beginPath();
+      ctx.arc(c1x, c1y, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(c2x, c2y, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    });
+  }
+
+  openSolutionStudio() {
+    if (this.solutionDialog) {
+      this.solutionDialog.bringToFront();
+      this.renderSolutionCanvas();
+      return;
+    }
+
+    const dialogMaker = (typeof UITools !== 'undefined' && typeof UITools.makeDialog === 'function')
+      ? UITools.makeDialog
+      : (opts => new DialogBox(opts));
+
+    this.solutionDialog = dialogMaker({
+      title: `Difference Solution Studio (${this.diffCircles.length} Spotted)`,
+      size: [880, 620],
+      position: [60, 60],
+      noPadding: true,
+      allowMaximize: true,
+      onClose: () => {
+        this.solutionDialog = null;
+      }
+    });
+
+    const root = document.createElement('div');
+    root.className = 'fdr-solution-studio';
+
+    const toolbar = document.createElement('div');
+    toolbar.className = 'fdr-solution-toolbar';
+
+    const bgToggleBtn = document.createElement('button');
+    bgToggleBtn.className = 'fdr-btn fdr-btn-sm';
+    bgToggleBtn.innerHTML = `🔲 Bg: ${this.solutionBgMode.toUpperCase()}`;
+    bgToggleBtn.title = 'Toggle background: Transparent (default), Dark Gradient, or Solid Color';
+    bgToggleBtn.onclick = () => {
+      const cycle = { transparent: 'gradient', gradient: 'color', color: 'transparent' };
+      this.solutionBgMode = cycle[this.solutionBgMode] || 'transparent';
+      bgToggleBtn.innerHTML = `🔲 Bg: ${this.solutionBgMode.toUpperCase()}`;
+      this.renderSolutionCanvas();
+    };
+
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'fdr-btn fdr-btn-sm fdr-btn-primary';
+    copyBtn.innerHTML = '📋 Copy Image';
+    copyBtn.onclick = () => {
+      this.solutionCanvas.toBlob(blob => {
+        if (!blob) return;
+        navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]).then(() => {
+          copyBtn.textContent = '✓ Copied PNG!';
+          setTimeout(() => { copyBtn.textContent = '📋 Copy Image'; }, 1500);
+        });
+      });
+    };
+
+    toolbar.append(bgToggleBtn, copyBtn);
+    root.appendChild(toolbar);
+
+    const vp = document.createElement('div');
+    vp.className = 'fdr-solution-viewport';
+    this.solutionCanvas = document.createElement('canvas');
+    this.solutionCanvas.className = 'fdr-solution-canvas';
+    vp.appendChild(this.solutionCanvas);
+    root.appendChild(vp);
+
+    this.solutionDialog.contentElement.appendChild(root);
+    this.renderSolutionCanvas();
+  }
+
+  static launchInSitu() {
+    const existingHud = document.getElementById('quoratoys-insitu-hud');
+    if (existingHud) {
+      existingHud.remove();
+      return;
+    }
+
+    const hud = document.createElement('div');
+    hud.id = 'quoratoys-insitu-hud';
+    hud.style.cssText = `
+      position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+      z-index: 2147483647; background: rgba(15, 23, 42, 0.94);
+      color: #00e676; border: 1.5px solid #00e676; border-radius: 30px;
+      padding: 6px 18px; font-family: monospace; font-size: 12px; font-weight: bold;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.8), 0 0 18px rgba(0, 230, 118, 0.35);
+      display: flex; align-items: center; gap: 12px; backdrop-filter: blur(10px);
+      user-select: none;
+    `;
+    hud.innerHTML = `
+      <span>🧩 QuoraToys Active: Click any puzzle image on this page to compare</span>
+      <button id="qt-hud-close" style="background:#334155; color:#fff; border:none; border-radius:50%; width:18px; height:18px; cursor:pointer; font-size:10px;">✕</button>
+    `;
+    document.body.appendChild(hud);
+
+    let activeHoverImg = null;
+
+    const onHover = (e) => {
+      const target = e.target;
+      if (target && target.tagName === 'IMG' && target.offsetWidth > 60 && target.offsetHeight > 60) {
+        if (activeHoverImg && activeHoverImg !== target) {
           activeHoverImg.style.outline = activeHoverImg._origOutline || '';
-          activeHoverImg = null;
         }
-      };
+        activeHoverImg = target;
+        activeHoverImg._origOutline = activeHoverImg.style.outline;
+        activeHoverImg.style.outline = '3px solid #00e676';
+        activeHoverImg.style.cursor = 'crosshair';
+      } else if (activeHoverImg && (!target || target.tagName !== 'IMG')) {
+        activeHoverImg.style.outline = activeHoverImg._origOutline || '';
+        activeHoverImg = null;
+      }
+    };
 
-      const onClick = (e) => {
-        const target = e.target;
-        if (target && target.tagName === 'IMG' && target.offsetWidth > 60 && target.offsetHeight > 60) {
-          e.preventDefault();
-          e.stopPropagation();
-          cleanup();
-
-          const app = new QuoraToys();
-          window.quoraToysInstance = app;
-          const host = document.createElement('div');
-          host.id = 'quoratoys-insitu-host';
-          host.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 2147483640;';
-          document.body.appendChild(host);
-
-          app.run({ container: host }).then(() => {
-            app.loadImageFromUrl(target.src, target.alt || 'Quora Puzzle');
-          });
-        }
-      };
-
-      const cleanup = () => {
-        document.removeEventListener('mousemove', onHover, true);
-        document.removeEventListener('click', onClick, true);
-        if (activeHoverImg) activeHoverImg.style.outline = activeHoverImg._origOutline || '';
-        hud.remove();
-      };
-
-      document.addEventListener('mousemove', onHover, true);
-      document.addEventListener('click', onClick, true);
-
-      document.getElementById('qt-hud-close').onclick = cleanup;
-      document.getElementById('qt-hud-sample').onclick = () => {
+    const onClick = (e) => {
+      const target = e.target;
+      if (target && target.tagName === 'IMG' && target.offsetWidth > 60 && target.offsetHeight > 60) {
+        e.preventDefault();
+        e.stopPropagation();
         cleanup();
-        const app = new QuoraToys();
-        window.quoraToysInstance = app;
+
         const host = document.createElement('div');
         host.id = 'quoratoys-insitu-host';
         host.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 2147483640;';
         document.body.appendChild(host);
+
+        const app = new QuoraToys();
+        window.quoraToysInstance = app;
         app.run({ container: host }).then(() => {
-          app.loadSamplePuzzle();
+          app.loadImageFromUrl(target.src, target.alt || 'Quora Puzzle');
         });
-      };
+      }
+    };
+
+    const cleanup = () => {
+      document.removeEventListener('mousemove', onHover, true);
+      document.removeEventListener('click', onClick, true);
+      if (activeHoverImg) activeHoverImg.style.outline = activeHoverImg._origOutline || '';
+      hud.remove();
+    };
+
+    document.addEventListener('mousemove', onHover, true);
+    document.addEventListener('click', onClick, true);
+    document.getElementById('qt-hud-close').onclick = cleanup;
   }
 }
 

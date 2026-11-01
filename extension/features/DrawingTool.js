@@ -1,25 +1,36 @@
 class DrawingTool {
   constructor(targetElement = document.body, options = {}) {
     this.targetElement = targetElement;
-    this.options = options;
+    this.options = options || {};
+
     this.colors = [
-      'rgb(255,0,0)',
-      'rgb(255,80,0)',
-      'rgb(255,255,0)',
-      'rgb(0,233,0)',
-      'rgb(0,80,255)',
-      'rgb(100,0,255)',
-      'rgb(255,30,255)',
+      '#00e676', // Emerald
+      '#00f2fe', // Cyan
+      '#ffd700', // Yellow
+      '#ff2d55', // Red / Rose
+      '#ff8000', // Orange
+      '#c084fc', // Amethyst / Purple
+      '#ffffff'  // Pure White
     ];
-    this.colorIndex = 3;
-    this.options.color = this.colors[3];
+    this.colorIndex = 0;
+    this.currentColor = this.colors[0];
+
+    this.modes = ['curve', 'line', 'balloon'];
+    this.toolMode = this.options.mode || 'curve'; // 'curve' | 'line' | 'balloon'
+    this.hasArrow = true;
+    this.strokeWidth = 4;
+    this.roundCorners = true;
+    this.filletRadius = 18;
+
     this.svg = null;
+    this.hudElement = null;
     this.isDrawing = false;
     this.lastPoint = [0, 0];
-    this.drawnCurves = [];
     this.currentPoints = [];
+    this.drawnObjects = []; // Array of { type: 'path'|'balloon', element, data }
     this.pencilSprite = null;
 
+    // Kinetic tether & string drag
     this.controlPressed = false;
     this.inControlMode = false;
     this.offsetVector = [0, 0];
@@ -31,6 +42,7 @@ class DrawingTool {
     this.usedControl = false;
 
     this.createSvgOverlay();
+    this.createHudToolbar();
     this.addEventListeners();
     this.setupKeystrokes();
   }
@@ -38,636 +50,662 @@ class DrawingTool {
   distance(pt1, pt2) {
     const dx = pt1[0] - pt2[0];
     const dy = pt1[1] - pt2[1];
-    return Math.sqrt(dx * dx + dy * dy);
+    return Math.hypot(dx, dy);
   }
 
   createSvgOverlay() {
     this.svg = makeElement('svg:svg', {
+      className: 'quoratoys-draw-overlay',
       style: {
         position: 'fixed',
-        zIndex: '2147483646',
+        zIndex: '2147483640',
         top: '0',
         left: '0',
         width: '100vw',
         height: '100vh',
         pointerEvents: 'auto',
         cursor: 'crosshair',
-      },
+        overflow: 'visible'
+      }
     });
+
+    // Marker Arrowheads Definition
+    this.markerDefs = makeElement('svg:defs');
+    this._rebuildArrowheadMarkers();
+    this.svg.appendChild(this.markerDefs);
+
+    this.curvesGroup = makeElement('svg:g', { className: 'draw-curves-layer' });
+    this.svg.appendChild(this.curvesGroup);
+
     this.targetElement.appendChild(this.svg);
   }
 
-  removeSvgOverlay() {
-    if (this.svg) this.svg.remove();
-    if (this.pencilSprite) this.pencilSprite.element.remove();
-    this.removeKeystrokes();
+  _rebuildArrowheadMarkers() {
+    if (!this.markerDefs) return;
+    this.markerDefs.innerHTML = '';
+
+    this.colors.forEach((col, idx) => {
+      const cleanCol = col.replace('#', 'c_');
+      const marker = makeElement('svg:marker', {
+        id: `qt-arrow-${cleanCol}`,
+        viewBox: '0 0 10 10',
+        refX: '7',
+        refY: '5',
+        markerWidth: '6',
+        markerHeight: '6',
+        orient: 'auto-start-reverse'
+      }, [
+        makeElement('svg:path', {
+          d: 'M 0 1.5 L 9 5 L 0 8.5 z',
+          fill: col,
+          stroke: 'rgba(0,0,0,0.4)',
+          'stroke-width': '0.6'
+        })
+      ]);
+      this.markerDefs.appendChild(marker);
+    });
   }
 
-  setColor(colorIndex) {
-    this.colorIndex = colorIndex;
-    this.options.color = this.colors[colorIndex];
-    if (this.pencilSprite) {
-      this.pencilSprite.setColor(this.options.color);
-    }
-  }
+  createHudToolbar() {
+    if (this.hudElement) return;
 
-  showPencilImage(x, y) {
-    if (!this.pencilSprite) {
-      this.pencilSprite = this.createPencilSprite();
-      document.body.appendChild(this.pencilSprite.element);
-      this.setColor(this.colorIndex);
-    } else {
-      this.setColor(this.colorIndex);
-    }
-    Object.assign(this.pencilSprite.element.style, {
-      left: `${x - 6}px`,
-      top: `${y - 12}px`,
-      display: 'block',
-    });
-    this.svg.style.cursor = 'none';
-  }
-
-  createPencilSprite() {
-    const defs = makeElement('svg:defs', {}, [
-      makeElement(
-        'svg:radialGradient',
-        {
-          id: 'palmGrad',
-          cx: '50%',
-          cy: '50%',
-          r: '75%',
-          fx: '30%',
-          fy: '30%',
-        },
-        [
-          makeElement('svg:stop', {
-            offset: '0%',
-            'stop-color': '#ffffff',
-            'stop-opacity': '1',
-          }),
-          makeElement('svg:stop', {
-            offset: '100%',
-            'stop-color': '#ffffff',
-            'stop-opacity': '0',
-          }),
-        ]
-      ),
-      makeElement(
-        'svg:linearGradient',
-        {
-          id: 'skinGrad',
-          x1: '64.59',
-          y1: '114.21',
-          x2: '64.58',
-          y2: '186.04',
-          gradientUnits: 'userSpaceOnUse',
-          gradientTransform:
-            'matrix(0.2557,-0.0835,0.0831,0.2570,-10.033,-1.663)',
-        },
-        [
-          makeElement('svg:stop', {
-            offset: '0%',
-            'stop-color': '#f1e6cd',
-            'stop-opacity': '1',
-          }),
-          makeElement('svg:stop', {
-            offset: '100%',
-            'stop-color': '#f1e6cb',
-            'stop-opacity': '0',
-          }),
-        ]
-      ),
-      makeElement(
-        'svg:linearGradient',
-        {
-          id: 'highlightGrad',
-          x1: '75.00',
-          y1: '167.54',
-          x2: '75.08',
-          y2: '215.72',
-          gradientUnits: 'userSpaceOnUse',
-          gradientTransform:
-            'matrix(0.2557,-0.0835,0.0831,0.2570,-10.033,-1.663)',
-        },
-        [
-          makeElement('svg:stop', {
-            offset: '0%',
-            'stop-color': '#ffffff',
-            'stop-opacity': '0.53',
-          }),
-          makeElement('svg:stop', {
-            offset: '100%',
-            'stop-color': '#ffffff',
-            'stop-opacity': '0',
-          }),
-        ]
-      ),
-      makeElement(
-        'svg:radialGradient',
-        {
-          id: 'tipGlow',
-          cx: '50%',
-          cy: '50%',
-          r: '50%',
-        },
-        [
-          makeElement('svg:stop', {
-            offset: '0%',
-            'stop-color': '#ffffff',
-            'stop-opacity': '1',
-          }),
-          makeElement('svg:stop', {
-            offset: '40%',
-            'stop-color': '#ffffff',
-            'stop-opacity': '0.6',
-          }),
-          makeElement('svg:stop', {
-            offset: '100%',
-            'stop-color': '#ffffff',
-            'stop-opacity': '0',
-          }),
-        ]
-      ),
-    ]);
-
-    const pencilColorPath = makeElement('svg:path', {
-      d: 'M39.16 7.55L24.98 7.42L27.05 14.76L39.17 14.85Z',
-      fill: this.options.color,
+    const hud = makeElement('div', {
+      className: 'quoratoys-draw-hud',
+      style: {
+        position: 'fixed',
+        top: '12px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: '2147483646',
+        background: 'rgba(15, 23, 42, 0.94)',
+        border: '1.5px solid #00e676',
+        borderRadius: '30px',
+        padding: '5px 14px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        boxShadow: '0 10px 30px rgba(0, 0, 0, 0.8), 0 0 18px rgba(0, 230, 118, 0.35)',
+        fontFamily: 'monospace',
+        fontSize: '11.5px',
+        color: '#f8fafc',
+        backdropFilter: 'blur(10px)',
+        userSelect: 'none'
+      }
     });
 
-    const pencilColorPath2 = makeElement('svg:path', {
-      d: 'M12.56 7.55L18.37 7.4C18.39 7.9 18.47 8.4 18.53 8.9L19.64 14.91L12.52 14.77C12.71 14.63 13.83 12.95 13.7 10.83C13.61 9.39 12.56 7.55 12.56 7.55Z',
-      fill: this.options.color,
+    // 1. Tool Mode Buttons
+    const btnCurve = makeElement('button', {
+      className: `dr-nav-btn ${this.toolMode === 'curve' ? 'primary' : ''}`,
+      style: { padding: '3px 8px', fontSize: '10.5px' },
+      onclick: () => this.setToolMode('curve')
+    }, '〰️ Spline');
+
+    const btnLine = makeElement('button', {
+      className: `dr-nav-btn ${this.toolMode === 'line' ? 'primary' : ''}`,
+      style: { padding: '3px 8px', fontSize: '10.5px' },
+      onclick: () => this.setToolMode('line')
+    }, '📏 Line');
+
+    const btnBalloon = makeElement('button', {
+      className: `dr-nav-btn ${this.toolMode === 'balloon' ? 'primary' : ''}`,
+      style: { padding: '3px 8px', fontSize: '10.5px' },
+      onclick: () => this.setToolMode('balloon')
+    }, '💬 Balloon');
+
+    this.modeButtons = { curve: btnCurve, line: btnLine, balloon: btnBalloon };
+
+    // 2. Arrowhead Toggle
+    const btnArrow = makeElement('button', {
+      className: `dr-nav-btn ${this.hasArrow ? 'primary' : ''}`,
+      style: { padding: '3px 8px', fontSize: '10.5px', color: this.hasArrow ? '#00f2fe' : '#64748b' },
+      onclick: () => {
+        this.hasArrow = !this.hasArrow;
+        btnArrow.classList.toggle('primary', this.hasArrow);
+        btnArrow.style.color = this.hasArrow ? '#00f2fe' : '#64748b';
+        btnArrow.textContent = this.hasArrow ? '🏹 Arrow ON' : '🏹 Arrow OFF';
+      }
+    }, '🏹 Arrow ON');
+    this.arrowButton = btnArrow;
+
+    // 3. Fillet / Rounded Corner Toggle (for straight lines)
+    const btnFillet = makeElement('button', {
+      className: `dr-nav-btn ${this.roundCorners ? 'primary' : ''}`,
+      style: { padding: '3px 8px', fontSize: '10.5px' },
+      title: 'Round sharp corners between connected line segments',
+      onclick: () => {
+        this.roundCorners = !this.roundCorners;
+        btnFillet.classList.toggle('primary', this.roundCorners);
+        btnFillet.textContent = this.roundCorners ? '📐 Round: ON' : '📐 Round: OFF';
+      }
+    }, '📐 Round: ON');
+
+    // 4. Color Swatches
+    const swatches = makeElement('div', {
+      style: { display: 'flex', gap: '4px', alignItems: 'center', margin: '0 4px' }
     });
 
-    const pencilColorPath3 = makeElement('svg:path', {
-      d: 'M8.91 12.96L5.08 11.07L8.86 9.3C8.86 9.3 9.49 10.18 9.49 11.24C9.5 11.83 9.29 12.35 8.91 12.95Z',
-      fill: this.options.color,
-    });
-
-    const glowCircle = makeElement('svg:circle', {
-      cx: '5.05',
-      cy: '11.07',
-      r: '3',
-      fill: 'url(#tipGlow)',
-    });
-
-    const handSvg = makeElement(
-      'svg:svg',
-      {
-        xmlns: 'http://www.w3.org/2000/svg',
-        viewBox: '0 0 50 50',
+    this.colors.forEach((col, idx) => {
+      const b = makeElement('button', {
         style: {
-          position: 'absolute',
-          top: '0',
-          left: '0',
-          width: '100%',
+          width: '16px',
+          height: '16px',
+          borderRadius: '50%',
+          background: col,
+          border: this.currentColor === col ? '2px solid #fff' : '1px solid rgba(255,255,255,0.3)',
+          cursor: 'pointer',
+          padding: '0',
+          boxShadow: this.currentColor === col ? `0 0 8px ${col}` : 'none',
+          transform: this.currentColor === col ? 'scale(1.25)' : 'none',
+          transition: 'all 0.12s ease'
         },
+        onclick: () => this.setColor(idx)
+      });
+      swatches.appendChild(b);
+    });
+    this.swatchesContainer = swatches;
+
+    // 5. Actions: Snapshot Copy, Undo, Clear, Exit
+    const copyBtn = makeElement('button', {
+      className: 'dr-nav-btn primary',
+      style: { padding: '3px 9px', fontSize: '10.5px', fontWeight: 'bold', background: '#238636', borderColor: '#2ea043' },
+      title: 'Copy visible drawing or image directly to clipboard for Quora',
+      onclick: () => this.copySnapshot(copyBtn)
+    }, '📋 Copy for Quora');
+
+    const undoBtn = makeElement('button', {
+      className: 'dr-nav-btn',
+      style: { padding: '3px 7px', fontSize: '10.5px' },
+      title: 'Undo last drawing (Ctrl+Z or U)',
+      onclick: () => this.undoLast()
+    }, '↺ Undo');
+
+    const clearBtn = makeElement('button', {
+      className: 'dr-nav-btn',
+      style: { padding: '3px 7px', fontSize: '10.5px', color: '#ff7b72' },
+      title: 'Clear all annotations',
+      onclick: () => this.clear()
+    }, '🗑️');
+
+    const closeBtn = makeElement('button', {
+      style: {
+        background: '#334155', color: '#fff', border: 'none',
+        borderRadius: '50%', width: '20px', height: '20px',
+        cursor: 'pointer', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center'
       },
-      [
-        defs,
-        makeElement('svg:path', {
-          d: 'M12.75 7.01C12.75 7.01 12.27 5.56 12.85 4.74C13.43 3.92 21.97 2.41 21.97 2.41C21.97 2.41 25.77 2.91 27.41 4.07C29.05 5.23 31.54 7.23 31.54 7.23L25.18 7.45L27.19 14.8L37.56 14.81C37.56 14.81 38.67 16.56 38.83 17.36C38.98 18.16 38.92 28.73 38.78 29.78C38.65 30.83 32.55 33.81 32.55 33.81L26.73 37.54L25.74 37.2C25.74 37.2 22.08 33.91 21.12 30.93C20.16 27.96 20.09 25.28 20.09 25.28C20.09 25.28 17.15 25.02 16.74 23.57C16.32 22.11 16.57 20.66 17.76 20.05C18.25 19.8 14.96 20.4 14.75 18.39C14.63 17.26 15.23 15.16 15.95 14.92C16.66 14.69 19.48 14.93 19.48 14.93L18.46 7.85L18 7.41Z',
-          fill: 'url(#skinGrad)',
-          stroke: 'none',
-        }),
-        makeElement('svg:ellipse', {
-          cx: '6.05',
-          cy: '10.94',
-          rx: '6.05',
-          ry: '6.14',
-          fill: 'url(#palmGrad)',
-          stroke: 'none',
-        }),
-        makeElement('svg:path', {
-          d: 'M25.18 38.44C24.83 38.68 24.72 39.33 24.95 39.71C25.18 40.08 30.08 47.91 30.27 48.16C30.45 48.41 31.23 48.73 31.72 48.43C32.21 48.12 46.45 39.17 46.76 38.96C47.07 38.75 47.2 37.93 46.87 37.46C46.54 36.99 42.03 29.67 41.74 29.33C41.45 28.99 40.66 28.83 40.15 29.18C39.63 29.53 25.18 38.44 25.18 38.44Z',
-          fill: 'url(#highlightGrad)',
-          'fill-opacity': '0.47',
-          stroke: 'none',
-        }),
-        pencilColorPath,
-        pencilColorPath2,
-        pencilColorPath3,
-        makeElement('svg:path', {
-          d: 'M29.34 22.6C28.41 19.4 25.7 9.92 24.93 7.21C24.21 4.7 22.7 4.29 21.22 4.49C20.1 4.65 18.13 5.71 18.43 7.85C18.72 9.87 20.12 17.75 20.69 20.44C20.77 20.85 20.61 21.41 20.61 21.41C20.61 21.41 19.98 25.29 20.17 26.93C20.36 28.65 21.04 31.14 22.19 33.03C23.34 34.93 26.26 37.68 26.26 37.68',
-          fill: 'none',
-          stroke: '#000000',
-          'stroke-width': '0.73',
-          'stroke-linecap': 'round',
-          'stroke-linejoin': 'round',
-        }),
-        makeElement('svg:path', {
-          d: 'M12.86 7.5C12.53 6.99 11.87 4.45 14.52 3.83C17.02 3.24 20.96 2.58 21.47 2.51C21.99 2.44 23.54 2.53 24.26 2.79C24.99 3.04 28.27 4.09 31.73 7.51',
-          fill: 'none',
-          stroke: '#000000',
-          'stroke-width': '0.73',
-          'stroke-linecap': 'round',
-          'stroke-linejoin': 'round',
-        }),
-        makeElement('svg:path', {
-          d: 'M16.87 14.85C15.58 15.18 14.96 16.34 14.78 17.17C14.63 17.88 14.71 19.46 16.03 19.99C16.93 20.35 17.82 20.17 20.41 19.16',
-          fill: 'none',
-          stroke: '#000000',
-          'stroke-width': '0.73',
-          'stroke-linecap': 'round',
-          'stroke-linejoin': 'round',
-        }),
-        makeElement('svg:path', {
-          d: 'M20.07 25.33C20.07 25.33 17.62 25.32 16.89 23.62C16.32 22.31 16.85 21.35 17.32 20.72C17.88 19.97 19.36 19.57 20.38 19.21',
-          fill: 'none',
-          stroke: '#000000',
-          'stroke-width': '0.73',
-          'stroke-linecap': 'round',
-          'stroke-linejoin': 'round',
-        }),
-        makeElement('svg:path', {
-          d: 'M37.74 14.88C37.74 14.88 38.85 16.47 39.01 18.15C39.18 19.82 39.05 27.76 38.83 29.9',
-          fill: 'none',
-          stroke: '#000000',
-          'stroke-width': '0.73',
-          'stroke-linecap': 'round',
-          'stroke-linejoin': 'round',
-        }),
-        makeElement('svg:line', {
-          x1: '40.6',
-          y1: '9',
-          x2: '42.55',
-          y2: '9',
-          stroke: '#000',
-          'stroke-width': '0.73',
-        }),
-        makeElement('svg:line', {
-          x1: '40.62',
-          y1: '10.49',
-          x2: '42.57',
-          y2: '10.49',
-          stroke: '#000',
-          'stroke-width': '0.73',
-        }),
-        makeElement('svg:line', {
-          x1: '40.58',
-          y1: '11.97',
-          x2: '42.53',
-          y2: '11.97',
-          stroke: '#000',
-          'stroke-width': '0.73',
-        }),
-        makeElement('svg:line', {
-          x1: '40.6',
-          y1: '13.49',
-          x2: '42.55',
-          y2: '13.49',
-          stroke: '#000',
-          'stroke-width': '0.73',
-        }),
-        makeElement('svg:path', {
-          d: 'M43.85 7.72C43.85 7.72 46.67 7.66 47.55 7.72C48.32 7.79 49.2 8.64 49.36 9.52C49.57 10.64 49.68 11.71 49.44 13.04C49.25 14.04 48.76 14.44 47.91 14.67C47.04 14.9 43.95 14.8 43.95 14.8Z',
-          fill: '#ff8484',
-          stroke: '#000000',
-          'stroke-width': '0.73',
-        }),
-        makeElement('svg:path', {
-          d: 'M39.69 7.15C40.14 7.17 43.32 7.18 43.51 7.19C43.7 7.2 43.84 7.37 43.85 7.56C43.86 7.8 43.95 14.71 43.94 14.97C43.94 15.18 43.76 15.31 43.56 15.32C43.33 15.34 39.76 15.41 39.55 15.4C39.36 15.38 39.17 15.08 39.17 14.85L39.14 7.65C39.14 7.65 39.24 7.14 39.69 7.15Z',
-          fill: '#ffffad',
-          stroke: '#000000',
-          'stroke-width': '0.73',
-        }),
-        makeElement('svg:path', {
-          d: 'M12.56 7.55L8.85 9.3C9.07 9.68 9.52 10.39 9.49 11.27C9.46 12.25 8.91 12.96 8.91 12.96L12.53 14.76C13.04 14.42 13.87 12.81 13.73 10.94C13.57 8.89 12.56 7.55 12.56 7.55Z',
-          fill: '#ffdca1',
-          stroke: '#000000',
-          'stroke-width': '0.73',
-        }),
-        glowCircle,
-      ]
+      title: 'Exit Drawing Mode (Esc)',
+      onclick: () => this.quit()
+    }, '✕');
+
+    hud.append(
+      btnCurve,
+      btnLine,
+      btnBalloon,
+      btnArrow,
+      btnFillet,
+      swatches,
+      copyBtn,
+      undoBtn,
+      clearBtn,
+      closeBtn
     );
 
-    const element = makeElement(
-      'div',
-      {
-        style: {
-          width: '65px',
-          zIndex: '2147483647',
-          position: 'fixed',
-          pointerEvents: 'none',
-        },
-      },
-      handSvg
-    );
-
-    return {
-      element,
-      setColor: (color) => {
-        pencilColorPath.setAttribute('fill', color);
-        pencilColorPath2.setAttribute('fill', color);
-        pencilColorPath3.setAttribute('fill', color);
-      },
-    };
+    document.body.appendChild(hud);
+    this.hudElement = hud;
   }
 
-  hidePencilImage() {
-    if (this.pencilSprite) {
-      this.pencilSprite.element.style.display = 'none';
+  setToolMode(mode) {
+    this.toolMode = mode;
+    Object.keys(this.modeButtons).forEach(k => {
+      this.modeButtons[k].classList.toggle('primary', k === mode);
+    });
+    if (this.svg) {
+      this.svg.style.cursor = mode === 'balloon' ? 'text' : 'crosshair';
     }
-    if (this.svg) this.svg.style.cursor = 'crosshair';
+  }
+
+  setColor(index) {
+    this.colorIndex = index;
+    this.currentColor = this.colors[index];
+
+    if (this.swatchesContainer) {
+      const btns = this.swatchesContainer.children;
+      for (let i = 0; i < btns.length; i++) {
+        const isSel = (i === index);
+        btns[i].style.border = isSel ? '2px solid #fff' : '1px solid rgba(255,255,255,0.3)';
+        btns[i].style.boxShadow = isSel ? `0 0 8px ${this.currentColor}` : 'none';
+        btns[i].style.transform = isSel ? 'scale(1.25)' : 'none';
+      }
+    }
+
+    if (this.pencilSprite) {
+      this.pencilSprite.setColor(this.currentColor);
+    }
   }
 
   addEventListeners() {
     this.boundStart = this.startDrawing.bind(this);
     this.boundDraw = this.draw.bind(this);
     this.boundStop = this.stopDrawing.bind(this);
-    this.boundHide = this.hidePencilImage.bind(this);
 
     ['mousedown', 'touchstart'].forEach((e) =>
-      this.svg.addEventListener(e, this.boundStart)
+      this.svg.addEventListener(e, this.boundStart, { passive: false })
     );
     ['mousemove', 'touchmove'].forEach((e) =>
-      this.svg.addEventListener(e, this.boundDraw)
+      this.svg.addEventListener(e, this.boundDraw, { passive: false })
     );
     ['mouseup', 'touchend'].forEach((e) =>
-      this.svg.addEventListener(e, this.boundStop)
+      this.svg.addEventListener(e, this.boundStop, { passive: false })
     );
-    this.svg.addEventListener('mouseleave', this.boundHide);
 
     this.boundKeyDown = (e) => {
+      if (e.target.isContentEditable || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
       if (e.key === 'Control' || e.key === 'Meta') this.controlPressed = true;
       if (e.key === 'Shift') this.shiftPressed = true;
-      if (e.key === 'd' || e.key === 'D') this.logControlLineDetails();
-    };
-    this.boundKeyUp = (e) => {
-      if (e.key === 'Control' || e.key === 'Meta') this.controlPressed = false;
-      if (e.key === 'Shift') {
-        this.shiftPressed = false;
-        if (
-          this.isDrawing &&
-          this.lastMousePos &&
-          this.currentPoints.length > 0
-        ) {
-          const lastPoint = this.currentPoints[this.currentPoints.length - 1];
-          this.offsetVector = [
-            this.lastMousePos[0] - lastPoint[0],
-            this.lastMousePos[1] - lastPoint[1],
-          ];
-        }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        this.undoLast();
+        e.preventDefault();
+      }
+      if (e.key === 'Escape') {
+        this.quit();
+        e.preventDefault();
       }
     };
-    window.addEventListener('keydown', this.boundKeyDown);
-    window.addEventListener('keyup', this.boundKeyUp);
+
+    this.boundKeyUp = (e) => {
+      if (e.key === 'Control' || e.key === 'Meta') this.controlPressed = false;
+      if (e.key === 'Shift') this.shiftPressed = false;
+    };
+
+    window.addEventListener('keydown', this.boundKeyDown, true);
+    window.addEventListener('keyup', this.boundKeyUp, true);
   }
 
   setupKeystrokes() {
-    this.ksHandlers = [
-      { key: 'red', fn: () => this.setColor(0) },
-      { key: 'orange', fn: () => this.setColor(1) },
-      { key: 'yellow', fn: () => this.setColor(2) },
-      { key: 'green', fn: () => this.setColor(3) },
-      { key: 'blue', fn: () => this.setColor(4) },
-      { key: 'purple', fn: () => this.setColor(5) },
-      { key: 'magenta', fn: () => this.setColor(6) },
-      { key: 'clear', fn: () => this.clear() },
-      { key: 'toggle', fn: () => KeystrokeHandler.toggleShowCommand() },
-      { key: 'undo', fn: () => this.undoLast() },
-      { key: 'zlog', fn: () => this.logControlLineDetails() },
-      { key: 'e&xit', fn: () => this.quit() },
-      {
-        key: { name: 'quit', key: 'escape', showPopup: true },
-        fn: () => this.quit(),
-      },
-    ];
-    this.ksHandlers.forEach((h) => KeystrokeHandler.addHandler(h.key, h.fn));
-  }
-
-  removeKeystrokes() {
-    window.removeEventListener('keydown', this.boundKeyDown);
-    window.removeEventListener('keyup', this.boundKeyUp);
-
-    if (this.ksHandlers) {
-      this.ksHandlers.forEach((h) => {
-        if (typeof h.key === 'string') {
-          KeystrokeHandler.removeHandler(h.key.replace('&', ''));
-        } else if (h.key && h.key.name) {
-          KeystrokeHandler.removeHandler(h.key.name);
-        }
-      });
-    }
-  }
-
-  quit() {
-    if (this.svg) {
-      ['mousedown', 'touchstart'].forEach((e) =>
-        this.svg.removeEventListener(e, this.boundStart)
-      );
-      ['mousemove', 'touchmove'].forEach((e) =>
-        this.svg.removeEventListener(e, this.boundDraw)
-      );
-      ['mouseup', 'touchend'].forEach((e) =>
-        this.svg.removeEventListener(e, this.boundStop)
-      );
-      this.svg.removeEventListener('mouseleave', this.boundHide);
-    }
-
-    this.removeSvgOverlay();
-
-    if (window.drawingToolInstance === this) {
+    if (typeof KeystrokeHandler !== 'undefined') {
+      KeystrokeHandler.addHandler('c', () => this.setToolMode('curve'));
+      KeystrokeHandler.addHandler('l', () => this.setToolMode('line'));
+      KeystrokeHandler.addHandler('b', () => this.setToolMode('balloon'));
+      KeystrokeHandler.addHandler('a', () => this.arrowButton?.click());
+      KeystrokeHandler.addHandler('u', () => this.undoLast());
     }
   }
 
   startDrawing(e) {
-    const svgRect = this.svg.getBoundingClientRect();
-    this.isDrawing = true;
-    const x =
-      (e.type.startsWith('touch') ? e.touches[0].clientX : e.clientX) -
-      svgRect.left;
-    const y =
-      (e.type.startsWith('touch') ? e.touches[0].clientY : e.clientY) -
-      svgRect.top;
+    if (e.target.closest('.quoratoys-draw-hud, .qt-balloon-card')) return;
 
-    this.lastPoint = [x, y];
-    this.currentPoints = [this.lastPoint];
-    this.lastMousePos = [x, y];
+    const pt = this._getEventPoint(e);
+    this.isDrawing = true;
+    this.lastPoint = pt;
+    this.currentPoints = [pt];
+    this.lastMousePos = pt;
     this.offsetVector = [0, 0];
     this.anchorPoint = null;
     this.inControlMode = false;
-    this.lastControlPos = [x, y];
+    this.lastControlPos = pt;
     this.usedControl = false;
 
-    this.createSvgPath(this.currentPoints);
+    if (this.toolMode === 'balloon') {
+      this.createSpeechBalloon(pt[0], pt[1]);
+      this.isDrawing = false;
+      e.preventDefault();
+      return;
+    }
+
+    if (this.toolMode === 'line') {
+      this.createSvgLinePreview(pt, pt);
+    } else {
+      this.createSvgPath(this.currentPoints);
+    }
 
     if (this.controlPressed) {
       this.inControlMode = true;
       this.anchorPoint = [...this.lastPoint];
-      this.createControlLine(x, y);
+      this.createControlLine(pt[0], pt[1]);
       this.usedControl = true;
     }
+
     e.preventDefault();
   }
 
   draw(e) {
-    const svgRect = this.svg.getBoundingClientRect();
-    const x =
-      (e.type.startsWith('touch') ? e.touches[0].clientX : e.clientX) -
-      svgRect.left;
-    const y =
-      (e.type.startsWith('touch') ? e.touches[0].clientY : e.clientY) -
-      svgRect.top;
-    this.showPencilImage(x, y);
-    this.lastMousePos = [x, y];
+    const pt = this._getEventPoint(e);
+    this.lastMousePos = pt;
 
     if (!this.isDrawing) return;
+
+    if (this.toolMode === 'line') {
+      this.updateSvgLinePreview(this.lastPoint, pt);
+      e.preventDefault();
+      return;
+    }
 
     if (this.controlPressed) {
       if (!this.inControlMode) {
         this.inControlMode = true;
-        this.anchorPoint = [
-          ...this.currentPoints[this.currentPoints.length - 1],
-        ];
-        this.createControlLine(x, y);
+        this.anchorPoint = [...this.currentPoints[this.currentPoints.length - 1]];
+        this.createControlLine(pt[0], pt[1]);
         this.usedControl = true;
       }
-      this.lastControlPos = [x, y];
-      this.updateControlLine(x, y);
+      this.lastControlPos = pt;
+      this.updateControlLine(pt[0], pt[1]);
       return;
     } else if (this.inControlMode) {
       const dx = this.lastControlPos[0] - this.anchorPoint[0];
       const dy = this.lastControlPos[1] - this.anchorPoint[1];
-      const d = Math.sqrt(dx * dx + dy * dy);
+      const d = Math.hypot(dx, dy);
       this.offsetVector = d < 4 ? [0, 0] : [dx, dy];
       this.removeControlLine();
       this.inControlMode = false;
     }
 
-    if (
-      this.shiftPressed &&
-      (this.offsetVector[0] !== 0 || this.offsetVector[1] !== 0)
-    ) {
-      this.backtrackIfCloser([x, y]);
-      this.updateControlLine(x, y, true);
-      this.currentSegmentPath.main.setAttribute(
-        'd',
-        this.pointsToPath(this.currentPoints)
-      );
-      this.currentSegmentPath.shadow.setAttribute(
-        'd',
-        this.pointsToPath(this.currentPoints, 3, 3)
-      );
+    if (this.shiftPressed && (this.offsetVector[0] !== 0 || this.offsetVector[1] !== 0)) {
+      this.backtrackIfCloser(pt);
+      this.updateControlLine(pt[0], pt[1], true);
+      this._updatePreviewPaths();
       return;
     }
 
-    const effectivePoint = this.computeEffectivePoint([x, y]);
-    if (
-      this.distance(
-        this.currentPoints[this.currentPoints.length - 1],
-        effectivePoint
-      ) >= 3
-    ) {
+    const effectivePoint = this.computeEffectivePoint(pt);
+    if (this.distance(this.currentPoints[this.currentPoints.length - 1], effectivePoint) >= 3) {
       this.currentPoints.push(effectivePoint);
     }
 
     if (this.offsetVector[0] !== 0 || this.offsetVector[1] !== 0) {
-      this.updateControlLine(x, y);
+      this.updateControlLine(pt[0], pt[1]);
     }
 
-    this.currentSegmentPath.main.setAttribute(
-      'd',
-      this.pointsToPath(this.currentPoints)
-    );
-    this.currentSegmentPath.shadow.setAttribute(
-      'd',
-      this.pointsToPath(this.currentPoints, 3, 3)
-    );
+    this._updatePreviewPaths();
     e.preventDefault();
   }
 
   stopDrawing(e) {
+    if (!this.isDrawing) return;
+    this.isDrawing = false;
+
     if (this.inControlMode && this.lastControlPos) {
       const dx = this.lastControlPos[0] - this.anchorPoint[0];
       const dy = this.lastControlPos[1] - this.anchorPoint[1];
-      const d = Math.sqrt(dx * dx + dy * dy);
-      this.offsetVector = d < 4 ? [0, 0] : [dx, dy];
+      this.offsetVector = Math.hypot(dx, dy) < 4 ? [0, 0] : [dx, dy];
       this.inControlMode = false;
     }
-
     this.removeControlLine();
-    this.isDrawing = false;
 
-    const error = this.usedControl ? 1 : 8;
-    // USE THE IMPORTED CURVE FITTER CLASS
-    const bezierCurves = CurveFitter.fit(this.currentPoints, error);
+    if (this.toolMode === 'line') {
+      const pt = this.lastMousePos || this.lastPoint;
+      if (this.distance(this.lastPoint, pt) > 5) {
+        this.commitStraightLine(this.lastPoint, pt);
+      }
+      if (this.currentPreviewLine) {
+        this.currentPreviewLine.remove();
+        this.currentPreviewLine = null;
+      }
+      return;
+    }
 
+    // Curve completion
     if (this.currentSegmentPath) {
       this.currentSegmentPath.main.remove();
       this.currentSegmentPath.shadow.remove();
     }
 
-    if (!bezierCurves || bezierCurves.length === 0) {
+    if (this.currentPoints.length < 2) {
       this.currentPoints = [];
-      this.currentSegmentPath = null;
       return;
     }
 
-    const finalPaths = this.appendBezierPathsToSvg(bezierCurves, {
-      offset: [3, 3],
-      thickness: 6,
+    const error = this.usedControl ? 1 : 8;
+    const bezierCurves = (typeof CurveFitter !== 'undefined')
+      ? CurveFitter.fit(this.currentPoints, error)
+      : [];
+
+    if (!bezierCurves || bezierCurves.length === 0) {
+      this.currentPoints = [];
+      return;
+    }
+
+    const finalPaths = this.appendBezierPathsToSvg(bezierCurves);
+    this.curvesGroup.appendChild(finalPaths.shadow);
+    this.curvesGroup.appendChild(finalPaths.main);
+
+    this.drawnObjects.push({
+      type: 'spline',
+      elements: [finalPaths.shadow, finalPaths.main]
     });
-    this.svg.insertBefore(finalPaths.shadow, this.svg.firstChild);
-    this.svg.appendChild(finalPaths.main);
-    this.drawnCurves.push(finalPaths);
 
     this.currentPoints = [];
     this.currentSegmentPath = null;
   }
 
-  createSvgPath(points, shadowOffset = { x: 3, y: 3 }) {
+  _getEventPoint(e) {
+    const clientX = e.clientX ?? e.touches?.[0]?.clientX ?? 0;
+    const clientY = e.clientY ?? e.touches?.[0]?.clientY ?? 0;
+    return [clientX, clientY];
+  }
+
+  _updatePreviewPaths() {
+    if (!this.currentSegmentPath) return;
+    const d = this.pointsToPath(this.currentPoints);
+    this.currentSegmentPath.main.setAttribute('d', d);
+    this.currentSegmentPath.shadow.setAttribute('d', this.pointsToPath(this.currentPoints, 2, 2));
+  }
+
+  createSvgPath(points) {
     const shadowPath = makeElement('svg:path', {
       fill: 'none',
-      stroke: 'black',
-      'stroke-width': '6',
+      stroke: 'rgba(0, 0, 0, 0.65)',
+      'stroke-width': String(this.strokeWidth + 3),
       'stroke-linecap': 'round',
       'stroke-linejoin': 'round',
-      filter: 'blur(4px)',
-      d: this.pointsToPath(points, shadowOffset.x, shadowOffset.y),
+      d: this.pointsToPath(points, 2, 2),
     });
 
+    const cleanCol = this.currentColor.replace('#', 'c_');
     const path = makeElement('svg:path', {
       fill: 'none',
-      stroke: this.options.color,
-      'stroke-width': '7',
+      stroke: this.currentColor,
+      'stroke-width': String(this.strokeWidth),
       'stroke-linecap': 'round',
       'stroke-linejoin': 'round',
-      filter: 'blur(2px)',
       d: this.pointsToPath(points),
+      ...(this.hasArrow ? { 'marker-end': `url(#qt-arrow-${cleanCol})` } : {})
     });
 
     this.currentSegmentPath = { main: path, shadow: shadowPath };
-    this.svg.insertBefore(this.currentSegmentPath.shadow, this.svg.firstChild);
-    this.svg.appendChild(this.currentSegmentPath.main);
+    this.curvesGroup.appendChild(shadowPath);
+    this.curvesGroup.appendChild(path);
   }
 
-  pointsToPath(points, offsetX = 0, offsetY = 0) {
-    return points
-      .map((point, i) => {
-        let command = i === 0 ? 'M' : 'L';
-        return `${command}${point[0] + offsetX},${point[1] + offsetY}`;
-      })
-      .join(' ');
+  createSvgLinePreview(p1, p2) {
+    if (this.currentPreviewLine) this.currentPreviewLine.remove();
+    this.currentPreviewLine = makeElement('svg:line', {
+      x1: p1[0], y1: p1[1], x2: p2[0], y2: p2[1],
+      stroke: this.currentColor,
+      'stroke-width': String(this.strokeWidth),
+      'stroke-dasharray': '5,3'
+    });
+    this.curvesGroup.appendChild(this.currentPreviewLine);
   }
 
+  updateSvgLinePreview(p1, p2) {
+    if (!this.currentPreviewLine) return;
+    this.currentPreviewLine.setAttribute('x1', p1[0]);
+    this.currentPreviewLine.setAttribute('y1', p1[1]);
+    this.currentPreviewLine.setAttribute('x2', p2[0]);
+    this.currentPreviewLine.setAttribute('y2', p2[1]);
+  }
+
+  commitStraightLine(p1, p2) {
+    const cleanCol = this.currentColor.replace('#', 'c_');
+
+    const shadow = makeElement('svg:line', {
+      x1: p1[0] + 2, y1: p1[1] + 2, x2: p2[0] + 2, y2: p2[1] + 2,
+      stroke: 'rgba(0, 0, 0, 0.65)',
+      'stroke-width': String(this.strokeWidth + 3),
+      'stroke-linecap': 'round'
+    });
+
+    const line = makeElement('svg:line', {
+      x1: p1[0], y1: p1[1], x2: p2[0], y2: p2[1],
+      stroke: this.currentColor,
+      'stroke-width': String(this.strokeWidth),
+      'stroke-linecap': 'round',
+      ...(this.hasArrow ? { 'marker-end': `url(#qt-arrow-${cleanCol})` } : {})
+    });
+
+    this.curvesGroup.appendChild(shadow);
+    this.curvesGroup.appendChild(line);
+
+    this.drawnObjects.push({
+      type: 'line',
+      elements: [shadow, line]
+    });
+  }
+
+  // --- Speech Balloon & Text Callout Implementation ---
+  createSpeechBalloon(targetX, targetY) {
+    const balloonId = 'qt_balloon_' + Date.now();
+    const balloonOffset = [80, -60];
+    const bubbleX = targetX + balloonOffset[0];
+    const bubbleY = targetY + balloonOffset[1];
+
+    const cleanCol = this.currentColor.replace('#', 'c_');
+
+    // 1. Directional Arrow Tail in SVG Layer
+    const tailShadow = makeElement('svg:line', {
+      x1: bubbleX + 2, y1: bubbleY + 2, x2: targetX + 2, y2: targetY + 2,
+      stroke: 'rgba(0, 0, 0, 0.65)',
+      'stroke-width': '4',
+      'stroke-linecap': 'round'
+    });
+
+    const tailLine = makeElement('svg:line', {
+      x1: bubbleX, y1: bubbleY, x2: targetX, y2: targetY,
+      stroke: this.currentColor,
+      'stroke-width': '2.5',
+      'stroke-linecap': 'round',
+      'marker-end': `url(#qt-arrow-${cleanCol})`
+    });
+
+    this.curvesGroup.appendChild(tailShadow);
+    this.curvesGroup.appendChild(tailLine);
+
+    // 2. Interactive Floating Card Body
+    const bubble = makeElement('div', {
+      className: 'qt-balloon-card',
+      id: balloonId,
+      style: {
+        position: 'fixed',
+        left: `${bubbleX}px`,
+        top: `${bubbleY - 20}px`,
+        minWidth: '100px',
+        maxWidth: '260px',
+        background: 'rgba(15, 23, 42, 0.96)',
+        border: `2px solid ${this.currentColor}`,
+        borderRadius: '12px',
+        padding: '8px 12px',
+        color: '#f8fafc',
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        fontSize: '12.5px',
+        boxShadow: `0 8px 24px rgba(0,0,0,0.7), 0 0 14px ${this.currentColor}44`,
+        zIndex: '2147483645',
+        cursor: 'move',
+        userSelect: 'none',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '4px'
+      }
+    });
+
+    const textEditable = makeElement('div', {
+      contentEditable: 'true',
+      style: {
+        outline: 'none',
+        minHeight: '18px',
+        color: '#ffffff',
+        cursor: 'text',
+        userSelect: 'text',
+        lineHeight: '1.4'
+      }
+    }, 'Type note...');
+
+    bubble.appendChild(textEditable);
+    document.body.appendChild(bubble);
+
+    // Auto focus and select
+    setTimeout(() => {
+      textEditable.focus();
+      const range = document.createRange();
+      range.selectNodeContents(textEditable);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }, 50);
+
+    // Make Balloon Draggable with kinetic pointer update
+    let isDraggingBalloon = false;
+    let dragStart = [0, 0];
+    let bubbleStart = [0, 0];
+
+    const onBubbleDown = (e) => {
+      if (e.target === textEditable) return;
+      isDraggingBalloon = true;
+      dragStart = [e.clientX, e.clientY];
+      bubbleStart = [parseFloat(bubble.style.left), parseFloat(bubble.style.top)];
+      e.stopPropagation();
+      e.preventDefault();
+    };
+
+    const onBubbleMove = (e) => {
+      if (!isDraggingBalloon) return;
+      const dx = e.clientX - dragStart[0];
+      const dy = e.clientY - dragStart[1];
+      const newX = bubbleStart[0] + dx;
+      const newY = bubbleStart[1] + dy;
+
+      bubble.style.left = `${newX}px`;
+      bubble.style.top = `${newY}px`;
+
+      const curTailX = newX;
+      const curTailY = newY + 20;
+
+      tailLine.setAttribute('x1', curTailX);
+      tailLine.setAttribute('y1', curTailY);
+      tailShadow.setAttribute('x1', curTailX + 2);
+      tailShadow.setAttribute('y1', curTailY + 2);
+    };
+
+    const onBubbleUp = () => {
+      isDraggingBalloon = false;
+    };
+
+    bubble.addEventListener('mousedown', onBubbleDown);
+    window.addEventListener('mousemove', onBubbleMove);
+    window.addEventListener('mouseup', onBubbleUp);
+
+    this.drawnObjects.push({
+      type: 'balloon',
+      elements: [tailShadow, tailLine, bubble],
+      cleanup: () => {
+        window.removeEventListener('mousemove', onBubbleMove);
+        window.removeEventListener('mouseup', onBubbleUp);
+        bubble.remove();
+        tailShadow.remove();
+        tailLine.remove();
+      }
+    });
+  }
+
+  // --- Kinetic Control Line & String-Drag ---
   createControlLine(x, y) {
     if (this.controlLine) return;
     this.controlLine = makeElement('svg:line', {
-      stroke: 'white',
-      'stroke-width': '4',
-      'stroke-opacity': '0.9',
-      'stroke-dasharray': '5,5',
+      stroke: '#ffffff',
+      'stroke-width': '3',
+      'stroke-dasharray': '5,4',
+      filter: 'drop-shadow(0 0 4px #00e676)'
     });
-    const animate = makeElement('svg:animate', {
-      attributeName: 'stroke-dashoffset',
-      from: '0',
-      to: '-10',
-      dur: '1s',
-      repeatCount: 'indefinite',
-    });
-    this.controlLine.appendChild(animate);
     this.svg.appendChild(this.controlLine);
     this.updateControlLine(x, y);
   }
@@ -678,19 +716,11 @@ class DrawingTool {
       return;
     }
     const lastPoint = this.currentPoints[this.currentPoints.length - 1];
-    Object.assign(this.controlLine.style, { display: 'block' }); // Ensure visible
     this.controlLine.setAttribute('x1', lastPoint[0]);
     this.controlLine.setAttribute('y1', lastPoint[1]);
     this.controlLine.setAttribute('x2', x);
     this.controlLine.setAttribute('y2', y);
-
-    if (isShift) {
-      this.controlLine.setAttribute('stroke', 'red');
-      this.controlLine.setAttribute('stroke-opacity', '1');
-    } else {
-      this.controlLine.setAttribute('stroke', 'white');
-      this.controlLine.setAttribute('stroke-opacity', '0.9');
-    }
+    this.controlLine.setAttribute('stroke', isShift ? '#ff2d55' : '#ffffff');
   }
 
   removeControlLine() {
@@ -703,26 +733,21 @@ class DrawingTool {
   computeEffectivePoint(pt) {
     if (this.offsetVector[0] === 0 && this.offsetVector[1] === 0) return pt;
     const last = this.currentPoints[this.currentPoints.length - 1];
-    const R = this.distance([0, 0], this.offsetVector);
+    const R = Math.hypot(this.offsetVector[0], this.offsetVector[1]);
     const d = this.distance(last, pt);
     if (d < R) return [...last];
     const dx = last[0] - pt[0];
     const dy = last[1] - pt[1];
-    const mag = Math.sqrt(dx * dx + dy * dy);
+    const mag = Math.hypot(dx, dy);
     if (mag === 0) return [...last];
     const ux = dx / mag;
     const uy = dy / mag;
     return [pt[0] + ux * R, pt[1] + uy * R];
   }
 
-  logControlLineDetails() {
-    if (this.controlLine) console.log('Control Line exists');
-    else console.log('No Control Line');
-  }
-
   backtrackIfCloser(mousePt) {
     if (this.currentPoints.length < 2) return;
-    const R = this.distance([0, 0], this.offsetVector);
+    const R = Math.hypot(this.offsetVector[0], this.offsetVector[1]);
     const last = this.currentPoints[this.currentPoints.length - 1];
     let currentError = Math.abs(this.distance(last, mousePt) - R);
     if (this.distance(last, mousePt) >= R) return;
@@ -737,65 +762,104 @@ class DrawingTool {
     }
   }
 
-  offsetBezierCurve(bezierData, offset) {
-    const result = [];
-    for (let i = 0; i < bezierData.length; i++) {
-      const [start, cp1, cp2, end] = bezierData[i];
-      result.push([
-        [start[0] + offset[0], start[1] + offset[1]],
-        [cp1[0] + offset[0], cp1[1] + offset[1]],
-        [cp2[0] + offset[0], cp2[1] + offset[1]],
-        [end[0] + offset[0], end[1] + offset[1]],
-      ]);
-    }
-    return result;
+  pointsToPath(points, offsetX = 0, offsetY = 0) {
+    return points
+      .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p[0] + offsetX} ${p[1] + offsetY}`)
+      .join(' ');
   }
 
   createPathString(cubicBezierData) {
-    let pathString = 'M' + cubicBezierData[0][0].join(' ');
+    let d = 'M ' + cubicBezierData[0][0].join(' ');
     for (let i = 0; i < cubicBezierData.length; i++) {
       const [start, cp1, cp2, end] = cubicBezierData[i];
-      pathString += ` C ${cp1.join(' ')} ${cp2.join(' ')} ${end.join(' ')}`;
+      d += ` C ${cp1.join(' ')}, ${cp2.join(' ')}, ${end.join(' ')}`;
     }
-    return pathString;
+    return d;
   }
 
-  appendBezierPathsToSvg(bezierData, options) {
+  appendBezierPathsToSvg(bezierData) {
+    const d = this.createPathString(bezierData);
+    const cleanCol = this.currentColor.replace('#', 'c_');
+
     const shadowPath = makeElement('svg:path', {
-      stroke: 'black',
-      'stroke-width': '6',
+      stroke: 'rgba(0, 0, 0, 0.65)',
+      'stroke-width': String(this.strokeWidth + 3),
       'stroke-linecap': 'round',
       'stroke-linejoin': 'round',
       fill: 'none',
-      filter: `blur(${
-        options && options.shadowBlur ? options.shadowBlur : 4
-      }px)`,
-      d: this.createPathString(
-        this.offsetBezierCurve(
-          bezierData,
-          options && options.offset ? options.offset : [6, 6]
-        )
-      ),
+      d: d,
+      transform: 'translate(2, 2)'
     });
 
     const coloredPath = makeElement('svg:path', {
-      'stroke-width': options && options.thickness ? options.thickness : 3,
+      stroke: this.currentColor,
+      'stroke-width': String(this.strokeWidth),
       'stroke-linecap': 'round',
       'stroke-linejoin': 'round',
       fill: 'none',
-      filter: 'blur(1px)',
-      stroke: this.options.color,
-      d: this.createPathString(bezierData),
+      d: d,
+      ...(this.hasArrow ? { 'marker-end': `url(#qt-arrow-${cleanCol})` } : {})
     });
 
     return { shadow: shadowPath, main: coloredPath };
   }
 
+  copySnapshot(btn) {
+    const canvas = document.createElement('canvas');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const ctx = canvas.getContext('2d');
+
+    const svgXml = new XMLSerializer().serializeToString(this.svg);
+    const blob = new Blob([svgXml], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+
+      // Also render text balloons onto canvas
+      document.querySelectorAll('.qt-balloon-card').forEach(card => {
+        const r = card.getBoundingClientRect();
+        ctx.save();
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
+        ctx.strokeStyle = card.style.borderColor || '#00e676';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(r.left, r.top, r.width, r.height, 10);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '12px system-ui, sans-serif';
+        const txt = card.innerText || '';
+        ctx.fillText(txt, r.left + 10, r.top + 20);
+        ctx.restore();
+      });
+
+      canvas.toBlob((pngBlob) => {
+        if (!pngBlob) return;
+        navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]).then(() => {
+          if (btn) {
+            const orig = btn.textContent;
+            btn.textContent = '✓ Copied PNG!';
+            setTimeout(() => { btn.textContent = orig; }, 1800);
+          }
+        });
+      });
+    };
+    img.src = url;
+  }
+
   undoLast() {
-    if (this.drawnCurves.length === 0) return false;
-    const lastCurve = this.drawnCurves.pop();
-    lastCurve.main.remove();
-    lastCurve.shadow.remove();
+    if (this.drawnObjects.length === 0) return false;
+    const last = this.drawnObjects.pop();
+    if (last.cleanup) {
+      last.cleanup();
+    } else if (last.elements) {
+      last.elements.forEach(el => el.remove());
+    }
     return true;
   }
 
@@ -803,5 +867,17 @@ class DrawingTool {
     while (this.undoLast()) {}
   }
 
+  quit() {
+    window.removeEventListener('keydown', this.boundKeyDown, true);
+    window.removeEventListener('keyup', this.boundKeyUp, true);
+    if (this.svg) this.svg.remove();
+    if (this.hudElement) this.hudElement.remove();
+    this.clear();
+    if (window.drawingToolInstance === this) {
+      window.drawingToolInstance = null;
+    }
+  }
 }
 
+globalThis.DrawingTool = DrawingTool;
+if (typeof module !== 'undefined' && module.exports) module.exports = DrawingTool;
