@@ -2221,6 +2221,94 @@ class QuoraToys {
     if (this.overlayDialog) this.overlayDialog.close();
     if (this.mainDialog) this.mainDialog.close();
   }
+
+  launchInSitu() {
+      const existingHud = document.getElementById('quoratoys-insitu-hud');
+      if (existingHud) {
+        existingHud.remove();
+        return;
+      }
+
+      const hud = document.createElement('div');
+      hud.id = 'quoratoys-insitu-hud';
+      hud.style.cssText = `
+        position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+        z-index: 2147483647; background: rgba(15, 23, 42, 0.94);
+        color: #00e676; border: 1.5px solid #00e676; border-radius: 30px;
+        padding: 6px 18px; font-family: system-ui, -apple-system, monospace;
+        font-size: 12px; font-weight: bold; box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+        display: flex; align-items: center; gap: 12px; backdrop-filter: blur(8px);
+        user-select: none;
+      `;
+      hud.innerHTML = `
+        <span>🧩 QuoraToys In-Situ Active: Hover and click any puzzle image on this page</span>
+        <button id="qt-hud-sample" style="background:#0284c7; color:#fff; border:none; border-radius:4px; padding:3px 8px; font-size:10.5px; cursor:pointer; font-weight:bold;">Load Sample</button>
+        <button id="qt-hud-close" style="background:#334155; color:#fff; border:none; border-radius:50%; width:18px; height:18px; cursor:pointer; font-size:10px;">✕</button>
+      `;
+      document.body.appendChild(hud);
+
+      let activeHoverImg = null;
+
+      const onHover = (e) => {
+        const target = e.target;
+        if (target && target.tagName === 'IMG' && target.offsetWidth > 60 && target.offsetHeight > 60) {
+          if (activeHoverImg && activeHoverImg !== target) {
+            activeHoverImg.style.outline = activeHoverImg._origOutline || '';
+          }
+          activeHoverImg = target;
+          activeHoverImg._origOutline = activeHoverImg.style.outline;
+          activeHoverImg.style.outline = '3px solid #00e676';
+          activeHoverImg.style.cursor = 'crosshair';
+        } else if (activeHoverImg && (!target || target.tagName !== 'IMG')) {
+          activeHoverImg.style.outline = activeHoverImg._origOutline || '';
+          activeHoverImg = null;
+        }
+      };
+
+      const onClick = (e) => {
+        const target = e.target;
+        if (target && target.tagName === 'IMG' && target.offsetWidth > 60 && target.offsetHeight > 60) {
+          e.preventDefault();
+          e.stopPropagation();
+          cleanup();
+
+          const app = new QuoraToys();
+          window.quoraToysInstance = app;
+          const host = document.createElement('div');
+          host.id = 'quoratoys-insitu-host';
+          host.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 2147483640;';
+          document.body.appendChild(host);
+
+          app.run({ container: host }).then(() => {
+            app.loadImageFromUrl(target.src, target.alt || 'Quora Puzzle');
+          });
+        }
+      };
+
+      const cleanup = () => {
+        document.removeEventListener('mousemove', onHover, true);
+        document.removeEventListener('click', onClick, true);
+        if (activeHoverImg) activeHoverImg.style.outline = activeHoverImg._origOutline || '';
+        hud.remove();
+      };
+
+      document.addEventListener('mousemove', onHover, true);
+      document.addEventListener('click', onClick, true);
+
+      document.getElementById('qt-hud-close').onclick = cleanup;
+      document.getElementById('qt-hud-sample').onclick = () => {
+        cleanup();
+        const app = new QuoraToys();
+        window.quoraToysInstance = app;
+        const host = document.createElement('div');
+        host.id = 'quoratoys-insitu-host';
+        host.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 2147483640;';
+        document.body.appendChild(host);
+        app.run({ container: host }).then(() => {
+          app.loadSamplePuzzle();
+        });
+      };
+  }
 }
 
 globalThis.QuoraToys = QuoraToys;

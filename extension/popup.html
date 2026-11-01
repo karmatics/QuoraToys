@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>QuoraToys</title>
+  <style>
+    body {
+      width: 280px; margin: 0; padding: 14px;
+      background: #090d16; color: #e2e8f0;
+      font-family: system-ui, -apple-system, sans-serif; font-size: 12px;
+    }
+    h2 { font-size: 14px; color: #00f2fe; margin: 0 0 10px 0; display: flex; align-items: center; gap: 6px; }
+    .tool-grid { display: flex; flex-direction: column; gap: 6px; }
+    button {
+      padding: 8px 12px; border-radius: 6px; border: 1px solid #1e293b;
+      background: #0f172a; color: #f8fafc; font-size: 12px; font-weight: 600;
+      cursor: pointer; display: flex; align-items: center; gap: 8px; text-align: left;
+      transition: all 0.15s ease;
+    }
+    button:hover { background: #1e293b; border-color: #00f2fe; color: #00f2fe; transform: translateY(-1px); }
+    button.primary { background: #003847; border-color: #00f2fe; color: #00f2fe; }
+    .footer-link {
+      margin-top: 12px; padding-top: 8px; border-top: 1px solid #1e293b;
+      display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #64748b;
+    }
+    .footer-link a { color: #38bdf8; text-decoration: none; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h2><span>🧩</span> QuoraToys &amp; Power Tools</h2>
+  <div class="tool-grid">
+    <button class="primary" id="btn-spot-diff"><span>🧩</span> Spot Difference (Overlay)</button>
+    <button id="btn-aardvark"><span>🔍</span> Aardvark (DOM Inspector)</button>
+    <button id="btn-draw"><span>✏️</span> Draw / Annotate</button>
+    <button id="btn-dictate"><span>🎙️</span> Voice Dictation</button>
+  </div>
+  <div class="footer-link">
+    <span>Luno Suite</span>
+    <a href="http://localhost:8080/QuoraToys/index.html" target="_blank">Open Studio ↗</a>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
