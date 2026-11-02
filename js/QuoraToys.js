@@ -69,94 +69,96 @@ class QuoraToys {
   }
 
   _buildWelcomeScreen() {
-    this.targetElement.innerHTML = '';
+      this.targetElement.innerHTML = '';
 
-    const welcome = document.createElement('div');
-    welcome.className = 'fdr-welcome-screen';
+      const welcome = document.createElement('div');
+      welcome.className = 'fdr-welcome-screen';
 
-    const brand = document.createElement('div');
-    brand.className = 'fdr-brand-banner';
-    brand.innerHTML = `
-      <div class="fdr-brand-icon">✨</div>
-      <div class="fdr-brand-title">QuoraToys <span class="fdr-brand-badge">Tool #1: Spot-The-Difference</span></div>
-    `;
+      const brand = document.createElement('div');
+      brand.className = 'fdr-brand-banner';
+      brand.innerHTML = `
+        <div class="fdr-brand-icon">✨</div>
+        <div class="fdr-brand-title">QuoraToys <span class="fdr-brand-badge">Power Suite</span></div>
+      `;
 
-    const dropzone = document.createElement('div');
-    dropzone.className = 'fdr-dropzone';
-    dropzone.innerHTML = `
-      <div class="fdr-dropzone-icon">🧩</div>
-      <div class="fdr-dropzone-title">Spot-the-Difference Comparator & Solution Studio</div>
-      <div class="fdr-dropzone-subtitle">
-        Paste any puzzle image from Quora with <b>Ctrl+V</b> (or Command+V),<br>
-        drag & drop an image from your browser or desktop, or select a file.
-      </div>
-      <div class="fdr-dropzone-actions">
-        <button class="fdr-btn fdr-btn-primary" id="fdr-choose-file-btn">📁 Choose Image File</button>
-        <button class="fdr-btn fdr-btn-accent" id="fdr-sample-puzzle-btn">🧩 Load Sample Puzzle</button>
-        <button class="fdr-btn" id="fdr-welcome-help-btn">📖 How It Works</button>
-      </div>
-    `;
+      const dropzone = document.createElement('div');
+      dropzone.className = 'fdr-dropzone';
+      dropzone.innerHTML = `
+        <div class="fdr-dropzone-icon">🎨</div>
+        <div class="fdr-dropzone-title">Universal Graphic Studio & Spot-the-Difference Comparator</div>
+        <div class="fdr-dropzone-subtitle">
+          Drop any image, paste with <b>Ctrl+V</b>, or choose an option below.<br>
+          Draw smooth Bézier curves, arrows, and blockout masks, or compare puzzle images.
+        </div>
+        <div class="fdr-dropzone-actions">
+          <button class="fdr-btn fdr-btn-accent" id="fdr-launch-annotation-direct-btn" style="background:#0284c7; border-color:#00f2fe; color:#fff; font-weight:800;">
+            ✏️ Launch Annotation Studio (Draw &amp; Arrows)
+          </button>
+          <button class="fdr-btn fdr-btn-primary" id="fdr-choose-file-btn">📁 Choose Image File</button>
+          <button class="fdr-btn" id="fdr-sample-puzzle-btn">🧩 Load Sample Puzzle</button>
+        </div>
+      `;
 
-    const docs = document.createElement('div');
-    docs.className = 'fdr-docs-card';
-    docs.innerHTML = `
-      <div class="fdr-docs-header">
-        <span>💡 What is this and why use it?</span>
-      </div>
-      <div class="fdr-docs-why">
-        <b>Why use this tool?</b> Quora puzzle questions rely on human saccadic memory limits when comparing side-by-side images.
-        QuoraToys allows you to superimpose one half directly on the other with pixel-perfect alignment. 
-        Using <b>50% Alpha</b>, <b>Optical Flashing</b>, or <b>Scrolling Stripes</b>, any alteration instantly reveals itself.
-      </div>
-    `;
+      const docs = document.createElement('div');
+      docs.className = 'fdr-docs-card';
+      docs.innerHTML = `
+        <div class="fdr-docs-header">
+          <span>💡 Two Powerful Tools in One Suite:</span>
+        </div>
+        <div class="fdr-docs-why">
+          • <b>1. Universal Annotation Studio:</b> Annotate any picture in 5 seconds flat with mathematically smoothed Bézier splines, auto arrowheads, speech balloons, and hard/soft blockout paint for Gemini AI.<br>
+          • <b>2. Spot-the-Difference Comparator:</b> Superimpose puzzle halves with sub-pixel alignment using 50% Alpha, Optical Flashing, or Scrolling Zebra Stripes.
+        </div>
+      `;
 
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = 'image/*';
-    fileInput.style.display = 'none';
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = 'image/*';
+      fileInput.style.display = 'none';
 
-    dropzone.addEventListener('click', (e) => {
-      if (e.target.closest('#fdr-sample-puzzle-btn')) {
-        this.loadSamplePuzzle();
-        return;
-      }
-      if (e.target.closest('#fdr-welcome-help-btn')) {
-        this.openDocumentationDialog();
-        return;
-      }
-      fileInput.click();
-    });
-
-    fileInput.addEventListener('change', (e) => {
-      if (e.target.files && e.target.files[0]) {
-        this.loadFile(e.target.files[0]);
-      }
-    });
-
-    ['dragenter', 'dragover'].forEach(name => {
-      dropzone.addEventListener(name, (e) => {
-        e.preventDefault();
-        dropzone.classList.add('drag-active');
+      dropzone.addEventListener('click', (e) => {
+        if (e.target.closest('#fdr-launch-annotation-direct-btn')) {
+          if (globalThis._quoraToysAppInstance) {
+            globalThis._quoraToysAppInstance.selectChapter('annotation');
+          }
+          return;
+        }
+        if (e.target.closest('#fdr-sample-puzzle-btn')) {
+          this.loadSamplePuzzle();
+          return;
+        }
+        fileInput.click();
       });
-    });
 
-    ['dragleave', 'drop'].forEach(name => {
-      dropzone.addEventListener(name, (e) => {
-        e.preventDefault();
-        dropzone.classList.remove('drag-active');
+      fileInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+          this.loadFile(e.target.files[0]);
+        }
       });
-    });
 
-    dropzone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      this.handleDrop(e);
-    });
+      ['dragenter', 'dragover'].forEach(name => {
+        dropzone.addEventListener(name, (e) => {
+          e.preventDefault();
+          dropzone.classList.add('drag-active');
+        });
+      });
 
-    welcome.append(brand, dropzone, docs, fileInput);
-    this.targetElement.appendChild(welcome);
-    this.welcomeElement = welcome;
-  }
+      ['dragleave', 'drop'].forEach(name => {
+        dropzone.addEventListener(name, (e) => {
+          e.preventDefault();
+          dropzone.classList.remove('drag-active');
+        });
+      });
 
+      dropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        this.handleDrop(e);
+      });
+
+      welcome.append(brand, dropzone, docs, fileInput);
+      this.targetElement.appendChild(welcome);
+      this.welcomeElement = welcome;
+    }
   _initGlobalListeners() {
     this._onPaste = (e) => {
       if (e.clipboardData && e.clipboardData.items) {
@@ -325,98 +327,105 @@ class QuoraToys {
   }
 
   openMainWindow() {
-    if (this.mainDialog) {
-      this.mainDialog.close();
-      this.mainDialog = null;
-    }
-    if (this.overlayDialog) {
-      this.overlayDialog.close();
-      this.overlayDialog = null;
-    }
-
-    const availW = Math.max(300, (window.innerWidth || 1024) - 60);
-    const availH = Math.max(200, (window.innerHeight || 768) - 120);
-    const overheadH = 75;
-
-    const scaleX = availW / this.naturalWidth;
-    const scaleY = (availH - overheadH) / this.naturalHeight;
-    this.zoom = Math.max(0.2, Math.min(1.0, Math.min(scaleX, scaleY)));
-
-    const initialW = Math.round(this.naturalWidth * this.zoom);
-    const initialH = Math.round(this.naturalHeight * this.zoom) + overheadH;
-
-    const dialogMaker = (typeof UITools !== 'undefined' && typeof UITools.makeDialog === 'function')
-      ? UITools.makeDialog
-      : (opts => new DialogBox(opts));
-
-    this.mainDialog = dialogMaker({
-      title: `${this.currentTitle || 'Source Image'} (${this.naturalWidth}×${this.naturalHeight})`,
-      size: [initialW, initialH],
-      position: [30, 40],
-      noPadding: true,
-      allowTransparency: false,
-      allowMaximize: true,
-      onClose: () => {
-        if (this.overlayDialog) this.overlayDialog.close();
-        if (this.solutionDialog) this.solutionDialog.close();
-        if (this.welcomeElement) this.welcomeElement.style.display = 'flex';
+      if (this.mainDialog) {
+        this.mainDialog.close();
+        this.mainDialog = null;
       }
-    });
+      if (this.overlayDialog) {
+        this.overlayDialog.close();
+        this.overlayDialog = null;
+      }
 
-    const content = this.mainDialog.contentElement;
-    content.style.display = 'flex';
-    content.style.flexDirection = 'column';
-    content.style.width = '100%';
-    content.style.height = '100%';
+      const leftSafe = (typeof SidePanel !== 'undefined' && SidePanel.getInstances()?.left?.isOpen)
+        ? (SidePanel.getInstances().left.width || 300)
+        : 0;
 
-    const toolbar = document.createElement('div');
-    toolbar.className = 'fdr-window-toolbar';
+      const availW = Math.max(300, (window.innerWidth || 1024) - leftSafe - 60);
+      const availH = Math.max(200, (window.innerHeight || 768) - 120);
+      const overheadH = 75;
 
-    const actionGroup = document.createElement('div');
-    actionGroup.className = 'fdr-toolbar-group';
+      const scaleX = availW / this.naturalWidth;
+      const scaleY = (availH - overheadH) / this.naturalHeight;
+      this.zoom = Math.max(0.2, Math.min(1.0, Math.min(scaleX, scaleY)));
 
-    this.cropBtn = document.createElement('button');
-    this.cropBtn.className = 'fdr-btn fdr-btn-sm fdr-btn-accent';
-    this.cropBtn.innerHTML = '✂ Crop Region';
-    this.cropBtn.onclick = () => this.toggleCropMode();
+      const initialW = Math.round(this.naturalWidth * this.zoom);
+      const initialH = Math.round(this.naturalHeight * this.zoom) + overheadH;
+      const initialLeft = leftSafe + 24;
 
-    const solBtn = document.createElement('button');
-    solBtn.className = 'fdr-btn fdr-btn-sm';
-    solBtn.innerHTML = '🎨 Solution Studio';
-    solBtn.onclick = () => this.openSolutionStudio();
+      const dialogMaker = (typeof UITools !== 'undefined' && typeof UITools.makeDialog === 'function')
+        ? UITools.makeDialog
+        : (opts => new DialogBox(opts));
 
-    actionGroup.append(this.cropBtn, solBtn);
-    toolbar.append(actionGroup);
-    content.appendChild(toolbar);
+      this.mainDialog = dialogMaker({
+        title: `${this.currentTitle || 'Source Image'} (${this.naturalWidth}×${this.naturalHeight})`,
+        size: [initialW, initialH],
+        position: [initialLeft, 40],
+        noPadding: true,
+        allowTransparency: false,
+        allowMaximize: true,
+        onClose: () => {
+          if (this.overlayDialog) this.overlayDialog.close();
+          if (this.solutionDialog) this.solutionDialog.close();
+          if (this.welcomeElement) this.welcomeElement.style.display = 'flex';
+        }
+      });
 
-    this.mainViewport = document.createElement('div');
-    this.mainViewport.className = 'fdr-image-viewport';
+      const content = this.mainDialog.contentElement;
+      content.style.display = 'flex';
+      content.style.flexDirection = 'column';
+      content.style.width = '100%';
+      content.style.height = '100%';
 
-    this.mainImgElement = document.createElement('img');
-    this.mainImgElement.className = 'fdr-main-image';
-    this.mainImgElement.src = this.imageSourceUrl;
-    this.mainImgElement.style.width = `${Math.round(this.naturalWidth * this.zoom)}px`;
-    this.mainImgElement.style.height = `${Math.round(this.naturalHeight * this.zoom)}px`;
+      const toolbar = document.createElement('div');
+      toolbar.className = 'fdr-window-toolbar';
 
-    this.cropSurface = document.createElement('div');
-    this.cropSurface.className = 'fdr-crop-surface';
-    this.cropSurface.style.display = 'none';
+      const actionGroup = document.createElement('div');
+      actionGroup.className = 'fdr-toolbar-group';
 
-    this.selectionBox = document.createElement('div');
-    this.selectionBox.className = 'fdr-selection-box';
+      this.cropBtn = document.createElement('button');
+      this.cropBtn.className = 'fdr-btn fdr-btn-sm fdr-btn-accent';
+      this.cropBtn.innerHTML = '✂ Crop Region';
+      this.cropBtn.onclick = () => this.toggleCropMode();
 
-    this.selectionTooltip = document.createElement('div');
-    this.selectionTooltip.className = 'fdr-selection-tooltip';
-    this.selectionBox.appendChild(this.selectionTooltip);
+      const drawStudioBtn = document.createElement('button');
+      drawStudioBtn.className = 'fdr-btn fdr-btn-sm fdr-btn-primary';
+      drawStudioBtn.innerHTML = '✏️ Open in Annotation Studio';
+      drawStudioBtn.title = 'Open this image directly in the Universal Graphic & Annotation Studio';
+      drawStudioBtn.onclick = () => {
+        QuoraAnnotationComponent.launchStandalone(this.sourceImage);
+      };
 
-    this._bindCropEvents();
+      actionGroup.append(this.cropBtn, drawStudioBtn);
+      toolbar.append(actionGroup);
+      content.appendChild(toolbar);
 
-    this.mainViewport.append(this.mainImgElement, this.cropSurface, this.selectionBox);
-    content.appendChild(this.mainViewport);
+      this.mainViewport = document.createElement('div');
+      this.mainViewport.className = 'fdr-image-viewport';
 
-    this.setCropMode(true);
-  }
+      this.mainImgElement = document.createElement('img');
+      this.mainImgElement.className = 'fdr-main-image';
+      this.mainImgElement.src = this.imageSourceUrl;
+      this.mainImgElement.style.width = `${Math.round(this.naturalWidth * this.zoom)}px`;
+      this.mainImgElement.style.height = `${Math.round(this.naturalHeight * this.zoom)}px`;
 
+      this.cropSurface = document.createElement('div');
+      this.cropSurface.className = 'fdr-crop-surface';
+      this.cropSurface.style.display = 'none';
+
+      this.selectionBox = document.createElement('div');
+      this.selectionBox.className = 'fdr-selection-box';
+
+      this.selectionTooltip = document.createElement('div');
+      this.selectionTooltip.className = 'fdr-selection-tooltip';
+      this.selectionBox.appendChild(this.selectionTooltip);
+
+      this._bindCropEvents();
+
+      this.mainViewport.append(this.mainImgElement, this.cropSurface, this.selectionBox);
+      content.appendChild(this.mainViewport);
+
+      this.setCropMode(true);
+    }
   setCropMode(enable) {
     this.isCropMode = enable;
     if (this.cropBtn) {
@@ -490,130 +499,153 @@ class QuoraToys {
   }
 
   openCropOverlayWindow(cropRect) {
-    this.activeCrop = cropRect;
-    if (this.overlayDialog) this.overlayDialog.close();
+      this.activeCrop = cropRect;
+      if (this.overlayDialog) this.overlayDialog.close();
 
-    const dispCropW = Math.round(cropRect.width * this.zoom);
-    const dispCropH = Math.round(cropRect.height * this.zoom);
+      const dispCropW = Math.round(cropRect.width * this.zoom);
+      const dispCropH = Math.round(cropRect.height * this.zoom);
 
-    const dialogMaker = (typeof UITools !== 'undefined' && typeof UITools.makeDialog === 'function')
-      ? UITools.makeDialog
-      : (opts => new DialogBox(opts));
+      const leftSafe = (typeof SidePanel !== 'undefined' && SidePanel.getInstances()?.left?.isOpen)
+        ? (SidePanel.getInstances().left.width || 300)
+        : 0;
 
-    this.overlayDialog = dialogMaker({
-      title: `Overlay [${cropRect.width}×${cropRect.height}]`,
-      size: [Math.max(340, dispCropW + 4), dispCropH + 32 + 46],
-      position: [80, 80],
-      contentTransparent: true,
-      noPadding: true,
-      onClose: () => {
-        this.stopFlashing();
-        this.stopStripes();
-        this.overlayDialog = null;
+      const overlayLeft = leftSafe + 60;
+
+      const dialogMaker = (typeof UITools !== 'undefined' && typeof UITools.makeDialog === 'function')
+        ? UITools.makeDialog
+        : (opts => new DialogBox(opts));
+
+      this.overlayDialog = dialogMaker({
+        title: `Overlay [${cropRect.width}×${cropRect.height}]`,
+        size: [Math.max(340, dispCropW + 4), dispCropH + 32 + 46],
+        position: [overlayLeft, 80],
+        transparent: true,
+        noPadding: true,
+        onClose: () => {
+          this.stopFlashing();
+          this.stopStripes();
+          this.overlayDialog = null;
+        }
+      });
+
+      // Enforce 100% Glass Transparency on container & content element
+      if (this.overlayDialog.element) {
+        this.overlayDialog.element.classList.add('fdr-overlay-dialog');
+        this.overlayDialog.element.style.background = 'transparent';
+        this.overlayDialog.element.style.backgroundColor = 'transparent';
+        this.overlayDialog.element.style.boxShadow = '0 10px 30px rgba(0,0,0,0.6)';
+        this.overlayDialog.element.style.border = '2px solid #00e676';
       }
-    });
 
-    const content = this.overlayDialog.contentElement;
-    this.overlayViewport = document.createElement('div');
-    this.overlayViewport.className = 'fdr-overlay-viewport';
-    this.overlayViewport.style.width = `${dispCropW}px`;
-    this.overlayViewport.style.height = `${dispCropH}px`;
+      const content = this.overlayDialog.contentElement;
+      if (content) {
+        content.style.background = 'transparent';
+        content.style.backgroundColor = 'transparent';
+        content.style.padding = '0';
+        content.style.overflow = 'visible';
+      }
 
-    this.overlayClippedImg = document.createElement('img');
-    this.overlayClippedImg.className = 'fdr-overlay-clipped-img';
-    this.overlayClippedImg.src = this.imageSourceUrl;
-    this.overlayClippedImg.style.opacity = `${this.currentOpacity}`;
+      this.overlayViewport = document.createElement('div');
+      this.overlayViewport.className = 'fdr-overlay-viewport';
+      this.overlayViewport.style.width = `${dispCropW}px`;
+      this.overlayViewport.style.height = `${dispCropH}px`;
+      this.overlayViewport.style.background = 'transparent';
+      this.overlayViewport.style.backgroundColor = 'transparent';
 
-    this.overlaySvgLayer = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    this.overlaySvgLayer.setAttribute('class', 'fdr-diff-svg-layer');
+      this.overlayClippedImg = document.createElement('img');
+      this.overlayClippedImg.className = 'fdr-overlay-clipped-img';
+      this.overlayClippedImg.src = this.imageSourceUrl;
+      this.overlayClippedImg.style.opacity = `${this.currentOpacity}`;
 
-    this.circleDrawSurface = document.createElement('div');
-    this.circleDrawSurface.className = 'fdr-circle-draw-surface';
+      this.overlaySvgLayer = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      this.overlaySvgLayer.setAttribute('class', 'fdr-diff-svg-layer');
 
-    this.overlayViewport.append(this.overlayClippedImg, this.overlaySvgLayer, this.circleDrawSurface);
-    content.appendChild(this.overlayViewport);
+      this.circleDrawSurface = document.createElement('div');
+      this.circleDrawSurface.className = 'fdr-circle-draw-surface';
 
-    // Overlay Bottom Toolbar with Flash, Stripes, Opacity & Nudge
-    const toolbar = document.createElement('div');
-    toolbar.className = 'fdr-overlay-toolbar';
+      this.overlayViewport.append(this.overlayClippedImg, this.overlaySvgLayer, this.circleDrawSurface);
+      content.appendChild(this.overlayViewport);
 
-    const stripeToolbar = document.createElement('div');
-    stripeToolbar.className = 'fdr-stripe-toolbar';
+      // Overlay Bottom Toolbar
+      const toolbar = document.createElement('div');
+      toolbar.className = 'fdr-overlay-toolbar';
 
-    const stripesBtn = document.createElement('button');
-    stripesBtn.className = 'fdr-btn fdr-btn-sm';
-    stripesBtn.innerHTML = '▤ Stripes';
+      const stripeToolbar = document.createElement('div');
+      stripeToolbar.className = 'fdr-stripe-toolbar';
 
-    const flashBtn = document.createElement('button');
-    flashBtn.className = 'fdr-btn fdr-btn-sm';
-    flashBtn.innerHTML = '⚡ Flash';
+      const stripesBtn = document.createElement('button');
+      stripesBtn.className = 'fdr-btn fdr-btn-sm';
+      stripesBtn.innerHTML = '▤ Stripes';
 
-    const opacityGroup = document.createElement('div');
-    opacityGroup.className = 'fdr-opacity-group fdr-opacity-active';
+      const flashBtn = document.createElement('button');
+      flashBtn.className = 'fdr-btn fdr-btn-sm';
+      flashBtn.innerHTML = '⚡ Flash';
 
-    const opacitySlider = document.createElement('input');
-    opacitySlider.type = 'range';
-    opacitySlider.min = '0';
-    opacitySlider.max = '100';
-    opacitySlider.value = String(Math.round(this.currentOpacity * 100));
+      const opacityGroup = document.createElement('div');
+      opacityGroup.className = 'fdr-opacity-group fdr-opacity-active';
 
-    const opacityLabel = document.createElement('span');
-    opacityLabel.className = 'fdr-opacity-lbl';
-    opacityLabel.textContent = `${Math.round(this.currentOpacity * 100)}%`;
+      const opacitySlider = document.createElement('input');
+      opacitySlider.type = 'range';
+      opacitySlider.min = '0';
+      opacitySlider.max = '100';
+      opacitySlider.value = String(Math.round(this.currentOpacity * 100));
 
-    opacitySlider.oninput = (e) => {
-      this.activateOpacityMode(opacityGroup, stripesBtn, flashBtn, stripeToolbar);
-      const val = parseInt(e.target.value, 10);
-      opacityLabel.textContent = `${val}%`;
-      this.setOverlayOpacity(val / 100);
-    };
+      const opacityLabel = document.createElement('span');
+      opacityLabel.className = 'fdr-opacity-lbl';
+      opacityLabel.textContent = `${Math.round(this.currentOpacity * 100)}%`;
 
-    opacityGroup.append(opacitySlider, opacityLabel);
+      opacitySlider.oninput = (e) => {
+        this.activateOpacityMode(opacityGroup, stripesBtn, flashBtn, stripeToolbar);
+        const val = parseInt(e.target.value, 10);
+        opacityLabel.textContent = `${val}%`;
+        this.setOverlayOpacity(val / 100);
+      };
 
-    stripesBtn.onclick = () => {
-      this.stopFlashing();
-      flashBtn.classList.remove('active');
-      stripesBtn.classList.add('active');
-      opacityGroup.classList.remove('fdr-opacity-active');
-      opacityGroup.classList.add('fdr-opacity-inactive');
-      stripeToolbar.style.display = 'flex';
-      this.startStripes();
-    };
+      opacityGroup.append(opacitySlider, opacityLabel);
 
-    flashBtn.onclick = () => {
-      this.stopStripes();
-      stripesBtn.classList.remove('active');
-      stripeToolbar.style.display = 'none';
-      if (this.isFlashing) {
+      stripesBtn.onclick = () => {
         this.stopFlashing();
         flashBtn.classList.remove('active');
-        this.activateOpacityMode(opacityGroup, stripesBtn, flashBtn, stripeToolbar);
-      } else {
+        stripesBtn.classList.add('active');
         opacityGroup.classList.remove('fdr-opacity-active');
         opacityGroup.classList.add('fdr-opacity-inactive');
-        this.startFlashing(flashBtn);
-      }
-    };
+        stripeToolbar.style.display = 'flex';
+        this.startStripes();
+      };
 
-    const diffCircleBtn = document.createElement('button');
-    diffCircleBtn.className = 'fdr-btn fdr-btn-sm fdr-btn-accent';
-    diffCircleBtn.innerHTML = '⭕ Circle Diff';
-    diffCircleBtn.onclick = () => this.toggleCircleDiffMode();
-    this.diffCircleBtn = diffCircleBtn;
+      flashBtn.onclick = () => {
+        this.stopStripes();
+        stripesBtn.classList.remove('active');
+        stripeToolbar.style.display = 'none';
+        if (this.isFlashing) {
+          this.stopFlashing();
+          flashBtn.classList.remove('active');
+          this.activateOpacityMode(opacityGroup, stripesBtn, flashBtn, stripeToolbar);
+        } else {
+          opacityGroup.classList.remove('fdr-opacity-active');
+          opacityGroup.classList.add('fdr-opacity-inactive');
+          this.startFlashing(flashBtn);
+        }
+      };
 
-    const solBtn = document.createElement('button');
-    solBtn.className = 'fdr-btn fdr-btn-sm';
-    solBtn.innerHTML = `🎨 Studio (${this.diffCircles.length})`;
-    solBtn.onclick = () => this.openSolutionStudio();
-    this.solutionBtn = solBtn;
+      const diffCircleBtn = document.createElement('button');
+      diffCircleBtn.className = 'fdr-btn fdr-btn-sm fdr-btn-accent';
+      diffCircleBtn.innerHTML = '⭕ Circle Diff';
+      diffCircleBtn.onclick = () => this.toggleCircleDiffMode();
+      this.diffCircleBtn = diffCircleBtn;
 
-    toolbar.append(stripesBtn, flashBtn, opacityGroup, diffCircleBtn, solBtn);
-    content.append(toolbar, stripeToolbar);
+      const sendStudioBtn = document.createElement('button');
+      sendStudioBtn.className = 'fdr-btn fdr-btn-sm fdr-btn-primary';
+      sendStudioBtn.innerHTML = `🎨 Studio (${this.diffCircles.length})`;
+      sendStudioBtn.title = 'Send this comparison and marked differences into the Universal Graphic Studio';
+      sendStudioBtn.onclick = () => this.sendToGraphicStudio();
 
-    this.updateOverlayGeometry();
-    this._bindCircleDrawEvents();
-  }
+      toolbar.append(stripesBtn, flashBtn, opacityGroup, diffCircleBtn, sendStudioBtn);
+      content.append(toolbar, stripeToolbar);
 
+      this.updateOverlayGeometry();
+      this._bindCircleDrawEvents();
+    }
   activateOpacityMode(opacityGroup, stripesBtn, flashBtn, stripeToolbar) {
     this.stopFlashing();
     this.stopStripes();
@@ -1194,6 +1226,30 @@ class QuoraToys {
     document.addEventListener('click', onClick, true);
     document.getElementById('qt-hud-close').onclick = cleanup;
   }
+
+  sendToGraphicStudio() {
+      if (!this.sourceImage) return;
+
+      const leftSafe = (typeof SidePanel !== 'undefined' && SidePanel.getInstances()?.left?.isOpen)
+        ? (SidePanel.getInstances().left.width || 300)
+        : 0;
+
+      // Switch navigator to Chapter 1 (Annotation Studio)
+      if (globalThis._quoraToysAppInstance) {
+        globalThis._quoraToysAppInstance.selectChapter('annotation');
+      }
+
+      // Pass data into QuoraAnnotationComponent
+      setTimeout(() => {
+        if (typeof QuoraAnnotationComponent !== 'undefined' && QuoraAnnotationComponent.loadExternalDataset) {
+          QuoraAnnotationComponent.loadExternalDataset({
+            sourceImage: this.sourceImage,
+            activeCrop: this.activeCrop,
+            diffCircles: this.diffCircles
+          });
+        }
+      }, 180);
+    }
 }
 
 globalThis.QuoraToys = QuoraToys;

@@ -1,7 +1,7 @@
 {
   "name": "QuoraToys",
-  "version": "2.0.0",
-  "description": "QuoraToys: Interactive puzzle solvers, optical comparators, living documentation, and in-situ browser tools",
+  "version": "2.3.0",
+  "description": "QuoraToys: Interactive visual solvers, kinetic vector annotations, living documentation, and in-situ browser tools",
   "type": "luno-web-app",
   "mainClass": "QuoraToysApp",
   "entrypoint": {
@@ -10,8 +10,10 @@
     "method": "run"
   },
   "main": [
+    "js/CurveFitter.js",
     "js/QuoraToys.js",
     "js/QuoraToysContent.js",
+    "js/QuoraAnnotationComponent.js",
     "js/QuoraStudioComponent.js",
     "js/QuoraBookmarkletComponent.js",
     "js/QuoraExtensionComponent.js",
@@ -22,50 +24,20 @@
     "DomBasics.js",
     "UITools.js",
     "DocumentReader.js",
-    "SidePanel.js"
+    "SidePanel.js",
+    "ColorPicker.js"
   ],
   "styles": [
     "css/basicsWithDialogBox.css"
   ],
-  "processedCountSinceCheckpoint": 0,
-  "lastCheckpointTime": "2026-11-01T06:54:03.975Z",
-  "pendingCheckpointDescription": "Clean working tree",
+  "processedCountSinceCheckpoint": 18,
+  "lastCheckpointTime": "2026-11-01T06:54:13.649Z",
+  "pendingCheckpointDescription": "Added ColorPicker to shared library manifest and refined hard-edge paint blockout tool",
   "changedMethods": {
-    "QuoraToys/css/basicsWithDialogBox.css": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/extension/background.js": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/extension/css/quoraToys.css": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/extension/dictation.html": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/extension/dictation.js": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/extension/features/Aardvark.js": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/extension/features/AardvarkActions.js": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/extension/features/AardvarkDictation.js": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/extension/features/AardvarkOverlay.js": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/extension/features/AardvarkRadialMenu.js": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/extension/features/AardvarkStyleEditor.js": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/extension/features/CurveFitter.js": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/extension/features/DrawingTool.js": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/extension/features/QuoraToysInSitu.js": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/extension/manifest.json": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/extension/popup.html": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/extension/popup.js": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/extension/utils/DialogBox.js": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/extension/utils/KeystrokeHandler.js": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/extension/utils/WindowMessenger.js": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/extension/utils/applyCss.js": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/extension/utils/makeElement.js": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/index.html": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/index_legacy_recursi.html": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/js/QuoraArchiverComponent.js": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/js/QuoraBookmarkletComponent.js": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/js/QuoraExtensionComponent.js": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/js/QuoraStudioComponent.js": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/js/QuoraToys.js": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/js/QuoraToysApp.js": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/js/QuoraToysContent.js": "2026-11-01T06:24:15.715Z",
-    "QuoraToys/luno.json": "2026-11-01T06:24:15.715Z",
-    "Library/DomBasics.js": "2026-11-01T06:24:15.715Z",
-    "Library/UITools.js": "2026-11-01T06:24:15.715Z",
-    "Library/DocumentReader.js": "2026-11-01T06:24:15.715Z",
-    "Library/SidePanel.js": "2026-11-01T06:24:15.715Z"
+    "luno.json": "2026-11-01T23:56:20.707Z",
+    "js/QuoraAnnotationComponent.js": "2026-11-02T06:36:56.289Z",
+    "js/QuoraToysApp.js": "2026-11-02T00:40:01.934Z",
+    "js/QuoraToys.js": "2026-11-02T00:40:01.934Z",
+    "Library/ColorPicker.js": "2026-11-02T06:36:56.289Z"
   }
 }

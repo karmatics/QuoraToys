@@ -1,0 +1,91 @@
+{
+  "timestamp": "2026-11-02T05:55:42.010Z",
+  "found": true,
+  "drawingAppDir": "/Users/rob/source/LunoProjects/DrawingApp",
+  "filesScanned": 16,
+  "matches": {
+    "colorPicker": [
+      {
+        "file": "files.json",
+        "hasHueRing": true,
+        "hasTriangle": true,
+        "hasColorUtils": true,
+        "size": 634
+      },
+      {
+        "file": "js/utils/HueRingCP.js",
+        "hasHueRing": true,
+        "hasTriangle": false,
+        "hasColorUtils": false,
+        "size": 8800
+      },
+      {
+        "file": "js/utils/MidiMapper.js",
+        "hasHueRing": true,
+        "hasTriangle": false,
+        "hasColorUtils": false,
+        "size": 16758
+      },
+      {
+        "file": "js/utils/TriangleCP.js",
+        "hasHueRing": false,
+        "hasTriangle": true,
+        "hasColorUtils": false,
+        "size": 14668
+      }
+    ],
+    "curveTool": [
+      {
+        "file": "js/CurveDraw.js",
+        "hasTangency": true,
+        "hasBalance": true,
+        "hasCurvature": true,
+        "hasCusp": false,
+        "size": 23339
+      },
+      {
+        "file": "js/DrawingApp.js",
+        "hasTangency": true,
+        "hasBalance": true,
+        "hasCurvature": true,
+        "hasCusp": false,
+        "size": 123697
+      },
+      {
+        "file": "js/curve/BezierVertex.js",
+        "hasTangency": false,
+        "hasBalance": true,
+        "hasCurvature": true,
+        "hasCusp": false,
+        "size": 1002
+      },
+      {
+        "file": "js/curve/Curve.js",
+        "hasTangency": false,
+        "hasBalance": true,
+        "hasCurvature": true,
+        "hasCusp": false,
+        "size": 8559
+      },
+      {
+        "file": "js/curve/UpdateControlPoints.js",
+        "hasTangency": false,
+        "hasBalance": true,
+        "hasCurvature": true,
+        "hasCusp": false,
+        "size": 2710
+      }
+    ]
+  },
+  "extractedFiles": [
+    "QuoraToys/imported_drawing_app/files.json",
+    "QuoraToys/imported_drawing_app/CurveDraw.js",
+    "QuoraToys/imported_drawing_app/DrawingApp.js",
+    "QuoraToys/imported_drawing_app/BezierVertex.js",
+    "QuoraToys/imported_drawing_app/Curve.js",
+    "QuoraToys/imported_drawing_app/UpdateControlPoints.js",
+    "QuoraToys/imported_drawing_app/HueRingCP.js",
+    "QuoraToys/imported_drawing_app/MidiMapper.js",
+    "QuoraToys/imported_drawing_app/TriangleCP.js"
+  ]
+}
