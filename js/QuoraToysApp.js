@@ -32,7 +32,8 @@ class QuoraToysApp {
         { id: 'bookmarklet', title: '2. In-Situ Bookmarklet Hub', docClass: () => globalThis.QuoraBookmarkletContent },
         { id: 'extension', title: '3. Chrome Extension & Ambient Tools', docClass: () => globalThis.QuoraExtensionContent },
         { id: 'archiver', title: '4. Quora Answer Archiver & Scraper', docClass: () => globalThis.QuoraArchiverContent },
-        { id: 'vision', title: '5. The Sovereign Feed: Anti-Slop & Community Leverage', docClass: () => globalThis.QuoraVisionContent }
+        { id: 'vision', title: '5. The Sovereign Feed: Anti-Slop & Community Leverage', docClass: () => globalThis.QuoraVisionContent },
+        { id: 'architecture', title: '6. Architecture Audit, Math & Refactor Blueprint', docClass: () => globalThis.QuoraArchitectureContent }
       ];
 
       this.reader = new DocumentReader({
@@ -54,7 +55,6 @@ class QuoraToysApp {
       globalThis._quoraToysAppInstance = this;
       return this;
     }
-
   _buildSidePanel(pages) {
       if (!this.sidePanel) return;
 

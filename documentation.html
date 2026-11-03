@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuoraToys & Studio — Architecture Audit & Mathematical Specification</title>
+  <link rel="stylesheet" href="css/basicsWithDialogBox.css">
+  <style>
+    body {
+      background: #090d16;
+      color: #cbd5e1;
+      font-family: system-ui, -apple-system, sans-serif;
+      line-height: 1.65;
+      padding: 40px 20px 120px;
+      margin: 0;
+      display: flex;
+      justify-content: center;
+    }
+    .doc-container {
+      max-width: 900px;
+      width: 100%;
+    }
+    h1, h2, h3, h4 { color: #f8fafc; font-family: monospace; }
+    h1 { font-size: 28px; color: #00f2fe; border-bottom: 2px solid #00f2fe; padding-bottom: 12px; margin-bottom: 24px; }
+    h2 { font-size: 20px; color: #ffd700; border-bottom: 1px solid #1e293b; padding-bottom: 8px; margin-top: 40px; }
+    h3 { font-size: 15px; color: #38bdf8; margin-top: 24px; }
+    p, li { font-size: 13.5px; }
+    code { background: rgba(0, 242, 254, 0.12); color: #00f2fe; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 12px; }
+    pre { background: #050811; border: 1px solid #1e293b; border-radius: 8px; padding: 14px; overflow-x: auto; color: #7ee787; font-size: 12px; }
+    .card { background: rgba(15, 23, 42, 0.7); border: 1px solid #1e293b; border-radius: 10px; padding: 18px; margin: 18px 0; }
+    .card.warning { border-left: 4px solid #f59e0b; background: rgba(245, 158, 11, 0.05); }
+    .card.success { border-left: 4px solid #10b981; background: rgba(16, 185, 129, 0.05); }
+    .card.cyan { border-left: 4px solid #00f2fe; background: rgba(0, 242, 254, 0.05); }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 12.5px; }
+    th, td { border: 1px solid #1e293b; padding: 8px 12px; text-align: left; }
+    th { background: rgba(15, 23, 42, 0.95); color: #00f2fe; }
+    .nav-bar { position: fixed; top: 0; left: 0; width: 100%; background: rgba(15, 23, 42, 0.95); border-bottom: 1px solid #1e293b; padding: 10px 24px; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; z-index: 100; font-family: monospace; }
+    .nav-bar a { color: #00f2fe; text-decoration: none; font-weight: bold; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="nav-bar">
+    <span>🧩 QuoraToys Architecture &amp; Living Specification</span>
+    <a href="index.html">↗ Launch Studio</a>
+  </div>
+
+  <div class="doc-container" style="margin-top: 40px;">
+    <h1>QuoraToys &amp; Studio: Comprehensive Architecture &amp; Living Specification</h1>
+    <p><em>Version 2.3.0 • Living Architecture &amp; Engineering Dossier</em></p>
+
+    <div class="card cyan">
+      <strong>Core Purpose:</strong> Universal Graphic Studio for instantaneous visual analysis and annotations. Delivers mathematical curve smoothing, drawstring-tether tremor reduction, target-first directional arrowheads, sub-pixel puzzle difference superimposition, and clean retina exports.
+    </div>
+
+    <h2>1. Forensic Self-Assessment &amp; Technical Debt Record</h2>
+    <div class="card warning">
+      <h4>Identified Implementation Defects &amp; Corrective Resolutions:</h4>
+      <ul>
+        <li><strong>Radian vs. Degree Mismatch:</strong> <code>GeometryUtils.rotateVector(v, angleRad)</code> evaluates in radians. Early code fed degree values (e.g. <code>45°</code>), causing the tangent vector to spin by over 7 full revolutions ($2578^\circ$) and flip directions. <em>Resolved: Tangent angle offsets are strictly kept in radians ($\Delta\theta \in [-\pi, \pi]$).</em></li>
+        <li><strong>Viewport Clipping of Floating Palettes:</strong> Mounting floating toolbars inside transformed article containers resulted in edge clipping. <em>Resolved: HUD palettes and debug dialogs mount directly to <code>document.body</code> with fixed coordinates.</em></li>
+        <li><strong>Canonical ColorPicker Substitution:</strong> Stubbed canvas methods temporarily replaced the original ColorPicker. <em>Resolved: Restored untouched <code>Library/ColorPicker.js</code> with canonical <code>HueRingCP.js</code>, <code>TriangleCP.js</code>, and <code>AppColorUtils.js</code>.</em></li>
+        <li><strong>Straight-Line Degradation:</strong> Secondary straight-line routines generated degenerate loops ("backwards zeros"). <em>Resolved: Purged straight-line tool. All lines are natural splines whose intermediate knots can be straightened dynamically.</em></li>
+        <li><strong>Label Padding &amp; Framing:</strong> Standard SVG rects caused trailing whitespace gaps. <em>Resolved: Reduced character metric overhang and introduced 2-sided architectural bracket frames (bottom shelf + entrance wall).</em></li>
+      </ul>
+    </div>
+
+    <h2>2. Mathematical Formulations &amp; Algorithmic Foundations</h2>
+
+    <h3>A. The Kinetic String-Tether (Virtual Drag-Lead)</h3>
+    <p>To eliminate high-frequency hand tremors, the pen tip is pulled by a virtual string of radius $R$ ($32\text{px}$):</p>
+    <pre>
+If dist(Cursor, Pen) &lt; R:
+    Pen stays stationary at P_last
+Else:
+    U = (Cursor - P_last) / dist(Cursor, P_last)
+    Pen = Cursor - U * R
+    </pre>
+
+    <h3>B. Inverse Knot Parameter Derivation</h3>
+    <p>Schneider's curve fitter outputs cubic Bézier segments $[P_0, P_1, P_2, P_3]$. The studio translates these into canonical <code>BezierVertex</code> knots without fixed tangents:</p>
+    <pre>
+1. Knot Position: V_i = P_0, V_{i+1} = P_3
+2. Actual Drawn Tangent: T_actual = normalize(P_1^{(i)} - P_2^{(i-1)})
+3. Natural Relaxation Baseline: T_base = normalize((V_{i+1} - V_i)/D_next + (V_i - V_{i-1})/D_prev)
+4. Signed Angle Offset (Radians):
+   theta = atan2(T_base.x * T_actual.y - T_base.y * T_actual.x, T_base.x * T_actual.x + T_base.y * T_actual.y)
+5. Scale &amp; Balance:
+   S_out = 3 * ||P_1 - V_i|| / D_next
+   S_in  = 3 * ||V_i - P_2|| / D_prev
+   Curvature C = (S_out + S_in) / 2
+   Balance   B = (2 * S_in) / (S_out + S_in)
+    </pre>
+
+    <h3>C. Hand-Drawn Concave Arrowhead Geometry</h3>
+    <p>Anchored at $P_0$ (initial touch point), barbs extend backward along the exit tangent and bow concavely toward the stem:</p>
+    <pre>
+Stem Tangent: U = normalize(Curve(0.25) - P_0), Normal N = (-U.y, U.x)
+Barb Ends:    B_1 = P_0 + U*18 + N*11,  B_2 = P_0 + U*18 - N*11
+Bowed Ctrls:  C_1 = P_0 + U*8 + N*2,    C_2 = P_0 + U*8 - N*2
+SVG Path:     M B_1 Q C_1 P_0 M P_0 Q C_2 B_2
+    </pre>
+
+    <h2>3. Layer Architecture &amp; Drop Shadow Hierarchy</h2>
+    <table>
+      <thead>
+        <tr><th>Z-Index</th><th>Layer Name</th><th>Elements Included</th><th>Styling Mandate</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td><code>diffSvgLayer</code></td><td>Comparator tangents, anchor circles</td><td>2px dashed color</td></tr>
+        <tr><td>2</td><td><code>paintLayer</code></td><td>Opaque &amp; feathered blockout masks</td><td>Solid / feGaussianBlur</td></tr>
+        <tr><td>3</td><td><code>shadowLayer</code></td><td>Curve shadows, barb shadows, box/text shadows</td><td><code>rgba(10, 15, 25, 0.95)</code> offset +2.0px</td></tr>
+        <tr><td>4</td><td><code>strokeLayer</code></td><td>Curve splines, concave arrowhead barbs</td><td>3.2px foreground stroke</td></tr>
+        <tr><td>5</td><td><code>textBadgesLayer</code></td><td>Call-out boxes, 2-sided brackets, text glyphs</td><td>Strictly justified to arrow side</td></tr>
+        <tr><td>6</td><td><code>controlsLayer</code></td><td>On-curve Knots, tangent rays, selection halos</td><td>Cyan / Gold drag handles</td></tr>
+      </tbody>
+    </table>
+
+    <h2>4. Key-In Matrix Command Registry</h2>
+    <table>
+      <thead>
+        <tr><th>Key</th><th>Mnemonic Action</th><th>Behavior Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>Space</code></td><td>Toggle Tool Mode</td><td>Switches between Spline Draw and Knot Tweak mode</td></tr>
+        <tr><td><code>Tab</code></td><td>Next Knot</td><td>Advances knot selection forward (Shift+Tab moves backward)</td></tr>
+        <tr><td><code>C</code></td><td>Toggle Cusp</td><td>Breaks tangency into a 45° corner at the active knot</td></tr>
+        <tr><td><code>B</code></td><td>Cycle Balance</td><td>Steps handle ratio balance (1.0 ➔ 1.5 ➔ 0.5 ➔ 1.0)</td></tr>
+        <tr><td><code>+ / -</code></td><td>Tune Curvature</td><td>Steps curvature tension $C$ by $\pm 0.15$</td></tr>
+        <tr><td><code>[ / ]</code></td><td>Step Tangent Angle</td><td>Steps tangent offset by $\pm 10^\circ$ (in radians)</td></tr>
+        <tr><td><code>S</code></td><td>Straighten Curve</td><td>Removes intermediate knots, collapsing curve into direct arrow</td></tr>
+        <tr><td><code>R</code></td><td>Reset Knot</td><td>Resets active knot constraints to defaults ($\theta=0, C=1, B=1$)</td></tr>
+        <tr><td><code>W</code></td><td>Wipe Curve</td><td>Wipes constraints across all knots on the selected curve</td></tr>
+        <tr><td><code>Del</code></td><td>Delete Entity</td><td>Deletes active curve, arrow, and label from memory and stage</td></tr>
+        <tr><td><code>D</code></td><td>Open Dev Deck</td><td>Opens the architecture telemetry dialog</td></tr>
+      </tbody>
+    </table>
+
+    <h2>5. Implementation Roadmap</h2>
+    <div class="card">
+      <ol>
+        <li><strong>Step 1:</strong> True circular / elliptical arc tool.</li>
+        <li><strong>Step 2:</strong> Straight line segments with fillet rounded corners.</li>
+        <li><strong>Step 3:</strong> Closed curve loop support ($C^1$ tangency closure).</li>
+        <li><strong>Step 4:</strong> Sub-module factorization into single-responsibility delegates (under 200 lines per file).</li>
+      </ol>
+    </div>
+  </div>
+</body>
+</html>
