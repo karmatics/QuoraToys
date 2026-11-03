@@ -1228,23 +1228,28 @@ class QuoraToys {
   }
 
   sendToGraphicStudio() {
-      if (!this.sourceImage) return;
+      if (!this.sourceImage || !this.activeCrop) return;
 
-      const leftSafe = (typeof SidePanel !== 'undefined' && SidePanel.getInstances()?.left?.isOpen)
-        ? (SidePanel.getInstances().left.width || 300)
-        : 0;
+      let baseOrigin = { x: this.activeCrop.x, y: this.activeCrop.y };
+      if (this.overlayDialog && this.overlayViewport && this.mainImgElement) {
+        const mainRect = this.mainImgElement.getBoundingClientRect();
+        const ovRect = this.overlayViewport.getBoundingClientRect();
+        baseOrigin = {
+          x: Math.round((ovRect.left - mainRect.left) / this.zoom),
+          y: Math.round((ovRect.top - mainRect.top) / this.zoom)
+        };
+      }
 
-      // Switch navigator to Chapter 1 (Annotation Studio)
       if (globalThis._quoraToysAppInstance) {
         globalThis._quoraToysAppInstance.selectChapter('annotation');
       }
 
-      // Pass data into QuoraAnnotationComponent
       setTimeout(() => {
         if (typeof QuoraAnnotationComponent !== 'undefined' && QuoraAnnotationComponent.loadExternalDataset) {
           QuoraAnnotationComponent.loadExternalDataset({
             sourceImage: this.sourceImage,
             activeCrop: this.activeCrop,
+            baseOrigin: baseOrigin,
             diffCircles: this.diffCircles
           });
         }

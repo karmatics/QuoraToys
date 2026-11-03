@@ -1,6 +1,6 @@
 {
   "name": "QuoraToys",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "QuoraToys: Interactive visual solvers, kinetic vector annotations, living documentation, and in-situ browser tools",
   "type": "luno-web-app",
   "mainClass": "QuoraToysApp",
@@ -10,6 +10,10 @@
     "method": "run"
   },
   "main": [
+    "js/AppColorUtils.js",
+    "js/GeometryUtils.js",
+    "js/BezierVertex.js",
+    "js/UpdateControlPoints.js",
     "js/CurveFitter.js",
     "js/QuoraToys.js",
     "js/QuoraToysContent.js",
@@ -30,14 +34,12 @@
   "styles": [
     "css/basicsWithDialogBox.css"
   ],
-  "processedCountSinceCheckpoint": 0,
-  "lastCheckpointTime": "2026-11-02T07:23:23.474Z",
-  "pendingCheckpointDescription": "Clean working tree",
+  "processedCountSinceCheckpoint": 10,
+  "lastCheckpointTime": "2026-11-02T07:23:53.476Z",
+  "pendingCheckpointDescription": "Integrate natural on-curve spline tool, paste ingestion, and comparator transfer",
   "changedMethods": {
-    "luno.json": "2026-11-01T23:56:20.707Z",
-    "js/QuoraAnnotationComponent.js": "2026-11-02T06:36:56.289Z",
-    "js/QuoraToysApp.js": "2026-11-02T00:40:01.934Z",
-    "js/QuoraToys.js": "2026-11-02T00:40:01.934Z",
-    "Library/ColorPicker.js": "2026-11-02T06:36:56.289Z"
+    "luno.json": "2026-11-02T19:06:11.034Z",
+    "js/QuoraToys.js": "2026-11-02T19:06:11.034Z",
+    "js/QuoraAnnotationComponent.js": "2026-11-03T05:02:47.901Z"
   }
 }
