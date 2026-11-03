@@ -1547,7 +1547,7 @@ class AardvarkActions {
     v = v.replace(/\u00a0/g, ' ');
     v = v.replace(/\u2028|\u2029/g, '\n');
 
-    // ✂️ Snip mode: truncate huge values instead of hiding attributes
+    // ���️ Snip mode: truncate huge values instead of hiding attributes
     if (viewMode === 1) {
       // Heuristics: SVG paths + data URLs + giant querystrings deserve aggressive snips
       const isSvgPath = n === 'd' || n === 'points';
