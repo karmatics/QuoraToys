@@ -1,73 +1,75 @@
 class QuoraToys {
 
   async run(env) {
-    if (!env || !env.container) {
-      throw new Error("[QuoraToys] run() requires an environment object with a valid container.");
+      if (!env || !env.container) {
+        throw new Error("[QuoraToys] run() requires an environment object with a valid container.");
+      }
+      this.env = env;
+      this.targetElement = env.container;
+      this.targetElement.classList.add('fdr-app-container');
+
+      window.quoraToysInstance = this;
+      globalThis.quoraToysInstance = this;
+
+      this.sourceImage = null;
+      this.imageSourceUrl = null;
+      this.naturalWidth = 0;
+      this.naturalHeight = 0;
+      this.zoom = 1.0;
+
+      this.mainDialog = null;
+      this.mainImgElement = null;
+      this.mainViewport = null;
+      this.cropSurface = null;
+      this.selectionBox = null;
+      this.selectionTooltip = null;
+      this.zoomLabel = null;
+      this.metaLabel = null;
+      this.cropBtn = null;
+
+      this.isCropMode = false;
+      this.activeCrop = null;
+      this.overlayDialog = null;
+      this.overlayViewport = null;
+      this.overlayClippedImg = null;
+      this.flashInterval = null;
+      this.isFlashing = false;
+      this.currentOpacity = 0.5;
+
+      // Scrolling Stripes Mode properties
+      this.isStripesMode = false;
+      this.stripeWidth = 50;
+      this.stripeSpeed = 45;
+      this.stripeOffset = 0;
+      this.stripeRunning = false;
+      this.stripeDirection = 1;
+      this.stripeRafId = null;
+
+      // Difference Circles State (Z-Order is array order)
+      this.diffCircles = [];
+      this.selectedDiffId = null;
+      this.isCircleDiffMode = false;
+      this.circleDrawSurface = null;
+      this.overlaySvgLayer = null;
+      this.solutionDialog = null;
+      this.helpDialog = null;
+
+      // Solution Canvas Appearance & Customization Settings
+      this.solutionDarken = 0.35;
+      this.solutionBlur = 4;
+      this.solutionOutlineColor = '#00e676';
+      this.solutionOutlineWidth = 3;
+      this.solutionShowLabels = false;
+      this.solutionConnectorStyle = 'tangents';
+      this.solutionBlendAnchor = true;
+
+      // Background Canvas Option: 'transparent' | 'gradient' | 'color'
+      this.solutionBgMode = 'transparent';
+      this.solutionBgColor = '#090d16';
+
+      this._buildWelcomeScreen();
+      this._initGlobalListeners();
     }
-    this.env = env;
-    this.targetElement = env.container;
-    this.targetElement.classList.add('fdr-app-container');
-
-    this.sourceImage = null;
-    this.imageSourceUrl = null;
-    this.naturalWidth = 0;
-    this.naturalHeight = 0;
-    this.zoom = 1.0;
-
-    this.mainDialog = null;
-    this.mainImgElement = null;
-    this.mainViewport = null;
-    this.cropSurface = null;
-    this.selectionBox = null;
-    this.selectionTooltip = null;
-    this.zoomLabel = null;
-    this.metaLabel = null;
-    this.cropBtn = null;
-
-    this.isCropMode = false;
-    this.activeCrop = null;
-    this.overlayDialog = null;
-    this.overlayViewport = null;
-    this.overlayClippedImg = null;
-    this.flashInterval = null;
-    this.isFlashing = false;
-    this.currentOpacity = 0.5;
-
-    // Scrolling Stripes Mode properties
-    this.isStripesMode = false;
-    this.stripeWidth = 50;
-    this.stripeSpeed = 45;
-    this.stripeOffset = 0;
-    this.stripeRunning = false;
-    this.stripeDirection = 1;
-    this.stripeRafId = null;
-
-    // Difference Circles State (Z-Order is array order)
-    this.diffCircles = [];
-    this.selectedDiffId = null;
-    this.isCircleDiffMode = false;
-    this.circleDrawSurface = null;
-    this.overlaySvgLayer = null;
-    this.solutionDialog = null;
-    this.helpDialog = null;
-
-    // Solution Canvas Appearance & Customization Settings
-    this.solutionDarken = 0.35;
-    this.solutionBlur = 4;
-    this.solutionOutlineColor = '#00e676';
-    this.solutionOutlineWidth = 3;
-    this.solutionShowLabels = false;
-    this.solutionConnectorStyle = 'tangents';
-    this.solutionBlendAnchor = true;
-
-    // Background Canvas Option: 'transparent' | 'gradient' | 'color'
-    this.solutionBgMode = 'transparent';
-    this.solutionBgColor = '#090d16';
-
-    this._buildWelcomeScreen();
-    this._initGlobalListeners();
-  }
-
   _buildWelcomeScreen() {
       this.targetElement.innerHTML = '';
 
