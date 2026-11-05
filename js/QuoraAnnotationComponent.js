@@ -1963,35 +1963,8 @@ class QuoraAnnotationComponent {
 
       splineEl.style.filter = 'drop-shadow(0 0 6px #00f2fe)';
 
-      // LOCALIZED NODE UPDATE: Only the segments connected to the modified node are recalculated
-      const updateCurveGeometry = (modifiedNodeIndex = null) => {
-        if (modifiedNodeIndex !== null && curveRecord.beziers && curveRecord.beziers.length > 0) {
-          // Localized update for the modified node: adjust its control points without wiggling distant nodes
-          const i = modifiedNodeIndex;
-          const v = vertices[i];
-
-          if (i < vertices.length - 1) {
-            const vNext = vertices[i + 1];
-            const segIdx = i;
-            if (curveRecord.beziers[segIdx]) {
-              curveRecord.beziers[segIdx][0] = [v.point[0], v.point[1]];
-              const dist = Math.hypot(vNext.point[0] - v.point[0], vNext.point[1] - v.point[1]);
-              const cp1 = [v.point[0] + (vNext.point[0] - v.point[0]) * 0.33, v.point[1] + (vNext.point[1] - v.point[1]) * 0.33];
-              curveRecord.beziers[segIdx][1] = cp1;
-            }
-          }
-          if (i > 0) {
-            const vPrev = vertices[i - 1];
-            const segIdx = i - 1;
-            if (curveRecord.beziers[segIdx]) {
-              curveRecord.beziers[segIdx][3] = [v.point[0], v.point[1]];
-              const cp2 = [v.point[0] - (v.point[0] - vPrev.point[0]) * 0.33, v.point[1] - (v.point[1] - vPrev.point[1]) * 0.33];
-              curveRecord.beziers[segIdx][2] = cp2;
-            }
-          }
-        } else {
-          curveRecord.beziers = this.verticesToBeziers(vertices);
-        }
+      const updateCurveGeometry = (affectedRange = null) => {
+        curveRecord.beziers = this.verticesToBeziers(vertices, affectedRange);
 
         let d = 'M ' + curveRecord.beziers[0][0].join(' ');
         for (let i = 0; i < curveRecord.beziers.length; i++) {
@@ -2067,15 +2040,11 @@ class QuoraAnnotationComponent {
             v.curvature = Math.max(0.2, Math.min(3.0, (v.curvature || 1) + delta * 0.1));
             this.showKnotToast(`Node ${idx + 1} Curvature: ${v.curvature.toFixed(2)}`);
           }
-          updateCurveGeometry(idx);
+          updateCurveGeometry();
         }, { passive: false });
 
-        // State backup for Escape cancellation
         let dragging = false;
-        let originalPt = [...v.point];
-        let originalTangentOffset = v.tangentAngleOffset;
-        let originalCurvature = v.curvature;
-        let originalBalance = v.balance;
+        const savedNodes = [];
 
         nodeCircle.addEventListener('mousedown', (e) => {
           if (e.button === 2) return;
@@ -2083,46 +2052,95 @@ class QuoraAnnotationComponent {
           this._activeKnotIdx = idx;
           dragging = true;
 
-          originalPt = [...v.point];
-          originalTangentOffset = v.tangentAngleOffset;
-          originalCurvature = v.curvature;
-          originalBalance = v.balance;
+          savedNodes.length = 0;
 
-          if (this.stageState.freePointOnDrag) {
-            v.tangentAngleOffset = 0;
-            v.curvature = 1.0;
-            v.balance = 1.0;
-          }
+          // Clear constraints on grabbed node AND on adjacent nodes on either side
+          const clearNode = (node, i) => {
+            if (!node) return;
+            savedNodes.push({
+              idx: i,
+              pt: [...node.point],
+              tangentOffset: node.tangentAngleOffset,
+              curvature: node.curvature,
+              balance: node.balance
+            });
+            node.tangentAngleOffset = 0;
+            node.curvature = 1.0;
+            node.balance = 1.0;
+            node.tangents = [null, null];
+          };
+
+          clearNode(v, idx);
+          if (idx > 0) clearNode(vertices[idx - 1], idx - 1);
+          if (idx < vertices.length - 1) clearNode(vertices[idx + 1], idx + 1);
+
+          const localRange = {
+            start: Math.max(0, idx - 1),
+            end: Math.min(vertices.length - 1, idx + 1)
+          };
+
+          const restoreAll = () => {
+            savedNodes.forEach(s => {
+              const targetNode = vertices[s.idx];
+              if (targetNode) {
+                targetNode.point = [...s.pt];
+                targetNode.tangentAngleOffset = s.tangentOffset;
+                targetNode.curvature = s.curvature;
+                targetNode.balance = s.balance;
+              }
+            });
+            nodeCircle.setAttribute('cx', v.point[0]);
+            nodeCircle.setAttribute('cy', v.point[1]);
+            updateCurveGeometry(localRange);
+          };
 
           const onEsc = (kev) => {
             if (kev.key === 'Escape' && dragging) {
               dragging = false;
-              v.point = [...originalPt];
-              v.tangentAngleOffset = originalTangentOffset;
-              v.curvature = originalCurvature;
-              v.balance = originalBalance;
-              nodeCircle.setAttribute('cx', v.point[0]);
-              nodeCircle.setAttribute('cy', v.point[1]);
-              updateCurveGeometry(idx);
-              window.removeEventListener('keydown', onEsc);
+              restoreAll();
+              cleanupDragListeners();
             }
           };
+
+          const onRightClickCancel = (mev) => {
+            if (mev.button === 2 && dragging) {
+              mev.preventDefault();
+              mev.stopPropagation();
+              dragging = false;
+              restoreAll();
+              cleanupDragListeners();
+            }
+          };
+
+          const onDrag = (ev) => {
+            if (!dragging) return;
+            const pt = getStagePt(ev);
+            v.point[0] = pt[0];
+            v.point[1] = pt[1];
+            nodeCircle.setAttribute('cx', pt[0]);
+            nodeCircle.setAttribute('cy', pt[1]);
+            updateCurveGeometry(localRange);
+          };
+
+          const onUp = () => {
+            if (dragging) {
+              dragging = false;
+              cleanupDragListeners();
+            }
+          };
+
+          const cleanupDragListeners = () => {
+            window.removeEventListener('keydown', onEsc);
+            window.removeEventListener('mousedown', onRightClickCancel, true);
+            window.removeEventListener('mousemove', onDrag);
+            window.removeEventListener('mouseup', onUp);
+          };
+
           window.addEventListener('keydown', onEsc);
+          window.addEventListener('mousedown', onRightClickCancel, true);
+          window.addEventListener('mousemove', onDrag);
+          window.addEventListener('mouseup', onUp);
         });
-
-        const onDrag = (e) => {
-          if (!dragging) return;
-          const pt = getStagePt(e);
-          v.point[0] = pt[0];
-          v.point[1] = pt[1];
-          nodeCircle.setAttribute('cx', pt[0]);
-          nodeCircle.setAttribute('cy', pt[1]);
-          updateCurveGeometry(idx);
-        };
-
-        const onUp = () => { dragging = false; };
-        window.addEventListener('mousemove', onDrag);
-        window.addEventListener('mouseup', onUp);
 
         this.controlsLayer.appendChild(nodeCircle);
       });
@@ -2788,12 +2806,12 @@ class QuoraAnnotationComponent {
 
       return vertices;
     }
-  verticesToBeziers(vertices) {
+
+  verticesToBeziers(vertices, affectedRange = null) {
       if (!vertices || vertices.length < 2) return [];
 
-      // Run the relaxation solver so control handles respond to neighbor movements
       if (typeof UpdateControlPoints !== 'undefined') {
-        UpdateControlPoints.run(vertices, 8);
+        UpdateControlPoints.run(vertices, 6, affectedRange);
       }
 
       const beziers = [];
