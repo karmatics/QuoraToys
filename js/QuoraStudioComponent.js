@@ -107,41 +107,95 @@ class QuoraStudioComponent {
   }
 
   static launchStandalone() {
-    const host = document.createElement('div');
-    host.id = 'quoratoys-standalone-mount';
-    host.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 100000; background: #0b0f19;';
-    document.body.appendChild(host);
+      const existing = document.getElementById('quoratoys-standalone-mount');
+      if (existing) existing.remove();
 
-    const closeBtn = document.createElement('button');
-    closeBtn.textContent = '✕ Return to Living Dossier';
-    closeBtn.style.cssText = 'position: fixed; top: 12px; right: 18px; z-index: 2147483647; background: #1e293b; color: #f8fafc; border: 1px solid #00e676; padding: 6px 12px; font-family: monospace; font-size: 11px; font-weight: bold; border-radius: 6px; cursor: pointer;';
-    closeBtn.onclick = () => {
-      host.remove();
-      closeBtn.remove();
-    };
-    document.body.appendChild(closeBtn);
+      const leftSafe = (typeof SidePanel !== 'undefined' && SidePanel.getInstances()?.left?.isOpen)
+        ? (SidePanel.getInstances().left.width || 300)
+        : 0;
 
-    const app = new QuoraToys();
-    app.run({ container: host });
-  }
+      const host = document.createElement('div');
+      host.id = 'quoratoys-standalone-mount';
+      host.style.cssText = [
+        'position: fixed;',
+        'top: 0;',
+        `left: ${leftSafe}px;`,
+        `width: calc(100vw - ${leftSafe}px);`,
+        'height: 100vh;',
+        'z-index: 200000;',
+        'background: #0b0f19;',
+        'overflow: hidden;',
+        'display: flex;',
+        'flex-direction: column;',
+        'transition: left 0.25s cubic-bezier(0.16, 1, 0.3, 1), width 0.25s cubic-bezier(0.16, 1, 0.3, 1);'
+      ].join('\n');
+      document.body.appendChild(host);
 
+      const closeBtn = document.createElement('button');
+      closeBtn.textContent = '✕ Return to Living Dossier';
+      closeBtn.className = 'dr-nav-btn';
+      closeBtn.style.cssText = [
+        'position: fixed;',
+        'top: 12px;',
+        'right: 18px;',
+        'z-index: 2147483647;',
+        'background: #1e293b;',
+        'color: #f8fafc;',
+        'border: 1.5px solid #00e676;',
+        'padding: 6px 14px;',
+        'font-family: monospace;',
+        'font-size: 11px;',
+        'font-weight: bold;',
+        'border-radius: 6px;',
+        'cursor: pointer;',
+        'box-shadow: 0 4px 14px rgba(0,0,0,0.6);'
+      ].join('\n');
+
+      closeBtn.onclick = () => {
+        if (host._safeAreaListener) {
+          window.removeEventListener('layout-safe-area-change', host._safeAreaListener);
+        }
+        host.remove();
+        closeBtn.remove();
+      };
+      document.body.appendChild(closeBtn);
+
+      // Keep standalone window from sliding behind the sidepanel when toggled
+      host._safeAreaListener = (e) => {
+        const l = e.detail?.left || 0;
+        host.style.left = `${l}px`;
+        host.style.width = `calc(100vw - ${l}px)`;
+      };
+      window.addEventListener('layout-safe-area-change', host._safeAreaListener);
+
+      const app = new QuoraToys();
+      window.quoraToysInstance = app;
+      globalThis.quoraToysInstance = app;
+      app.run({ container: host });
+      return app;
+    }
   static loadSample() {
-    QuoraStudioComponent.launchStandalone();
-    setTimeout(() => {
-      if (window.quoraToysInstance) {
-        window.quoraToysInstance.loadSamplePuzzle();
-      }
-    }, 150);
-  }
+      const app = QuoraStudioComponent.launchStandalone();
+      setTimeout(() => {
+        if (app && typeof app.loadSamplePuzzle === 'function') {
+          app.loadSamplePuzzle();
+        } else if (window.quoraToysInstance && typeof window.quoraToysInstance.loadSamplePuzzle === 'function') {
+          window.quoraToysInstance.loadSamplePuzzle();
+        }
+      }, 120);
+    }
 
   static loadFile(file) {
-    QuoraStudioComponent.launchStandalone();
-    setTimeout(() => {
-      if (window.quoraToysInstance) {
-        window.quoraToysInstance.loadFile(file);
-      }
-    }, 150);
-  }
+      if (!file) return;
+      const app = QuoraStudioComponent.launchStandalone();
+      setTimeout(() => {
+        if (app && typeof app.loadFile === 'function') {
+          app.loadFile(file);
+        } else if (window.quoraToysInstance && typeof window.quoraToysInstance.loadFile === 'function') {
+          window.quoraToysInstance.loadFile(file);
+        }
+      }, 120);
+    }
 }
 
 globalThis.QuoraStudioComponent = QuoraStudioComponent;

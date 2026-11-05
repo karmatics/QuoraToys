@@ -125,10 +125,16 @@ class QuoraAnnotationComponent {
       }, [
         makeElement('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, [
           makeElement('span', { style: { fontSize: '16px' } }, '🎨'),
-          makeElement('strong', { style: { fontSize: '13px', color: '#00f2fe' } }, 'Universal Graphic Studio'),
+          makeElement('strong', { style: { fontSize: '13px', color: '#00f2fe' } }, 'Universal Graphic Studio & Solvers'),
           makeElement('span', { id: 'qa-status-pill', style: { fontSize: '10px', background: 'rgba(0, 242, 254, 0.15)', color: '#00f2fe', padding: '2px 8px', borderRadius: '12px', fontWeight: 'bold' } }, 'Ready')
         ]),
         makeElement('div', { style: { display: 'flex', gap: '6px' } }, [
+          makeElement('button', {
+            className: 'dr-nav-btn primary',
+            style: { padding: '4px 10px', fontSize: '11px', background: '#0284c7', borderColor: '#38bdf8' },
+            title: 'Launch Spot-the-Difference Comparator workflow to insert twin difference lenses',
+            onclick: () => this.openSpotDiffWorkflow()
+          }, '🧩 Spot Difference'),
           makeElement('button', {
             className: 'dr-nav-btn',
             style: { padding: '4px 9px', fontSize: '11px', color: '#00f2fe', borderColor: '#00f2fe66' },
@@ -174,15 +180,22 @@ class QuoraAnnotationComponent {
         Object.keys(this.toolBtns).forEach(k => this.toolBtns[k].classList.toggle('primary', k === mode));
         this.svgSurface.style.cursor = (mode === 'paint') ? 'crosshair' : (mode === 'balloon' ? 'text' : (mode === 'select' ? 'default' : 'crosshair'));
         this.brushControlsRibbon.style.display = (mode === 'paint') ? 'flex' : 'none';
-        this.curveControlsRibbon.style.display = (mode === 'curve') ? 'flex' : 'none';
+        this.curveControlsRibbon.style.display = (mode === 'curve' || mode === 'click_nodes') ? 'flex' : 'none';
       };
 
       this.toolBtns.curve = makeElement('button', {
         className: 'dr-nav-btn primary',
         style: { padding: '4px 8px', fontSize: '11px' },
-        title: 'Draw smooth cubic Bézier splines (point-first, releases at tail). Hold Shift to erase rewind!',
+        title: 'Draw smooth cubic Bézier splines with drag-tether. Click, drag, and release!',
         onclick: () => setTool('curve')
-      }, '〰️ Spline');
+      }, '🪢 Drag-Tether');
+
+      this.toolBtns.click_nodes = makeElement('button', {
+        className: 'dr-nav-btn',
+        style: { padding: '4px 8px', fontSize: '11px' },
+        title: 'Draw curve by placing discrete points: click, click, click, Enter or double-click to finish!',
+        onclick: () => setTool('click_nodes')
+      }, '📍 Click-Nodes');
 
       this.toolBtns.balloon = makeElement('button', {
         className: 'dr-nav-btn',
@@ -207,7 +220,7 @@ class QuoraAnnotationComponent {
       this.toolBtns.select = makeElement('button', {
         className: 'dr-nav-btn',
         style: { padding: '4px 8px', fontSize: '11px' },
-        title: 'Select and tweak existing curves, arrows, and differences',
+        title: 'Select and tweak existing curves, arrows, nodes, and differences [Hotkey: Space]',
         onclick: () => setTool('select')
       }, '👆 Move/Tweak');
 
@@ -219,6 +232,7 @@ class QuoraAnnotationComponent {
         onclick: () => {
           const h = document.getElementById('qa-keyin-matrix-hud');
           if (h) h.style.display = (h.style.display === 'none') ? 'flex' : 'none';
+          else this.setupKeyInMatrixHud();
         }
       }, '⌨️ HUD');
 
@@ -321,7 +335,7 @@ class QuoraAnnotationComponent {
       }, '🗑️ Clear');
 
       ribbon.append(
-        this.toolBtns.curve, this.toolBtns.balloon,
+        this.toolBtns.curve, this.toolBtns.click_nodes, this.toolBtns.balloon,
         this.toolBtns.paint, this.toolBtns.crop, this.toolBtns.select,
         hudToggleBtn, debugDeckBtn, zoomGroup, autoBoundsBtn, bgBtn, undoBtn, clearBtn
       );
@@ -344,36 +358,36 @@ class QuoraAnnotationComponent {
 
       const tetherBtn = makeElement('button', {
         className: `dr-nav-btn ${this.stageState.tetherActive ? 'primary' : ''}`,
-        style: { padding: '3px 8px', fontSize: '11px', color: this.stageState.tetherActive ? '#070a13' : '#f59e0b', fontWeight: 'bold' },
+        style: { padding: '3px 8px', fontSize: '11px', color: this.stageState.tetherActive ? '#ffffff' : '#f59e0b', fontWeight: 'bold' },
         title: 'Kinetic String-Tether (Virtual Drag-Lead). Stabilizes mouse motion. Default: ON',
         onclick: () => {
           this.stageState.tetherActive = !this.stageState.tetherActive;
           tetherBtn.classList.toggle('primary', this.stageState.tetherActive);
-          tetherBtn.style.color = this.stageState.tetherActive ? '#070a13' : '#f59e0b';
+          tetherBtn.style.color = this.stageState.tetherActive ? '#ffffff' : '#f59e0b';
           tetherBtn.textContent = this.stageState.tetherActive ? '🪢 Tether: ON' : '🪢 Tether: OFF';
         }
       }, this.stageState.tetherActive ? '🪢 Tether: ON' : '🪢 Tether: OFF');
 
       const arrowBtn = makeElement('button', {
         className: `dr-nav-btn ${this.stageState.hasArrow ? 'primary' : ''}`,
-        style: { padding: '3px 8px', fontSize: '11px', color: this.stageState.hasArrow ? '#070a13' : '#94a3b8' },
+        style: { padding: '3px 8px', fontSize: '11px', color: this.stageState.hasArrow ? '#ffffff' : '#94a3b8' },
         title: 'Toggle arrowhead: Turn OFF for pure plain curves without arrow or text',
         onclick: () => {
           this.stageState.hasArrow = !this.stageState.hasArrow;
           arrowBtn.classList.toggle('primary', this.stageState.hasArrow);
-          arrowBtn.style.color = this.stageState.hasArrow ? '#070a13' : '#94a3b8';
+          arrowBtn.style.color = this.stageState.hasArrow ? '#ffffff' : '#94a3b8';
           arrowBtn.textContent = this.stageState.hasArrow ? '🏹 Arrow: ON' : '🏹 Arrow: OFF (Plain Curve)';
         }
       }, this.stageState.hasArrow ? '🏹 Arrow: ON' : '🏹 Arrow: OFF (Plain Curve)');
 
       const borderBtn = makeElement('button', {
         className: `dr-nav-btn ${this.stageState.hasBorder ? 'primary' : ''}`,
-        style: { padding: '3px 8px', fontSize: '11px', color: this.stageState.hasBorder ? '#070a13' : '#94a3b8' },
+        style: { padding: '3px 8px', fontSize: '11px', color: this.stageState.hasBorder ? '#ffffff' : '#94a3b8' },
         title: 'Toggle text boundary box (thickness matches the curve Bézier stroke)',
         onclick: () => {
           this.stageState.hasBorder = !this.stageState.hasBorder;
           borderBtn.classList.toggle('primary', this.stageState.hasBorder);
-          borderBtn.style.color = this.stageState.hasBorder ? '#070a13' : '#94a3b8';
+          borderBtn.style.color = this.stageState.hasBorder ? '#ffffff' : '#94a3b8';
           borderBtn.textContent = this.stageState.hasBorder ? '◻ Box: ON' : '◻ Box: OFF';
           this.renderStage();
         }
@@ -618,21 +632,20 @@ class QuoraAnnotationComponent {
   }
 
   setupZoomWheel() {
-      // Smooth cursor-anchored zoom (anchors world point directly under mouse)
+      // 1. Mouse Wheel Cursor-Centered Zooming
       this.viewport.addEventListener('wheel', (e) => {
-        // If hovering over a knot or input, let the specific element handle it
-        if (e.target.closest('.qa-on-curve-knot-handle, input, textarea, select')) return;
+        if (e.target.closest('input, textarea, select')) return;
 
         e.preventDefault();
         const rect = this.viewport.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
 
-        // Mouse position in current canvas coordinate space
         const curZoom = this.stageState.zoom;
         const curPanX = this.stageState.panX;
         const curPanY = this.stageState.panY;
 
+        // Calculate world point anchored under cursor
         const worldX = (mouseX - curPanX) / curZoom;
         const worldY = (mouseY - curPanY) / curZoom;
 
@@ -642,7 +655,7 @@ class QuoraAnnotationComponent {
           Math.min(this.stageState.maxZoom, curZoom * zoomFactor)
         );
 
-        // Re-anchor pan so world point under cursor remains exactly under cursor
+        // Re-anchor pan so world point stays locked under mouse cursor
         this.stageState.panX = mouseX - worldX * nextZoom;
         this.stageState.panY = mouseY - worldY * nextZoom;
         this.stageState.zoom = nextZoom;
@@ -654,13 +667,13 @@ class QuoraAnnotationComponent {
         if (this._devDeckDialog) this.updateDevDeckUI();
       }, { passive: false });
 
-      // Middle-click or Alt+Drag pan support
+      // 2. Middle-click or Alt+Drag pan support
       let isPanning = false;
       let panStart = [0, 0];
       let startPanCoords = [0, 0];
 
       this.viewport.addEventListener('mousedown', (e) => {
-        if (e.button === 1 || (e.button === 0 && (e.altKey || this.stageState.activeTool === 'pan'))) {
+        if (e.button === 1 || (e.button === 0 && e.altKey)) {
           isPanning = true;
           panStart = [e.clientX, e.clientY];
           startPanCoords = [this.stageState.panX, this.stageState.panY];
@@ -682,6 +695,29 @@ class QuoraAnnotationComponent {
         if (isPanning) {
           isPanning = false;
           this.viewport.style.cursor = '';
+        }
+      });
+
+      // 3. Right-Click Interceptor to cancel drawing/dragging without browser menu
+      this.viewport.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // If drawing point-by-point, right click commits the curve!
+        if (this.stageState.activeTool === 'click_nodes') {
+          if (this._activePenVertices && this._activePenVertices.length >= 2) {
+            this.commitPenCurve();
+          } else {
+            this.cancelPenCurve();
+          }
+          return;
+        }
+
+        // If dragging a node or element, let go
+        if (this.stageState.selectedItem) {
+          this.controlsLayer.innerHTML = '';
+          this.stageState.selectedItem = null;
+          this.renderStage();
         }
       });
     }
@@ -985,7 +1021,7 @@ class QuoraAnnotationComponent {
 
       this.renderPlacedImages(sCtx);
 
-      // 2. Difference Callouts
+      // 2. Difference Callouts (Twin Magnifier Lenses)
       this.diffCanvas.width = tf.totalW;
       this.diffCanvas.height = tf.totalH;
       const dCtx = this.diffCanvas.getContext('2d');
@@ -1093,7 +1129,6 @@ class QuoraAnnotationComponent {
           const lines = String(ann.text).split('\n');
           const lineHeight = fontS * 1.25;
 
-          // Tight Glyph Metrics (prevents trailing whitespace gaps)
           const charW = fontS * (fontF.includes('mono') ? 0.60 : 0.52);
           let maxLineChars = 0;
           lines.forEach(l => { if (l.length > maxLineChars) maxLineChars = l.length; });
@@ -1159,7 +1194,6 @@ class QuoraAnnotationComponent {
           window.addEventListener('mousemove', onLabelMove);
           window.addEventListener('mouseup', onLabelUp);
 
-          // 1. 4-Sided Rounded Box Frame
           if (boxStyle === 'box') {
             const boxShadow = makeElement('svg:rect', {
               className: 'qa-attached-text-shadow',
@@ -1178,9 +1212,7 @@ class QuoraAnnotationComponent {
               'stroke-linecap': 'round', 'stroke-linejoin': 'round'
             });
             labelGroup.appendChild(boxRect);
-          }
-          // 2. Architectural 2-Sided Bracket Frame (Bottom shelf + entering side)
-          else if (boxStyle === 'bracket') {
+          } else if (boxStyle === 'bracket') {
             const bottomY = boxY + boxHeight;
             const sideX = isLeft ? boxX : boxX + boxWidth;
             const oppX = isLeft ? boxX + boxWidth : boxX;
@@ -1206,7 +1238,6 @@ class QuoraAnnotationComponent {
             labelGroup.appendChild(bracketFg);
           }
 
-          // Text Shadow in shadowLayer
           const textShadow = makeElement('svg:text', {
             className: 'qa-attached-text-shadow',
             x: textX + shadowOffset,
@@ -1229,7 +1260,6 @@ class QuoraAnnotationComponent {
           });
           this.shadowLayer.appendChild(textShadow);
 
-          // Foreground Text in textBadgesLayer
           const fgText = makeElement('svg:text', {
             x: textX, y: textStartY,
             'text-anchor': textAnchor,
@@ -1424,6 +1454,20 @@ class QuoraAnnotationComponent {
             this.executeKeyInCommand('delete_curve', e);
             return;
           }
+          if (e.key === 'Enter') {
+            if (this._activePenVertices && this._activePenVertices.length >= 2) {
+              e.preventDefault();
+              this.commitPenCurve();
+              return;
+            }
+          }
+          if (e.key === 'Escape') {
+            if (this._activePenVertices && this._activePenVertices.length > 0) {
+              e.preventDefault();
+              this.cancelPenCurve();
+              return;
+            }
+          }
         });
       }
 
@@ -1451,6 +1495,23 @@ class QuoraAnnotationComponent {
 
       this.svgSurface.addEventListener('mouseleave', () => {
         if (brushStampCircle) { brushStampCircle.remove(); brushStampCircle = null; }
+      });
+
+      // Handle Discrete Node placement click versus Drag-Tether
+      this.svgSurface.addEventListener('click', (e) => {
+        if (e.target.closest('.qa-on-curve-knot-handle, #qa-tail-settings-hud, foreignObject, .qa-movable-label-group, #qa-keyin-matrix-hud')) return;
+        if (this.stageState.activeTool === 'click_nodes') {
+          const pt = getStagePt(e);
+          this.addPenVertex(pt);
+        }
+      });
+
+      this.svgSurface.addEventListener('dblclick', (e) => {
+        if (this.stageState.activeTool === 'click_nodes') {
+          e.preventDefault();
+          e.stopPropagation();
+          this.commitPenCurve();
+        }
       });
 
       this.svgSurface.addEventListener('mousedown', (e) => {
@@ -1490,6 +1551,11 @@ class QuoraAnnotationComponent {
           return;
         }
 
+        if (this.stageState.activeTool === 'click_nodes') {
+          // Managed by click listener above
+          return;
+        }
+
         this.controlsLayer.innerHTML = '';
         this.stageState.selectedItem = null;
 
@@ -1510,6 +1576,11 @@ class QuoraAnnotationComponent {
       window.addEventListener('mousemove', (e) => {
         const pt = getStagePt(e);
         if (this.stageState.activeTool === 'paint') updateBrushCursor(pt);
+
+        if (this.stageState.activeTool === 'click_nodes') {
+          this.updatePenTentativePreview(pt);
+          return;
+        }
 
         if (!isDrawing) return;
 
@@ -1892,8 +1963,35 @@ class QuoraAnnotationComponent {
 
       splineEl.style.filter = 'drop-shadow(0 0 6px #00f2fe)';
 
-      const updateCurveGeometry = () => {
-        curveRecord.beziers = this.verticesToBeziers(vertices);
+      // LOCALIZED NODE UPDATE: Only the segments connected to the modified node are recalculated
+      const updateCurveGeometry = (modifiedNodeIndex = null) => {
+        if (modifiedNodeIndex !== null && curveRecord.beziers && curveRecord.beziers.length > 0) {
+          // Localized update for the modified node: adjust its control points without wiggling distant nodes
+          const i = modifiedNodeIndex;
+          const v = vertices[i];
+
+          if (i < vertices.length - 1) {
+            const vNext = vertices[i + 1];
+            const segIdx = i;
+            if (curveRecord.beziers[segIdx]) {
+              curveRecord.beziers[segIdx][0] = [v.point[0], v.point[1]];
+              const dist = Math.hypot(vNext.point[0] - v.point[0], vNext.point[1] - v.point[1]);
+              const cp1 = [v.point[0] + (vNext.point[0] - v.point[0]) * 0.33, v.point[1] + (vNext.point[1] - v.point[1]) * 0.33];
+              curveRecord.beziers[segIdx][1] = cp1;
+            }
+          }
+          if (i > 0) {
+            const vPrev = vertices[i - 1];
+            const segIdx = i - 1;
+            if (curveRecord.beziers[segIdx]) {
+              curveRecord.beziers[segIdx][3] = [v.point[0], v.point[1]];
+              const cp2 = [v.point[0] - (v.point[0] - vPrev.point[0]) * 0.33, v.point[1] - (v.point[1] - vPrev.point[1]) * 0.33];
+              curveRecord.beziers[segIdx][2] = cp2;
+            }
+          }
+        } else {
+          curveRecord.beziers = this.verticesToBeziers(vertices);
+        }
 
         let d = 'M ' + curveRecord.beziers[0][0].join(' ');
         for (let i = 0; i < curveRecord.beziers.length; i++) {
@@ -1933,13 +2031,12 @@ class QuoraAnnotationComponent {
         if (this._devDeckDialog) this.updateDevDeckUI();
       };
 
-      // Render Knots directly on curve
+      // Render Nodes directly on curve
       vertices.forEach((v, idx) => {
         const isTip = (idx === 0 && curveRecord.hasArrow);
         const isTail = (idx === vertices.length - 1);
-        const isIntermediate = !isTip && !isTail;
 
-        const knotCircle = makeElement('svg:circle', {
+        const nodeCircle = makeElement('svg:circle', {
           cx: v.point[0],
           cy: v.point[1],
           r: isTip ? '7' : (isTail ? '6.5' : '5'),
@@ -1954,7 +2051,7 @@ class QuoraAnnotationComponent {
         });
 
         // Mouse Wheel Real-Time Parameter Tuning
-        knotCircle.addEventListener('wheel', (e) => {
+        nodeCircle.addEventListener('wheel', (e) => {
           e.preventDefault();
           e.stopPropagation();
           this._activeKnotIdx = idx;
@@ -1962,15 +2059,15 @@ class QuoraAnnotationComponent {
           const delta = e.deltaY > 0 ? -1 : 1;
           if (e.shiftKey) {
             v.tangentAngleOffset = (v.tangentAngleOffset || 0) + delta * 0.087;
-            this.showKnotToast(`Tangent: ${Math.round(v.tangentAngleOffset * (180 / Math.PI))}°`);
+            this.showKnotToast(`Node ${idx + 1} Tangent: ${Math.round(v.tangentAngleOffset * (180 / Math.PI))}°`);
           } else if (e.altKey || e.ctrlKey) {
             v.balance = Math.max(0.1, Math.min(1.9, (v.balance || 1) + delta * 0.08));
-            this.showKnotToast(`Balance: ${v.balance.toFixed(2)}`);
+            this.showKnotToast(`Node ${idx + 1} Balance: ${v.balance.toFixed(2)}`);
           } else {
             v.curvature = Math.max(0.2, Math.min(3.0, (v.curvature || 1) + delta * 0.1));
-            this.showKnotToast(`Curvature: ${v.curvature.toFixed(2)}`);
+            this.showKnotToast(`Node ${idx + 1} Curvature: ${v.curvature.toFixed(2)}`);
           }
-          updateCurveGeometry();
+          updateCurveGeometry(idx);
         }, { passive: false });
 
         // State backup for Escape cancellation
@@ -1980,7 +2077,7 @@ class QuoraAnnotationComponent {
         let originalCurvature = v.curvature;
         let originalBalance = v.balance;
 
-        knotCircle.addEventListener('mousedown', (e) => {
+        nodeCircle.addEventListener('mousedown', (e) => {
           if (e.button === 2) return;
           e.stopPropagation();
           this._activeKnotIdx = idx;
@@ -1991,7 +2088,6 @@ class QuoraAnnotationComponent {
           originalCurvature = v.curvature;
           originalBalance = v.balance;
 
-          // If "Free Knot on Drag" is checked, release constraints while moving
           if (this.stageState.freePointOnDrag) {
             v.tangentAngleOffset = 0;
             v.curvature = 1.0;
@@ -2005,9 +2101,9 @@ class QuoraAnnotationComponent {
               v.tangentAngleOffset = originalTangentOffset;
               v.curvature = originalCurvature;
               v.balance = originalBalance;
-              knotCircle.setAttribute('cx', v.point[0]);
-              knotCircle.setAttribute('cy', v.point[1]);
-              updateCurveGeometry();
+              nodeCircle.setAttribute('cx', v.point[0]);
+              nodeCircle.setAttribute('cy', v.point[1]);
+              updateCurveGeometry(idx);
               window.removeEventListener('keydown', onEsc);
             }
           };
@@ -2019,16 +2115,16 @@ class QuoraAnnotationComponent {
           const pt = getStagePt(e);
           v.point[0] = pt[0];
           v.point[1] = pt[1];
-          knotCircle.setAttribute('cx', pt[0]);
-          knotCircle.setAttribute('cy', pt[1]);
-          updateCurveGeometry();
+          nodeCircle.setAttribute('cx', pt[0]);
+          nodeCircle.setAttribute('cy', pt[1]);
+          updateCurveGeometry(idx);
         };
 
         const onUp = () => { dragging = false; };
         window.addEventListener('mousemove', onDrag);
         window.addEventListener('mouseup', onUp);
 
-        this.controlsLayer.appendChild(knotCircle);
+        this.controlsLayer.appendChild(nodeCircle);
       });
     }
   createSpeechCallout(targetX, targetY) {
@@ -2304,20 +2400,62 @@ class QuoraAnnotationComponent {
       const existing = document.getElementById('quora-annotation-standalone-mount');
       if (existing) existing.remove();
 
+      const leftSafe = (typeof SidePanel !== 'undefined' && SidePanel.getInstances()?.left?.isOpen)
+        ? (SidePanel.getInstances().left.width || 300)
+        : 0;
+
       const host = document.createElement('div');
       host.id = 'quora-annotation-standalone-mount';
-      host.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 100000; background: #0b0f19; overflow: hidden; display: flex; flex-direction: column;';
+      host.style.cssText = [
+        'position: fixed;',
+        'top: 0;',
+        `left: ${leftSafe}px;`,
+        `width: calc(100vw - ${leftSafe}px);`,
+        'height: 100vh;',
+        'z-index: 200000;',
+        'background: #0b0f19;',
+        'overflow: hidden;',
+        'display: flex;',
+        'flex-direction: column;',
+        'transition: left 0.25s cubic-bezier(0.16, 1, 0.3, 1), width 0.25s cubic-bezier(0.16, 1, 0.3, 1);'
+      ].join('\n');
       document.body.appendChild(host);
 
       const closeBtn = document.createElement('button');
-      closeBtn.textContent = '✕ Close Studio';
+      closeBtn.textContent = '✕ Return to Living Dossier';
       closeBtn.className = 'dr-nav-btn';
-      closeBtn.style.cssText = 'position: fixed; top: 10px; right: 16px; z-index: 2147483647; background: #1e293b; color: #f8fafc; border: 1.5px solid #00f2fe; padding: 5px 12px; font-family: monospace; font-size: 11px; font-weight: bold; border-radius: 6px; cursor: pointer;';
+      closeBtn.style.cssText = [
+        'position: fixed;',
+        'top: 10px;',
+        'right: 16px;',
+        'z-index: 2147483647;',
+        'background: #1e293b;',
+        'color: #f8fafc;',
+        'border: 1.5px solid #00f2fe;',
+        'padding: 6px 14px;',
+        'font-family: monospace;',
+        'font-size: 11px;',
+        'font-weight: bold;',
+        'border-radius: 6px;',
+        'cursor: pointer;',
+        'box-shadow: 0 4px 14px rgba(0,0,0,0.6);'
+      ].join('\n');
+
       closeBtn.onclick = () => {
+        if (host._safeAreaListener) {
+          window.removeEventListener('layout-safe-area-change', host._safeAreaListener);
+        }
         host.remove();
         closeBtn.remove();
       };
       document.body.appendChild(closeBtn);
+
+      host._safeAreaListener = (e) => {
+        const l = e.detail?.left || 0;
+        host.style.left = `${l}px`;
+        host.style.width = `calc(100vw - ${l}px)`;
+      };
+      window.addEventListener('layout-safe-area-change', host._safeAreaListener);
 
       QuoraAnnotationComponent.render(host);
 
@@ -2335,7 +2473,6 @@ class QuoraAnnotationComponent {
         }, 50);
       }
     }
-
   _promptInlineTailText(curveRecord, tailPt, justifySide) {
       const existing = document.getElementById('qa-inline-tail-editor');
       if (existing) existing.remove();
@@ -4161,16 +4298,32 @@ class QuoraAnnotationComponent {
     }
 
   setupKeyInMatrixHud() {
-      const existing = document.getElementById('qa-keyin-matrix-hud');
-      if (existing) existing.remove();
+      let hud = document.getElementById('qa-keyin-matrix-hud');
 
+      // Restore position from persistent localStorage if present
       if (!this._hudPos) {
-        this._hudPos = { left: 24, top: 80 };
+        try {
+          const saved = JSON.parse(localStorage.getItem('quoratoys_hud_pos') || 'null');
+          this._hudPos = saved || { left: 24, top: 80 };
+        } catch (e) {
+          this._hudPos = { left: 24, top: 80 };
+        }
       }
+
+      // Clamp coordinates so it never spawns completely off-screen
+      this._hudPos.left = Math.max(8, Math.min(window.innerWidth - 250, this._hudPos.left));
+      this._hudPos.top = Math.max(8, Math.min(window.innerHeight - 80, this._hudPos.top));
+
+      if (hud) {
+        hud.style.left = `${this._hudPos.left}px`;
+        hud.style.top = `${this._hudPos.top}px`;
+        hud.style.display = 'flex';
+        return;
+      }
+
       this._hudCollapsed = false;
 
-      // Mounted to document.body with fixed positioning so it can float anywhere on screen without clipping!
-      const hud = makeElement('div', {
+      hud = makeElement('div', {
         id: 'qa-keyin-matrix-hud',
         style: {
           position: 'fixed',
@@ -4229,7 +4382,7 @@ class QuoraAnnotationComponent {
           makeElement('button', {
             className: 'dr-nav-btn',
             style: { padding: '1px 5px', fontSize: '10px', color: '#ff7b72', lineHeight: '1' },
-            title: 'Close HUD',
+            title: 'Close HUD (re-open with "⌨️ HUD" in toolbar)',
             onclick: (e) => {
               e.stopPropagation();
               hud.style.display = 'none';
@@ -4264,6 +4417,9 @@ class QuoraAnnotationComponent {
         hud.style.left = `${newLeft}px`;
         hud.style.top = `${newTop}px`;
         this._hudPos = { left: newLeft, top: newTop };
+        try {
+          localStorage.setItem('quoratoys_hud_pos', JSON.stringify(this._hudPos));
+        } catch (err) {}
       });
 
       window.addEventListener('mouseup', () => {
@@ -4279,13 +4435,13 @@ class QuoraAnnotationComponent {
 
       const commands = [
         { key: 'Space', label: 'Draw ↔ Tweak Mode', action: 'toggle_tool' },
-        { key: 'Tab', label: 'Next Knot on Curve', action: 'next_knot' },
+        { key: 'Tab', label: 'Next Node on Curve', action: 'next_knot' },
         { key: 'C', label: 'Toggle Cusp (45°)', action: 'toggle_cusp' },
         { key: 'B', label: 'Cycle Balance (0.5/1.5)', action: 'cycle_balance' },
         { key: '+ / -', label: 'Tune Curvature (C)', action: 'tune_curvature' },
         { key: '[ / ]', label: 'Step Tangent Angle', action: 'tune_tangent' },
         { key: 'S', label: 'Straighten (Direct Line)', action: 'straighten' },
-        { key: 'R', label: 'Reset Knot Constraints', action: 'reset_knot' },
+        { key: 'R', label: 'Reset Node Constraints', action: 'reset_knot' },
         { key: 'W', label: 'Wipe Curve Constraints', action: 'wipe_curve' },
         { key: 'Del', label: 'Delete Selected Curve', action: 'delete_curve' }
       ];
@@ -4449,6 +4605,71 @@ class QuoraAnnotationComponent {
           }
           break;
         }
+      }
+    }
+
+  openSpotDiffWorkflow() {
+      // Launches Spot-the-Difference in-process workflow that deposits difference lenses directly into this Studio
+      const overlayHost = document.createElement('div');
+      overlayHost.id = 'qa-diff-workflow-modal';
+
+      const leftSafe = (typeof SidePanel !== 'undefined' && SidePanel.getInstances()?.left?.isOpen)
+        ? (SidePanel.getInstances().left.width || 300)
+        : 0;
+
+      overlayHost.style.cssText = [
+        'position: fixed;',
+        'top: 0;',
+        `left: ${leftSafe}px;`,
+        `width: calc(100vw - ${leftSafe}px);`,
+        'height: 100vh;',
+        'z-index: 200000;',
+        'background: rgba(11, 15, 25, 0.98);',
+        'overflow: hidden;',
+        'display: flex;',
+        'flex-direction: column;',
+        'box-shadow: 0 0 35px rgba(0,0,0,0.8);',
+        'backdrop-filter: blur(12px);',
+        'transition: left 0.25s ease, width 0.25s ease;'
+      ].join('\n');
+      document.body.appendChild(overlayHost);
+
+      const closeBtn = document.createElement('button');
+      closeBtn.textContent = '✕ Return to Studio';
+      closeBtn.className = 'dr-nav-btn';
+      closeBtn.style.cssText = [
+        'position: fixed;',
+        'top: 12px;',
+        'right: 18px;',
+        'z-index: 2147483647;',
+        'background: #1e293b;',
+        'color: #f8fafc;',
+        'border: 1.5px solid #00e676;',
+        'padding: 6px 14px;',
+        'font-family: monospace;',
+        'font-size: 11px;',
+        'font-weight: bold;',
+        'border-radius: 6px;',
+        'cursor: pointer;',
+        'box-shadow: 0 4px 14px rgba(0,0,0,0.6);'
+      ].join('\n');
+
+      closeBtn.onclick = () => {
+        overlayHost.remove();
+        closeBtn.remove();
+      };
+      document.body.appendChild(closeBtn);
+
+      const app = new QuoraToys();
+      app.run({ container: overlayHost });
+
+      // When the user has marked differences or wants to complete the comparison,
+      // they click "🎨 Studio" inside the overlay, which calls sendToGraphicStudio()
+      // and seamlessly delivers the dataset directly back to this active Studio instance!
+      if (this.stageState.baseImage) {
+        setTimeout(() => {
+          app.loadImageFromUrl(this.stageState.baseImage.src, 'Studio Active Image');
+        }, 80);
       }
     }
 }

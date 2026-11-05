@@ -1,0 +1,126 @@
+================================================================
+🕵️ QUORATOYS GIT ARCHAEOLOGY & CONTENT RECOVERY REPORT
+Generated: 2026-11-05T04:51:17.681Z • Host: darwin (mac-mini-rob.local)
+================================================================
+
+--- [1] LOCAL GIT STATUS ---
+M css/basicsWithDialogBox.css
+ M js/QuoraAnnotationComponent.js
+ M js/QuoraStudioComponent.js
+ M js/QuoraToys.js
+ M js/QuoraToysApp.js
+ M js/QuoraToysContent.js
+
+--- [2] GIT STASH LIST ---
+No stashes found.
+
+--- [3] RECENT COMMITS ---
+cb74979 [Restored] Clean 9:20 PM checkpoint 5ae95d7 before sync overwrite
+7031c46 [Auto-Snapshot before Fleet Pull] 11/3/2026, 9:39:39 PM
+996e9b2 [Fleet Sync] 11/3/2026, 9:36:07 PM
+0f39b06 [QuoraToys] Checkpoint 11/3/2026, 9:35:46 PM
+8c98463 [Fleet Sync] 11/3/2026, 9:35:39 PM
+4c52ebc [Fleet 1-Tap Sync] 11/3/2026, 9:35:38 PM
+a2d94ad [Fleet Sync] 11/3/2026, 9:35:07 PM
+fc5681d [Fleet 1-Tap Sync] 11/3/2026, 9:35:07 PM
+7118a80 [Fleet 1-Tap Sync] 11/3/2026, 9:34:52 PM
+5ae95d7 [QuoraToys] Checkpoint 11/3/2026, 9:20:28 PM
+f953c2d [Auto-Snapshot before Fleet Pull] 11/3/2026, 5:52:09 AM
+df898cd [Auto-Snapshot before Fleet Pull] 11/2/2026, 11:51:21 PM
+772ecef [Fleet Sync] 11/2/2026, 11:41:55 PM
+b0b292e [Fleet 1-Tap Sync] 11/2/2026, 11:41:54 PM
+916832e [QuoraToys] Checkpoint 11/2/2026, 9:15:50 PM
+c0eb773 [Cross-Wire Sync] 11/1/2026, 11:23:44 PM
+face2f0 [QuoraToys] Checkpoint 11/1/2026, 11:23:23 PM
+5861502 [Fleet Sync] 11/1/2026, 11:23:02 PM
+0d1b5ba [QuoraToys] Checkpoint 11/1/2026, 11:22:34 PM
+0e6ed01 [Fleet Sync] 10/31/2026, 11:54:04 PM
+
+--- [4] GIT REFLOG (RECOVERY TRAIL) ---
+cb74979 HEAD@{0}: commit: [Restored] Clean 9:20 PM checkpoint 5ae95d7 before sync overwrite
+7031c46 HEAD@{1}: commit: [Auto-Snapshot before Fleet Pull] 11/3/2026, 9:39:39 PM
+996e9b2 HEAD@{2}: commit: [Fleet Sync] 11/3/2026, 9:36:07 PM
+0f39b06 HEAD@{3}: commit: [QuoraToys] Checkpoint 11/3/2026, 9:35:46 PM
+8c98463 HEAD@{4}: commit: [Fleet Sync] 11/3/2026, 9:35:39 PM
+4c52ebc HEAD@{5}: commit: [Fleet 1-Tap Sync] 11/3/2026, 9:35:38 PM
+a2d94ad HEAD@{6}: commit: [Fleet Sync] 11/3/2026, 9:35:07 PM
+fc5681d HEAD@{7}: commit: [Fleet 1-Tap Sync] 11/3/2026, 9:35:07 PM
+7118a80 HEAD@{8}: commit: [Fleet 1-Tap Sync] 11/3/2026, 9:34:52 PM
+5ae95d7 HEAD@{9}: commit: [QuoraToys] Checkpoint 11/3/2026, 9:20:28 PM
+f953c2d HEAD@{10}: commit: [Auto-Snapshot before Fleet Pull] 11/3/2026, 5:52:09 AM
+df898cd HEAD@{11}: commit: [Auto-Snapshot before Fleet Pull] 11/2/2026, 11:51:21 PM
+772ecef HEAD@{12}: commit: [Fleet Sync] 11/2/2026, 11:41:55 PM
+b0b292e HEAD@{13}: commit: [Fleet 1-Tap Sync] 11/2/2026, 11:41:54 PM
+916832e HEAD@{14}: commit: [QuoraToys] Checkpoint 11/2/2026, 9:15:50 PM
+c0eb773 HEAD@{15}: commit: [Cross-Wire Sync] 11/1/2026, 11:23:44 PM
+face2f0 HEAD@{16}: commit: [QuoraToys] Checkpoint 11/1/2026, 11:23:23 PM
+5861502 HEAD@{17}: commit: [Fleet Sync] 11/1/2026, 11:23:02 PM
+0d1b5ba HEAD@{18}: commit: [QuoraToys] Checkpoint 11/1/2026, 11:22:34 PM
+0e6ed01 HEAD@{19}: commit: [Fleet Sync] 10/31/2026, 11:54:04 PM
+175fbad HEAD@{20}: commit: [Fleet 1-Tap Sync] 10/31/2026, 11:54:03 PM
+d4cf72b HEAD@{21}: commit: [Fleet Sync] 10/31/2026, 11:33:23 PM
+40acb01 HEAD@{22}: commit: [Fleet 1-Tap Sync] 10/31/2026, 11:33:23 PM
+b7e885c HEAD@{23}: commit: [Auto-Snapshot before Fleet Pull] 10/31/2026, 11:32:21 PM
+c27d019 HEAD@{24}: commit: [Mac Auto-Checkpoint] 10/31/2026, 10:53:40 PM
+
+--- [5] COMMITS TOUCHING CHAPTER CONTENT ---
+commit cb7497916facd0e0fd3f6d5d785a6c488f27f0f6
+Author: Rob Brown <rjbrown@gmail.com>
+Date:   Wed Nov 4 16:25:33 2026 -0800
+
+    [Restored] Clean 9:20 PM checkpoint 5ae95d7 before sync overwrite
+
+ js/QuoraToysContent.js | 209 +------------------------------------------------
+ 1 file changed, 1 insertion(+), 208 deletions(-)
+
+commit 4c52ebc87877ff62a8b225b657a610a77308a3e9
+Author: Rob Brown <rjbrown@gmail.com>
+Date:   Tue Nov 3 21:35:38 2026 -0800
+
+    [Fleet 1-Tap Sync] 11/3/2026, 9:35:38 PM
+
+ js/QuoraToysContent.js | 209 ++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 208 insertions(+), 1 deletion(-)
+
+commit b0b292e01bff6d2de135f642d64c71a48e8b6cca
+Author: Rob Brown <rjbrown@gmail.com>
+Date:   Mon Nov 2 23:41:55 2026 -0800
+
+    [Fleet 1-Tap Sync] 11/2/2026, 11:41:54 PM
+
+ documentation.html     | 149 +++++++++++++++++++++++++
+ js/QuoraToysApp.js     |   4 +-
+ js/QuoraToysContent.js | 293 ++++++++++---------------------------------------
+ 3 files changed, 209 insertions(+), 237 deletions(-)
+
+commit 0d1b5ba1f10411b3e3ef3ccb20627a2d914a55de
+Author: Rob Brown <rjbrown@gmail.com>
+Date:   Sun Nov 1 23:22:34 2026 -0800
+
+    [QuoraToys] Checkpoint 11/1/2026, 11:22:34 PM
+
+ js/QuoraToysApp.js     | 391 +++++++++++++++++++++++++++++++------------------
+ js/QuoraToysContent.js | 178 +++++++++++++++++-----
+ 2 files changed, 389 insertions(+), 180 deletions(-)
+
+commit 6870b418ea9089b1d21a0e37e923ac8a1d325625
+Author: Rob Brown <rjbrown@gmail.com>
+Date:   Sat Oct 31 19:13:40 2026 -0700
+
+    [QuoraToys] Checkpoint 10/31/2026, 7:13:40 PM
+
+ js/QuoraToysApp.js     | 203 +++++++++++++++++++++++++++++++++++++++++++++++++
+ js/QuoraToysContent.js | 186 ++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 389 insertions(+)
+
+Found 5 historical revision(s) of js/QuoraToysContent.js in Git.
+  ✓ Extracted revision [cb74979] (5521 bytes) -> recovered_content/QuoraToysContent_cb74979.js
+  ✓ Extracted revision [4c52ebc] (12726 bytes) -> recovered_content/QuoraToysContent_4c52ebc.js
+  ✓ Extracted revision [b0b292e] (5521 bytes) -> recovered_content/QuoraToysContent_b0b292e.js
+  ✓ Extracted revision [0d1b5ba] (14577 bytes) -> recovered_content/QuoraToysContent_0d1b5ba.js
+  ✓ Extracted revision [6870b41] (7220 bytes) -> recovered_content/QuoraToysContent_6870b41.js
+
+================================================================
+🌐 CROSS-MACHINE PROBE TO LINUX LAPTOP (10.0.0.245:8080)
+================================================================
+✓ Reached Linux node! Found QuoraToysContent.js (5521 bytes). Saved to recovered_content/QuoraToysContent_from_Linux_10.0.0.245.js

@@ -55,6 +55,7 @@ class QuoraToysApp {
       globalThis._quoraToysAppInstance = this;
       return this;
     }
+
   _buildSidePanel(pages) {
       if (!this.sidePanel) return;
 
@@ -82,10 +83,13 @@ class QuoraToysApp {
       toolsBox.innerHTML = `
         <span style="font-family: monospace; font-size: 10.5px; font-weight: 800; color: #00f2fe; text-transform: uppercase;">Direct Launchers</span>
         <button class="dr-nav-btn primary" style="justify-content: center; font-size: 11.5px; padding: 8px; font-weight: 800; background: linear-gradient(135deg, #0284c7 0%, #00f2fe 100%); color: #070a13;" onclick="_quoraToysAppInstance.selectChapter('annotation')">
-          ✏️ Open Annotation Studio
+          ✏️ Annotation Studio (Draw &amp; Arrows)
         </button>
         <button class="dr-nav-btn" style="justify-content: center; font-size: 11px; padding: 6px; color: #00e676; border-color: rgba(0, 230, 118, 0.4);" onclick="_quoraToysAppInstance.selectChapter('studio')">
           🧩 Spot-The-Difference Studio
+        </button>
+        <button class="dr-nav-btn" style="justify-content: center; font-size: 10.5px; padding: 5px; color: #cbd5e1; border-color: #334155;" onclick="QuoraAnnotationComponent.launchStandalone()">
+          🚀 Launch Fullscreen Studio
         </button>
       `;
       container.appendChild(toolsBox);

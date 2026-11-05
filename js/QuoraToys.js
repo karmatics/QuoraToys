@@ -85,17 +85,17 @@ class QuoraToys {
       dropzone.className = 'fdr-dropzone';
       dropzone.innerHTML = `
         <div class="fdr-dropzone-icon">🎨</div>
-        <div class="fdr-dropzone-title">Universal Graphic Studio & Spot-the-Difference Comparator</div>
+        <div class="fdr-dropzone-title">Universal Graphic Studio &amp; Spot-the-Difference Comparator</div>
         <div class="fdr-dropzone-subtitle">
           Drop any image, paste with <b>Ctrl+V</b>, or choose an option below.<br>
           Draw smooth Bézier curves, arrows, and blockout masks, or compare puzzle images.
         </div>
         <div class="fdr-dropzone-actions">
-          <button class="fdr-btn fdr-btn-accent" id="fdr-launch-annotation-direct-btn" style="background:#0284c7; border-color:#00f2fe; color:#fff; font-weight:800;">
+          <button class="fdr-btn fdr-btn-accent" id="fdr-launch-annotation-direct-btn" style="background:#0284c7; border-color:#00f2fe; color:#fff; font-weight:800; padding: 8px 16px;">
             ✏️ Launch Annotation Studio (Draw &amp; Arrows)
           </button>
-          <button class="fdr-btn fdr-btn-primary" id="fdr-choose-file-btn">📁 Choose Image File</button>
-          <button class="fdr-btn" id="fdr-sample-puzzle-btn">🧩 Load Sample Puzzle</button>
+          <button class="fdr-btn fdr-btn-primary" id="fdr-choose-file-btn" style="padding: 8px 14px;">📁 Choose Image File</button>
+          <button class="fdr-btn" id="fdr-sample-puzzle-btn" style="padding: 8px 14px;">🧩 Load Sample Puzzle</button>
         </div>
       `;
 
@@ -106,7 +106,7 @@ class QuoraToys {
           <span>💡 Two Powerful Tools in One Suite:</span>
         </div>
         <div class="fdr-docs-why">
-          • <b>1. Universal Annotation Studio:</b> Annotate any picture in 5 seconds flat with mathematically smoothed Bézier splines, auto arrowheads, speech balloons, and hard/soft blockout paint for Gemini AI.<br>
+          • <b>1. Universal Annotation Studio:</b> Annotate any picture in seconds with mathematically smoothed Bézier splines, auto arrowheads, speech balloons, and hard/soft blockout paint for Gemini AI.<br>
           • <b>2. Spot-the-Difference Comparator:</b> Superimpose puzzle halves with sub-pixel alignment using 50% Alpha, Optical Flashing, or Scrolling Zebra Stripes.
         </div>
       `;
@@ -118,7 +118,9 @@ class QuoraToys {
 
       dropzone.addEventListener('click', (e) => {
         if (e.target.closest('#fdr-launch-annotation-direct-btn')) {
-          if (globalThis._quoraToysAppInstance) {
+          if (typeof QuoraAnnotationComponent !== 'undefined' && QuoraAnnotationComponent.launchStandalone) {
+            QuoraAnnotationComponent.launchStandalone(this.sourceImage);
+          } else if (globalThis._quoraToysAppInstance) {
             globalThis._quoraToysAppInstance.selectChapter('annotation');
           }
           return;
