@@ -14,1743 +14,1157 @@ class QuoraAnnotationComponent {
     }
   }
 
-  constructor() {
-      this.stageState = {
-        baseImage: null,
-        cropRect: null,
-        baseOrigin: { x: 0, y: 0 },
-        diffCallouts: [],
-        lensAlignment: 'perpendicular',
-        annotations: [],       // All curves, arrows, and blockouts
-        placedImages: [],      // Multiple draggable/resizable image plates
-        activeImage: null,
-        // Cursor-centered viewport camera state
-        panX: 0,
-        panY: 0,
-        zoom: 1.0,
-        minZoom: 0.15,
-        maxZoom: 6.0,
-        manualSizing: false,
-        canvasWidth: 800,
-        canvasHeight: 500,
-        padding: 35,
-        canvasBgMode: 'matte',
-        canvasBgColor: '#090d16',
-        activeTool: 'curve',
-        hasArrow: true,
-        curveStrokeWidth: 3.2,
-        currentColor: '#00e676',
-        hasBorder: true,
-        fontFamily: "'Architects Daughter', cursive, sans-serif",
-        fontSize: 22,
-        recentFonts: [
-          "'Architects Daughter', cursive, sans-serif",
-          "monospace",
-          "'Plus Jakarta Sans', system-ui, sans-serif"
-        ],
-        brushMode: 'freehand',
-        brushColor: '#000000',
-        brushSize: 32,
-        brushSoftness: 0,
-        tetherActive: true,
-        tetherLength: 32,
-        eraseRadius: 24,
-        selectedItem: null,
-        freePointOnDrag: true, // Frees knot constraints when moving; Esc restores
-        cropMarquee: null
-      };
+  static launchStandalone(initialImage = null) {
+    const existing = document.getElementById('quora-annotation-standalone-mount');
+    if (existing) existing.remove();
 
-      this.cropCanvas = null;
-      this.baseCropCanvas = null;
-      this._loadedFonts = new Set();
-      this._devDeckDialog = null;
-      this._activeKnotIdx = 0;
+    const leftSafe = (typeof SidePanel !== 'undefined' && SidePanel.getInstances()?.left?.isOpen)
+      ? (SidePanel.getInstances().left.width || 300)
+      : 0;
+
+    const host = document.createElement('div');
+    host.id = 'quora-annotation-standalone-mount';
+    host.style.cssText = [
+      'position: fixed;', 'top: 0;', `left: ${leftSafe}px;`,
+      `width: calc(100vw - ${leftSafe}px);`, 'height: 100vh;', 'z-index: 200000;',
+      'background: #0b0f19;', 'overflow: hidden;', 'display: flex;', 'flex-direction: column;',
+      'transition: left 0.25s cubic-bezier(0.16, 1, 0.3, 1), width 0.25s cubic-bezier(0.16, 1, 0.3, 1);'
+    ].join('\n');
+    document.body.appendChild(host);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '✕ Return to Living Dossier';
+    closeBtn.className = 'dr-nav-btn';
+    closeBtn.style.cssText = [
+      'position: fixed;', 'top: 10px;', 'right: 16px;', 'z-index: 2147483647;',
+      'background: #1e293b;', 'color: #f8fafc;', 'border: 1.5px solid #00f2fe;',
+      'padding: 6px 14px;', 'font-family: monospace;', 'font-size: 11px;',
+      'font-weight: bold;', 'border-radius: 6px;', 'cursor: pointer;',
+      'box-shadow: 0 4px 14px rgba(0,0,0,0.6);'
+    ].join('\n');
+
+    closeBtn.onclick = () => {
+      if (host._safeAreaListener) {
+        window.removeEventListener('layout-safe-area-change', host._safeAreaListener);
+      }
+      host.remove();
+      closeBtn.remove();
+    };
+    document.body.appendChild(closeBtn);
+
+    host._safeAreaListener = (e) => {
+      const l = e.detail?.left || 0;
+      host.style.left = `${l}px`;
+      host.style.width = `calc(100vw - ${l}px)`;
+    };
+    window.addEventListener('layout-safe-area-change', host._safeAreaListener);
+
+    QuoraAnnotationComponent.render(host);
+
+    if (initialImage && QuoraAnnotationComponent.activeInstance) {
+      setTimeout(() => {
+        const inst = QuoraAnnotationComponent.activeInstance;
+        inst.addNewImagePlate(initialImage, 50, 50);
+      }, 50);
     }
+  }
+
+  constructor() {
+    this.stageState = {
+      baseImage: null,
+      cropRect: null,
+      baseOrigin: { x: 0, y: 0 },
+      diffCallouts: [],
+      annotations: [],
+      placedImages: [],
+      activeImage: null,
+      panX: 0,
+      panY: 0,
+      zoom: 1.0,
+      minZoom: 0.15,
+      maxZoom: 6.0,
+      manualSizing: false,
+      canvasWidth: Math.max(1100, window.innerWidth - 380),
+      canvasHeight: Math.max(640, window.innerHeight - 180),
+      padding: 45,
+      canvasBgMode: 'matte',
+      canvasBgColor: '#090d16',
+      activeTool: 'curve',
+      hasArrow: true,
+      curveStrokeWidth: 3.2,
+      currentColor: '#00e676',
+      hasBorder: true,
+      fontFamily: "'Architects Daughter', cursive, sans-serif",
+      fontSize: 22,
+      brushMode: 'freehand',
+      brushColor: '#000000',
+      brushSize: 32,
+      brushSoftness: 0,
+      tetherActive: true,
+      tetherLength: 32,
+      eraseRadius: 26,
+      selectedItem: null,
+      dragLockMode: 'single'
+    };
+
+    this._activeKnotIdx = 0;
+    this._clutchActive = false;
+    this._handRestActive = false;
+    this._metaHelpActive = false;
+    this._hoveredCurve = null;
+    this._isDrawingActive = false;
+    this._penNodes = null;
+    this._loadedFonts = new Set();
+  }
 
   build(container) {
-      this.ensureFontLoaded(this.stageState.fontFamily);
+    this.ensureFontLoaded(this.stageState.fontFamily);
 
-      const wrap = makeElement('div', {
-        style: {
-          background: '#070a13',
-          border: '1.5px solid #21262d',
-          borderRadius: '12px',
-          overflow: 'hidden',
-          boxShadow: '0 16px 40px rgba(0,0,0,0.65)',
-          display: 'flex',
-          flexDirection: 'column',
-          fontFamily: 'monospace'
-        }
-      });
-
-      const localFileInput = makeElement('input', {
-        type: 'file',
-        accept: 'image/*',
-        style: { display: 'none' },
-        onchange: (e) => {
-          if (e.target.files && e.target.files[0]) {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-              const img = new Image();
-              img.onload = () => {
-                this.stageState.baseImage = img;
-                this.stageState.cropRect = { x: 0, y: 0, width: img.naturalWidth, height: img.naturalHeight };
-                this.stageState.baseOrigin = { x: 0, y: 0 };
-                this.cropCanvas = null;
-                this.baseCropCanvas = null;
-                this.stageState.diffCallouts = [];
-                this.stageState.manualSizing = false;
-                this.renderStage();
-              };
-              img.src = ev.target.result;
-            };
-            reader.readAsDataURL(e.target.files[0]);
-          }
-        }
-      });
-      wrap.appendChild(localFileInput);
-
-      // 1. Studio Header Toolbar
-      const header = makeElement('div', {
-        style: {
-          padding: '10px 16px',
-          background: 'rgba(15, 23, 42, 0.95)',
-          borderBottom: '1px solid #21262d',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '8px'
-        }
-      }, [
-        makeElement('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, [
-          makeElement('span', { style: { fontSize: '16px' } }, '🎨'),
-          makeElement('strong', { style: { fontSize: '13px', color: '#00f2fe' } }, 'Universal Graphic Studio & Solvers'),
-          makeElement('span', { id: 'qa-status-pill', style: { fontSize: '10px', background: 'rgba(0, 242, 254, 0.15)', color: '#00f2fe', padding: '2px 8px', borderRadius: '12px', fontWeight: 'bold' } }, 'Ready')
-        ]),
-        makeElement('div', { style: { display: 'flex', gap: '6px' } }, [
-          makeElement('button', {
-            className: 'dr-nav-btn primary',
-            style: { padding: '4px 10px', fontSize: '11px', background: '#0284c7', borderColor: '#38bdf8' },
-            title: 'Launch Spot-the-Difference Comparator workflow to insert twin difference lenses',
-            onclick: () => this.openSpotDiffWorkflow()
-          }, '🧩 Spot Difference'),
-          makeElement('button', {
-            className: 'dr-nav-btn',
-            style: { padding: '4px 9px', fontSize: '11px', color: '#00f2fe', borderColor: '#00f2fe66' },
-            title: 'Open any image from your computer to start annotating immediately',
-            onclick: () => localFileInput.click()
-          }, '📁 Open Image'),
-          makeElement('button', {
-            className: 'dr-nav-btn',
-            style: { padding: '4px 9px', fontSize: '11px', color: '#38bdf8', borderColor: '#38bdf866' },
-            onclick: () => this.captureScreen()
-          }, '📸 Screenshot'),
-          makeElement('button', {
-            className: 'dr-nav-btn primary',
-            style: { padding: '4px 12px', fontSize: '11px', fontWeight: 'bold', background: '#238636', borderColor: '#2ea043' },
-            title: 'Copy high-resolution PNG directly to clipboard',
-            onclick: (e) => this.copyCompositeToClipboard(e.currentTarget)
-          }, '📋 Copy Hi-Res PNG')
-        ])
-      ]);
-      wrap.appendChild(header);
-
-      // 2. Main Tool Ribbon
-      const ribbon = makeElement('div', {
-        style: {
-          padding: '8px 14px',
-          background: 'rgba(11, 17, 32, 0.98)',
-          borderBottom: '1px solid #1e293b',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          flexWrap: 'wrap',
-          fontSize: '11px',
-          color: '#cbd5e1'
-        }
-      });
-
-      this.toolBtns = {};
-      const setTool = (mode) => {
-        this.stageState.activeTool = mode;
-        this.stageState.selectedItem = null;
-        this.controlsLayer.innerHTML = '';
-        if (mode !== 'crop') this.removeCropMarquee();
-        Object.keys(this.toolBtns).forEach(k => this.toolBtns[k].classList.toggle('primary', k === mode));
-        this.svgSurface.style.cursor = (mode === 'paint') ? 'crosshair' : (mode === 'balloon' ? 'text' : (mode === 'select' ? 'default' : 'crosshair'));
-        this.brushControlsRibbon.style.display = (mode === 'paint') ? 'flex' : 'none';
-        this.curveControlsRibbon.style.display = (mode === 'curve' || mode === 'click_nodes') ? 'flex' : 'none';
-      };
-
-      this.toolBtns.curve = makeElement('button', {
-        className: 'dr-nav-btn primary',
-        style: { padding: '4px 8px', fontSize: '11px' },
-        title: 'Draw smooth cubic Bézier splines with drag-tether. Click, drag, and release!',
-        onclick: () => setTool('curve')
-      }, '🪢 Drag-Tether');
-
-      this.toolBtns.click_nodes = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '4px 8px', fontSize: '11px' },
-        title: 'Draw curve by placing discrete points: click, click, click, Enter or double-click to finish!',
-        onclick: () => setTool('click_nodes')
-      }, '📍 Click-Nodes');
-
-      this.toolBtns.balloon = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '4px 8px', fontSize: '11px' },
-        onclick: () => setTool('balloon')
-      }, '💬 Balloon');
-
-      this.toolBtns.paint = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '4px 8px', fontSize: '11px', color: '#f59e0b', borderColor: '#f59e0b66' },
-        title: 'Blockout Paintbrush: Mask unwanted areas with solid paint before pasting into Gemini',
-        onclick: () => setTool('paint')
-      }, '🖌️ Blockout Paint');
-
-      this.toolBtns.crop = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '4px 8px', fontSize: '11px' },
-        title: 'Crop the canvas / image stage to a selected rectangle',
-        onclick: () => setTool('crop')
-      }, '✂️ Crop');
-
-      this.toolBtns.select = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '4px 8px', fontSize: '11px' },
-        title: 'Select and tweak existing curves, arrows, nodes, and differences [Hotkey: Space]',
-        onclick: () => setTool('select')
-      }, '👆 Move/Tweak');
-
-      // HUD and Dev Deck Launchers
-      const hudToggleBtn = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '4px 8px', fontSize: '11px', color: '#00f2fe', borderColor: 'rgba(0, 242, 254, 0.4)' },
-        title: 'Toggle Key-In Matrix Palette',
-        onclick: () => {
-          const h = document.getElementById('qa-keyin-matrix-hud');
-          if (h) h.style.display = (h.style.display === 'none') ? 'flex' : 'none';
-          else this.setupKeyInMatrixHud();
-        }
-      }, '⌨️ HUD');
-
-      const debugDeckBtn = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '4px 9px', fontSize: '11px', color: '#c084fc', borderColor: 'rgba(192, 132, 252, 0.45)', fontWeight: 'bold' },
-        title: 'Open Curve Architecture Dev Deck [Hotkey: D]',
-        onclick: () => this.openDevDeckDialog()
-      }, '🛠️ Dev Deck');
-
-      // Zoom Controls Group
-      const zoomGroup = makeElement('div', {
-        style: { display: 'inline-flex', alignItems: 'center', gap: '3px', border: '1px solid #334155', borderRadius: '6px', padding: '1px 4px', background: '#0b1120' }
-      });
-
-      const zoomOutBtn = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '2px 6px', fontSize: '11px', border: 'none' },
-        title: 'Zoom Out (Ctrl + Scroll Down)',
-        onclick: () => {
-          this.stageState.zoom = Math.max(this.stageState.minZoom, this.stageState.zoom - 0.15);
-          this.applyViewportTransform();
-          if (this.zoomLabelBtn) this.zoomLabelBtn.textContent = `${Math.round(this.stageState.zoom * 100)}%`;
-        }
-      }, '🔍 -');
-
-      this.zoomLabelBtn = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '2px 6px', fontSize: '10.5px', border: 'none', minWidth: '44px', textAlign: 'center', color: '#00f2fe' },
-        title: 'Click to reset zoom to 100%',
-        onclick: () => {
-          this.stageState.zoom = 1.0;
-          this.stageState.panX = 0;
-          this.stageState.panY = 0;
-          this.applyViewportTransform();
-          this.zoomLabelBtn.textContent = '100%';
-        }
-      }, '100%');
-
-      const zoomInBtn = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '2px 6px', fontSize: '11px', border: 'none' },
-        title: 'Zoom In (Ctrl + Scroll Up)',
-        onclick: () => {
-          this.stageState.zoom = Math.min(this.stageState.maxZoom, this.stageState.zoom + 0.15);
-          this.applyViewportTransform();
-          if (this.zoomLabelBtn) this.zoomLabelBtn.textContent = `${Math.round(this.stageState.zoom * 100)}%`;
-        }
-      }, '🔍 +');
-
-      const fitBtn = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '2px 6px', fontSize: '10.5px', border: 'none', color: '#94a3b8' },
-        title: 'Fit Canvas to Viewport',
-        onclick: () => this.fitToViewport()
-      }, 'Fit');
-
-      zoomGroup.append(zoomOutBtn, this.zoomLabelBtn, zoomInBtn, fitBtn);
-
-      const autoBoundsBtn = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '4px 8px', fontSize: '11px' },
-        title: 'Reset canvas bounds to automatically fit scene plates and difference lenses',
-        onclick: () => {
-          this.stageState.manualSizing = false;
-          this.renderStage();
-        }
-      }, '📐 Auto Bounds');
-
-      const bgBtn = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '4px 8px', fontSize: '11px' },
-        title: 'Toggle canvas backdrop: Dark Matte (#090d16) or 100% Transparent Alpha',
-        onclick: () => {
-          this.stageState.canvasBgMode = this.stageState.canvasBgMode === 'matte' ? 'transparent' : 'matte';
-          bgBtn.textContent = `🔲 Bg: ${this.stageState.canvasBgMode.toUpperCase()}`;
-          this.renderStage();
-        }
-      }, '🔲 Bg: MATTE');
-
-      const undoBtn = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '4px 8px', fontSize: '11px', color: '#f59e0b', marginLeft: 'auto' },
-        title: 'Undo last stroke or annotation (Ctrl+Z)',
-        onclick: () => this.undoLastAnnotation()
-      }, '↺ Undo');
-
-      const clearBtn = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '4px 8px', fontSize: '11px', color: '#ff7b72' },
-        onclick: () => {
-          this.stageState.annotations.length = 0;
-          this.paintLayer.innerHTML = '';
-          this.shadowLayer.innerHTML = '';
-          this.strokeLayer.innerHTML = '';
-          this.textBadgesLayer.innerHTML = '';
-          this.controlsLayer.innerHTML = '';
-          this.balloonsLayer.innerHTML = '';
-        }
-      }, '🗑️ Clear');
-
-      ribbon.append(
-        this.toolBtns.curve, this.toolBtns.click_nodes, this.toolBtns.balloon,
-        this.toolBtns.paint, this.toolBtns.crop, this.toolBtns.select,
-        hudToggleBtn, debugDeckBtn, zoomGroup, autoBoundsBtn, bgBtn, undoBtn, clearBtn
-      );
-      wrap.appendChild(ribbon);
-
-      // 3. Curve & Spline Sub-Ribbon
-      this.curveControlsRibbon = makeElement('div', {
-        style: {
-          padding: '6px 14px',
-          background: 'rgba(15, 23, 42, 0.92)',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          flexWrap: 'wrap',
-          fontSize: '11px',
-          color: '#94a3b8'
-        }
-      });
-
-      const tetherBtn = makeElement('button', {
-        className: `dr-nav-btn ${this.stageState.tetherActive ? 'primary' : ''}`,
-        style: { padding: '3px 8px', fontSize: '11px', color: this.stageState.tetherActive ? '#ffffff' : '#f59e0b', fontWeight: 'bold' },
-        title: 'Kinetic String-Tether (Virtual Drag-Lead). Stabilizes mouse motion. Default: ON',
-        onclick: () => {
-          this.stageState.tetherActive = !this.stageState.tetherActive;
-          tetherBtn.classList.toggle('primary', this.stageState.tetherActive);
-          tetherBtn.style.color = this.stageState.tetherActive ? '#ffffff' : '#f59e0b';
-          tetherBtn.textContent = this.stageState.tetherActive ? '🪢 Tether: ON' : '🪢 Tether: OFF';
-        }
-      }, this.stageState.tetherActive ? '🪢 Tether: ON' : '🪢 Tether: OFF');
-
-      const arrowBtn = makeElement('button', {
-        className: `dr-nav-btn ${this.stageState.hasArrow ? 'primary' : ''}`,
-        style: { padding: '3px 8px', fontSize: '11px', color: this.stageState.hasArrow ? '#ffffff' : '#94a3b8' },
-        title: 'Toggle arrowhead: Turn OFF for pure plain curves without arrow or text',
-        onclick: () => {
-          this.stageState.hasArrow = !this.stageState.hasArrow;
-          arrowBtn.classList.toggle('primary', this.stageState.hasArrow);
-          arrowBtn.style.color = this.stageState.hasArrow ? '#ffffff' : '#94a3b8';
-          arrowBtn.textContent = this.stageState.hasArrow ? '🏹 Arrow: ON' : '🏹 Arrow: OFF (Plain Curve)';
-        }
-      }, this.stageState.hasArrow ? '🏹 Arrow: ON' : '🏹 Arrow: OFF (Plain Curve)');
-
-      const borderBtn = makeElement('button', {
-        className: `dr-nav-btn ${this.stageState.hasBorder ? 'primary' : ''}`,
-        style: { padding: '3px 8px', fontSize: '11px', color: this.stageState.hasBorder ? '#ffffff' : '#94a3b8' },
-        title: 'Toggle text boundary box (thickness matches the curve Bézier stroke)',
-        onclick: () => {
-          this.stageState.hasBorder = !this.stageState.hasBorder;
-          borderBtn.classList.toggle('primary', this.stageState.hasBorder);
-          borderBtn.style.color = this.stageState.hasBorder ? '#ffffff' : '#94a3b8';
-          borderBtn.textContent = this.stageState.hasBorder ? '◻ Box: ON' : '◻ Box: OFF';
-          this.renderStage();
-        }
-      }, this.stageState.hasBorder ? '◻ Box: ON' : '◻ Box: OFF');
-
-      const colors = ['#00e676', '#00f2fe', '#ffd700', '#ff2d55', '#ff8000', '#c084fc', '#ffffff'];
-      const swatches = makeElement('div', { style: { display: 'flex', gap: '3px', alignItems: 'center' } });
-      colors.forEach(col => {
-        const b = makeElement('button', {
-          style: {
-            width: '14px', height: '14px', borderRadius: '50%', background: col,
-            border: this.stageState.currentColor === col ? '2px solid #fff' : '1px solid rgba(255,255,255,0.3)',
-            cursor: 'pointer', padding: 0
-          },
-          onclick: () => {
-            this.stageState.currentColor = col;
-            swatches.querySelectorAll('button').forEach(btn => btn.style.border = '1px solid rgba(255,255,255,0.3)');
-            b.style.border = '2px solid #fff';
-          }
-        });
-        swatches.appendChild(b);
-      });
-
-      const openColorPickerBtn = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '3px 7px', fontSize: '10.5px', color: '#00f2fe' },
-        title: 'Open Advanced Color Picker',
-        onclick: (e) => this.launchColorPicker('curve', e.currentTarget)
-      }, '🎨 Pick...');
-
-      this.curveControlsRibbon.append(
-        tetherBtn, arrowBtn, borderBtn, swatches, openColorPickerBtn
-      );
-      wrap.appendChild(this.curveControlsRibbon);
-
-      // 4. Brush Controls Ribbon
-      this.brushControlsRibbon = makeElement('div', {
-        style: {
-          padding: '6px 14px',
-          background: 'rgba(24, 15, 30, 0.94)',
-          borderBottom: '1px solid rgba(245, 158, 11, 0.25)',
-          display: 'none',
-          alignItems: 'center',
-          gap: '10px',
-          fontSize: '11px',
-          color: '#f8fafc',
-          flexWrap: 'wrap'
-        }
-      });
-
-      const brushModeBtns = {};
-      const setBrushMode = (m) => {
-        this.stageState.brushMode = m;
-        Object.keys(brushModeBtns).forEach(k => brushModeBtns[k].classList.toggle('primary', k === m));
-      };
-
-      brushModeBtns.freehand = makeElement('button', {
-        className: 'dr-nav-btn primary',
-        style: { padding: '2px 7px', fontSize: '10.5px' },
-        title: 'Freehand Paint: Solid opaque brush strokes',
-        onclick: () => setBrushMode('freehand')
-      }, '🖌️ Paint');
-
-      brushModeBtns.rect = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '2px 7px', fontSize: '10.5px' },
-        title: 'Drag to mask a clean solid or soft rectangle over watermarks/logos',
-        onclick: () => setBrushMode('rect')
-      }, '⬛ Box Rect');
-
-      brushModeBtns.oval = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '2px 7px', fontSize: '10.5px' },
-        title: 'Drag to mask an oval over unwanted areas',
-        onclick: () => setBrushMode('oval')
-      }, '🔘 Oval');
-
-      const brushSizeLabel = makeElement('span', {}, `Size: ${this.stageState.brushSize}px`);
-      const brushSizeSlider = makeElement('input', {
-        type: 'range', min: '8', max: '140', value: String(this.stageState.brushSize),
-        style: { width: '75px', accentColor: '#f59e0b', cursor: 'pointer' },
-        oninput: (e) => {
-          this.stageState.brushSize = parseInt(e.target.value, 10);
-          brushSizeLabel.textContent = `Size: ${this.stageState.brushSize}px`;
-        }
-      });
-
-      const softnessLabel = makeElement('span', {}, `Feather: ${this.stageState.brushSoftness}px`);
-      const softnessSlider = makeElement('input', {
-        type: 'range', min: '0', max: '25', value: String(this.stageState.brushSoftness),
-        style: { width: '75px', accentColor: '#00f2fe', cursor: 'pointer' },
-        oninput: (e) => {
-          this.stageState.brushSoftness = parseInt(e.target.value, 10);
-          softnessLabel.textContent = `Feather: ${this.stageState.brushSoftness}px`;
-          this.updateSvgBlurFilter();
-        }
-      });
-
-      const blockoutColors = ['#000000', '#ffffff', '#808080', '#e2e8f0', '#0f172a'];
-      const brushSwatches = makeElement('div', { style: { display: 'flex', gap: '3px', alignItems: 'center' } });
-      blockoutColors.forEach(col => {
-        const b = makeElement('button', {
-          title: `Paint Blockout: ${col}`,
-          style: {
-            width: '14px', height: '14px', borderRadius: '3px', background: col,
-            border: this.stageState.brushColor === col ? '2px solid #00f2fe' : '1px solid rgba(255,255,255,0.3)',
-            cursor: 'pointer', padding: 0
-          },
-          onclick: () => {
-            this.stageState.brushColor = col;
-            brushSwatches.querySelectorAll('button').forEach(btn => btn.style.border = '1px solid rgba(255,255,255,0.3)');
-            b.style.border = '2px solid #00f2fe';
-          }
-        });
-        brushSwatches.appendChild(b);
-      });
-
-      const openPaintColorPickerBtn = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '2px 7px', fontSize: '10.5px', color: '#f59e0b' },
-        title: 'Open Advanced Color Picker for Paint Brush',
-        onclick: (e) => this.launchColorPicker('paint', e.currentTarget)
-      }, '🎨 Pick...');
-
-      this.brushControlsRibbon.append(
-        makeElement('strong', { style: { color: '#f59e0b' } }, 'Brush:'),
-        brushModeBtns.freehand, brushModeBtns.rect, brushModeBtns.oval,
-        brushSizeSlider, brushSizeLabel,
-        softnessSlider, softnessLabel,
-        makeElement('span', { style: { color: '#94a3b8', marginLeft: '4px' } }, 'Color:'),
-        brushSwatches, openPaintColorPickerBtn
-      );
-      wrap.appendChild(this.brushControlsRibbon);
-
-      // 5. Stage Viewport
-      this.viewport = makeElement('div', {
-        style: {
-          position: 'relative',
-          minHeight: '480px',
-          maxHeight: '660px',
-          overflow: 'hidden',
-          background: 'radial-gradient(circle at 50% 25%, #151e33 0%, #0b0f19 100%)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '0',
-          boxSizing: 'border-box'
-        }
-      });
-
-      this.zoomScaffold = makeElement('div', {
-        style: {
-          position: 'relative',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          transition: 'transform 0.05s ease-out'
-        }
-      });
-
-      this.stageBox = makeElement('div', {
-        id: 'quora-composite-stage',
-        style: {
-          position: 'relative',
-          boxShadow: '0 16px 45px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08)',
-          borderRadius: '6px',
-          background: 'transparent',
-          overflow: 'visible',
-          display: 'inline-block',
-          outline: '1.5px dashed rgba(0, 242, 254, 0.35)',
-          outlineOffset: '0px'
-        }
-      });
-
-      this.sceneCanvas = document.createElement('canvas');
-      this.sceneCanvas.style.cssText = 'position: absolute; top: 0; left: 0; display: block; border-radius: 6px;';
-      this.stageBox.appendChild(this.sceneCanvas);
-
-      this.diffCanvas = document.createElement('canvas');
-      this.diffCanvas.style.cssText = 'position: absolute; top: 0; left: 0; display: block; pointer-events: none;';
-      this.stageBox.appendChild(this.diffCanvas);
-
-      this.svgSurface = makeElement('svg:svg', {
-        id: 'quora-vector-svg',
-        style: {
-          position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-          overflow: 'visible', pointerEvents: 'auto', shapeRendering: 'geometricPrecision'
-        }
-      });
-
-      this.svgDefs = makeElement('svg:defs');
-      this.svgSurface.appendChild(this.svgDefs);
-      this.updateSvgBlurFilter();
-
-      this.diffSvgLayer = makeElement('svg:g', { className: 'qa-diff-tangents' });
-      this.paintLayer = makeElement('svg:g', { className: 'qa-blockout-paint-layer' });
-      this.shadowLayer = makeElement('svg:g', { className: 'qa-crisp-shadows' });
-      this.strokeLayer = makeElement('svg:g', { className: 'qa-crisp-strokes' });
-      this.textBadgesLayer = makeElement('svg:g', { className: 'qa-curve-attached-text' });
-      this.controlsLayer = makeElement('svg:g', { className: 'qa-interactive-controls' });
-
-      this.svgSurface.append(
-        this.diffSvgLayer, this.paintLayer, this.shadowLayer,
-        this.strokeLayer, this.textBadgesLayer, this.controlsLayer
-      );
-      this.stageBox.appendChild(this.svgSurface);
-
-      this.balloonsLayer = makeElement('div', {
-        className: 'qa-balloons-container',
-        style: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }
-      });
-      this.stageBox.appendChild(this.balloonsLayer);
-
-      this.setupEdgePullHandles();
-
-      this.zoomScaffold.appendChild(this.stageBox);
-      this.viewport.appendChild(this.zoomScaffold);
-      wrap.appendChild(this.viewport);
-
-      this.setupInteractions();
-      this.setupZoomWheel();
-      this.loadDefaultDemo();
-
-      container.appendChild(wrap);
-    }
-  setZoom(val) {
-    this.stageState.zoom = Math.max(0.25, Math.min(3.0, Math.round(val * 100) / 100));
-    this.zoomScaffold.style.transform = `scale(${this.stageState.zoom})`;
-    if (this.zoomLabelBtn) {
-      this.zoomLabelBtn.textContent = `${Math.round(this.stageState.zoom * 100)}%`;
-    }
-  }
-
-  fitToViewport() {
-    const vpW = this.viewport.clientWidth - 80;
-    const vpH = this.viewport.clientHeight - 80;
-    const stageW = this.stageState.canvasWidth || 680;
-    const stageH = this.stageState.canvasHeight || 340;
-
-    const scale = Math.min(vpW / stageW, vpH / stageH);
-    this.setZoom(Math.min(1.5, Math.max(0.35, scale)));
-  }
-
-  setupZoomWheel() {
-      // 1. Mouse Wheel Cursor-Centered Zooming
-      this.viewport.addEventListener('wheel', (e) => {
-        if (e.target.closest('input, textarea, select')) return;
-
-        e.preventDefault();
-        const rect = this.viewport.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-
-        const curZoom = this.stageState.zoom;
-        const curPanX = this.stageState.panX;
-        const curPanY = this.stageState.panY;
-
-        // Calculate world point anchored under cursor
-        const worldX = (mouseX - curPanX) / curZoom;
-        const worldY = (mouseY - curPanY) / curZoom;
-
-        const zoomFactor = e.deltaY < 0 ? 1.12 : (1 / 1.12);
-        const nextZoom = Math.max(
-          this.stageState.minZoom,
-          Math.min(this.stageState.maxZoom, curZoom * zoomFactor)
-        );
-
-        // Re-anchor pan so world point stays locked under mouse cursor
-        this.stageState.panX = mouseX - worldX * nextZoom;
-        this.stageState.panY = mouseY - worldY * nextZoom;
-        this.stageState.zoom = nextZoom;
-
-        this.applyViewportTransform();
-        if (this.zoomLabelBtn) {
-          this.zoomLabelBtn.textContent = `${Math.round(nextZoom * 100)}%`;
-        }
-        if (this._devDeckDialog) this.updateDevDeckUI();
-      }, { passive: false });
-
-      // 2. Middle-click or Alt+Drag pan support
-      let isPanning = false;
-      let panStart = [0, 0];
-      let startPanCoords = [0, 0];
-
-      this.viewport.addEventListener('mousedown', (e) => {
-        if (e.button === 1 || (e.button === 0 && e.altKey)) {
-          isPanning = true;
-          panStart = [e.clientX, e.clientY];
-          startPanCoords = [this.stageState.panX, this.stageState.panY];
-          this.viewport.style.cursor = 'grab';
-          e.preventDefault();
-        }
-      });
-
-      window.addEventListener('mousemove', (e) => {
-        if (!isPanning) return;
-        const dx = e.clientX - panStart[0];
-        const dy = e.clientY - panStart[1];
-        this.stageState.panX = startPanCoords[0] + dx;
-        this.stageState.panY = startPanCoords[1] + dy;
-        this.applyViewportTransform();
-      });
-
-      window.addEventListener('mouseup', (e) => {
-        if (isPanning) {
-          isPanning = false;
-          this.viewport.style.cursor = '';
-        }
-      });
-
-      // 3. Right-Click Interceptor to cancel drawing/dragging without browser menu
-      this.viewport.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        // If drawing point-by-point, right click commits the curve!
-        if (this.stageState.activeTool === 'click_nodes') {
-          if (this._activePenVertices && this._activePenVertices.length >= 2) {
-            this.commitPenCurve();
-          } else {
-            this.cancelPenCurve();
-          }
-          return;
-        }
-
-        // If dragging a node or element, let go
-        if (this.stageState.selectedItem) {
-          this.controlsLayer.innerHTML = '';
-          this.stageState.selectedItem = null;
-          this.renderStage();
-        }
-      });
-    }
-  setupEdgePullHandles() {
-    // 1. Right Edge Bar
-    const rightBar = makeElement('div', {
-      className: 'qa-edge-handle qa-edge-right',
-      title: 'Drag to expand canvas width',
+    const wrap = makeElement('div', {
       style: {
-        position: 'absolute', top: '10%', right: '-8px', width: '12px', height: '80%',
-        cursor: 'ew-resize', zIndex: '40', background: 'transparent'
+        background: '#070a13', border: '1.5px solid #21262d', borderRadius: '12px',
+        overflow: 'hidden', boxShadow: '0 16px 40px rgba(0,0,0,0.65)', display: 'flex',
+        flexDirection: 'column', fontFamily: 'monospace'
       }
     });
 
-    // 2. Bottom Edge Bar
-    const bottomBar = makeElement('div', {
-      className: 'qa-edge-handle qa-edge-bottom',
-      title: 'Drag to expand canvas height',
+    const localFileInput = makeElement('input', {
+      type: 'file', accept: 'image/*', style: { display: 'none' },
+      onchange: (e) => {
+        if (e.target.files && e.target.files[0]) {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            const img = new Image();
+            img.onload = () => this.addNewImagePlate(img, 60, 60);
+            img.src = ev.target.result;
+          };
+          reader.readAsDataURL(e.target.files[0]);
+        }
+      }
+    });
+    wrap.appendChild(localFileInput);
+
+    // Primary Header
+    const header = makeElement('div', {
       style: {
-        position: 'absolute', bottom: '-8px', left: '10%', width: '80%', height: '12px',
-        cursor: 'ns-resize', zIndex: '40', background: 'transparent'
+        padding: '10px 16px', background: 'rgba(15, 23, 42, 0.95)', borderBottom: '1px solid #21262d',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px'
+      }
+    }, [
+      makeElement('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, [
+        makeElement('span', { style: { fontSize: '16px' } }, '🎨'),
+        makeElement('strong', { style: { fontSize: '13px', color: '#00f2fe' } }, 'Universal Smart Callout Studio'),
+        makeElement('span', { id: 'qa-status-pill', style: { fontSize: '10px', background: 'rgba(0, 242, 254, 0.15)', color: '#00f2fe', padding: '2px 8px', borderRadius: '12px', fontWeight: 'bold' } }, 'Draw curve & type • Drag image in • Hold H')
+      ]),
+      makeElement('div', { style: { display: 'flex', gap: '6px' } }, [
+        makeElement('button', {
+          className: 'dr-nav-btn primary',
+          style: { padding: '4px 10px', fontSize: '11px', background: '#0284c7', borderColor: '#38bdf8' },
+          onclick: () => this.openSpotDiffWorkflow()
+        }, '🧩 Spot Difference'),
+        makeElement('button', {
+          className: 'dr-nav-btn',
+          style: { padding: '4px 9px', fontSize: '11px', color: '#ffd700', borderColor: 'rgba(255, 215, 0, 0.45)' },
+          title: 'Paste image from clipboard directly onto canvas',
+          onclick: () => this.pasteFromClipboardAction()
+        }, '📋 Paste Image'),
+        makeElement('button', {
+          className: 'dr-nav-btn',
+          style: { padding: '4px 9px', fontSize: '11px', color: '#00f2fe', borderColor: '#00f2fe66' },
+          onclick: () => localFileInput.click()
+        }, '📁 Add Image File'),
+        makeElement('button', {
+          className: 'dr-nav-btn primary',
+          style: { padding: '4px 12px', fontSize: '11px', fontWeight: 'bold', background: '#238636', borderColor: '#2ea043' },
+          onclick: (e) => this.copyCompositeToClipboard(e.currentTarget)
+        }, '📋 Copy Hi-Res PNG')
+      ])
+    ]);
+    wrap.appendChild(header);
+
+    // Primary Ribbon
+    const ribbon = makeElement('div', {
+      style: {
+        padding: '8px 14px', background: 'rgba(11, 17, 32, 0.98)', borderBottom: '1px solid #1e293b',
+        display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '11px', color: '#cbd5e1'
       }
     });
 
-    // 3. Bottom-Right Corner Grip
-    const cornerGrip = makeElement('div', {
-      className: 'qa-edge-handle qa-edge-corner',
-      title: 'Drag to expand canvas both width and height',
-      style: {
-        position: 'absolute', bottom: '-6px', right: '-6px', width: '14px', height: '14px',
-        cursor: 'nwse-resize', zIndex: '45', background: '#00f2fe', borderRadius: '3px',
-        boxShadow: '0 0 8px rgba(0, 242, 254, 0.6)'
-      }
-    });
-
-    const initDrag = (e, axis) => {
-      e.stopPropagation();
-      e.preventDefault();
-      this.stageState.manualSizing = true;
-      const startX = e.clientX;
-      const startY = e.clientY;
-      const startW = this.stageState.canvasWidth;
-      const startH = this.stageState.canvasHeight;
-      const z = this.stageState.zoom || 1.0;
-
-      const onMove = (ev) => {
-        const dx = (ev.clientX - startX) / z;
-        const dy = (ev.clientY - startY) / z;
-        if (axis === 'x' || axis === 'both') {
-          this.stageState.canvasWidth = Math.max(300, Math.round(startW + dx));
-        }
-        if (axis === 'y' || axis === 'both') {
-          this.stageState.canvasHeight = Math.max(200, Math.round(startH + dy));
-        }
-        this.renderStage();
-      };
-
-      const onUp = () => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
-      };
-
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
+    this.toolBtns = {};
+    const setTool = (mode) => {
+      this.stageState.activeTool = mode;
+      Object.keys(this.toolBtns).forEach(k => this.toolBtns[k].classList.toggle('primary', k === mode));
+      this.svgSurface.style.cursor = (mode === 'paint' ? 'crosshair' : 'crosshair');
+      this.brushControlsRibbon.style.display = (mode === 'paint') ? 'flex' : 'none';
+      this.updateDynamicKeyInHUD();
     };
 
-    rightBar.onmousedown = (e) => initDrag(e, 'x');
-    bottomBar.onmousedown = (e) => initDrag(e, 'y');
-    cornerGrip.onmousedown = (e) => initDrag(e, 'both');
+    this.toolBtns.curve = makeElement('button', {
+      className: 'dr-nav-btn primary',
+      style: { padding: '4px 10px', fontSize: '11px', fontWeight: 'bold' },
+      title: 'Unified Smart Pen: Draw curves, drop text notes, or pull arrows seamlessly!',
+      onclick: () => setTool('curve')
+    }, '🪢 Smart Pen');
 
-    this.stageBox.append(rightBar, bottomBar, cornerGrip);
+    this.toolBtns.paint = makeElement('button', {
+      className: 'dr-nav-btn',
+      style: { padding: '4px 8px', fontSize: '11px', color: '#f59e0b', borderColor: '#f59e0b66' },
+      title: 'Blockout Paint: Mask logos, watermarks, or text for Gemini AI inpainting',
+      onclick: () => setTool('paint')
+    }, '🖌️ Paint');
+
+    // Color Picker Button
+    this.colorPickerBtn = makeElement('button', {
+      className: 'dr-nav-btn',
+      style: { padding: '4px 10px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '6px', borderColor: '#00e676' },
+      title: 'Open Real-Time Color Picker (Applies immediately to selected curve/text or next stroke)',
+      onclick: (e) => this.launchColorPicker('curve', e.currentTarget)
+    }, [
+      (this.colorIndicatorDot = makeElement('span', {
+        style: { width: '12px', height: '12px', borderRadius: '50%', background: this.stageState.currentColor, display: 'inline-block', border: '1px solid #fff' }
+      })),
+      makeElement('span', {}, 'Color Picker')
+    ]);
+
+    // Arrow Toggle Button
+    this.arrowBtn = makeElement('button', {
+      className: `dr-nav-btn ${this.stageState.hasArrow ? 'primary' : ''}`,
+      style: { padding: '4px 8px', fontSize: '11px', color: this.stageState.hasArrow ? '#ffffff' : '#94a3b8' },
+      title: 'Toggle Arrowhead [Hotkey: A]',
+      onclick: () => this.toggleArrowhead()
+    }, this.stageState.hasArrow ? '🏹 Arrow: ON' : '🏹 Arrow: OFF');
+
+    // Add Text Button
+    const addTextBtn = makeElement('button', {
+      className: 'dr-nav-btn',
+      style: { padding: '4px 8px', fontSize: '11px' },
+      title: 'Attach or Edit Text Callout [Hotkey: T]',
+      onclick: () => this.triggerTextOnActiveOrCanvas()
+    }, '💬 Text');
+
+    // Swap Ends Button
+    const swapEndsBtn = makeElement('button', {
+      className: 'dr-nav-btn',
+      style: { padding: '4px 9px', fontSize: '10.5px', color: '#ffd700', borderColor: 'rgba(255, 215, 0, 0.4)' },
+      title: 'Swap Terminals: Flips arrowhead to opposite end and relocates text box [Hotkey: X]',
+      onclick: () => this.swapActiveCurveTerminals()
+    }, '⇄ Swap Ends');
+
+    const addPointBtn = makeElement('button', {
+      className: 'dr-nav-btn',
+      style: { padding: '4px 8px', fontSize: '11px', color: '#00f2fe' },
+      title: 'Add Point: Inserts knot at segment midpoint [Hotkey: +]',
+      onclick: () => this.addKnotToActiveCurve()
+    }, '➕ Add Point');
+
+    const delPointBtn = makeElement('button', {
+      className: 'dr-nav-btn',
+      style: { padding: '4px 8px', fontSize: '11px', color: '#ff7b72' },
+      title: 'Delete Selected Knot or Entire Curve [Hotkey: Del]',
+      onclick: () => this.deleteSelectedEntity()
+    }, '➖ Del');
+
+    this.dragLockBtn = makeElement('button', {
+      className: 'dr-nav-btn',
+      style: { padding: '4px 8px', fontSize: '10.5px' },
+      title: 'Lock Distant Points on Drag vs Global Ripple',
+      onclick: () => {
+        this.stageState.dragLockMode = this.stageState.dragLockMode === 'single' ? 'ripple' : 'single';
+        this.dragLockBtn.textContent = this.stageState.dragLockMode === 'single' ? '🔒 Single Knot' : '🌊 Ripple';
+        this.showKnotToast(`Move Mode: ${this.stageState.dragLockMode === 'single' ? 'Locked Distant Points' : 'Global Ripple'}`);
+      }
+    }, '🔒 Single Knot');
+
+    const hudToggleBtn = makeElement('button', {
+      className: 'dr-nav-btn',
+      style: { padding: '4px 8px', fontSize: '11px', color: '#00f2fe', borderColor: 'rgba(0, 242, 254, 0.4)' },
+      onclick: () => {
+        const h = document.getElementById('qa-keyin-matrix-hud');
+        if (h) h.style.display = (h.style.display === 'none') ? 'flex' : 'none';
+        else this.setupKeyInMatrixHud();
+      }
+    }, '⌨️ HUD');
+
+    const undoBtn = makeElement('button', {
+      className: 'dr-nav-btn',
+      style: { padding: '4px 8px', fontSize: '11px', color: '#f59e0b', marginLeft: 'auto' },
+      onclick: () => this.undoLastAnnotation()
+    }, '↺ Undo');
+
+    ribbon.append(
+      this.toolBtns.curve, this.toolBtns.paint, this.colorPickerBtn, this.arrowBtn,
+      addTextBtn, swapEndsBtn, addPointBtn, delPointBtn, this.dragLockBtn, hudToggleBtn, undoBtn
+    );
+    wrap.appendChild(ribbon);
+
+    // Brush Controls Ribbon
+    this.brushControlsRibbon = makeElement('div', {
+      style: {
+        padding: '6px 14px', background: 'rgba(24, 15, 30, 0.94)', borderBottom: '1px solid rgba(245, 158, 11, 0.25)',
+        display: 'none', alignItems: 'center', gap: '10px', fontSize: '11px', color: '#f8fafc', flexWrap: 'wrap'
+      }
+    });
+
+    const brushSizeLabel = makeElement('span', {}, `Size: ${this.stageState.brushSize}px`);
+    const brushSizeSlider = makeElement('input', {
+      type: 'range', min: '8', max: '140', value: String(this.stageState.brushSize),
+      style: { width: '80px', accentColor: '#f59e0b', cursor: 'pointer' },
+      oninput: (e) => {
+        this.stageState.brushSize = parseInt(e.target.value, 10);
+        brushSizeLabel.textContent = `Size: ${this.stageState.brushSize}px`;
+      }
+    });
+
+    const softnessLabel = makeElement('span', {}, `Feather: ${this.stageState.brushSoftness}px`);
+    const softnessSlider = makeElement('input', {
+      type: 'range', min: '0', max: '25', value: String(this.stageState.brushSoftness),
+      style: { width: '80px', accentColor: '#00f2fe', cursor: 'pointer' },
+      oninput: (e) => {
+        this.stageState.brushSoftness = parseInt(e.target.value, 10);
+        softnessLabel.textContent = `Feather: ${this.stageState.brushSoftness}px`;
+        this.updateSvgBlurFilter();
+      }
+    });
+
+    this.brushControlsRibbon.append(
+      makeElement('strong', { style: { color: '#f59e0b' } }, 'Blockout Paint:'),
+      brushSizeSlider, brushSizeLabel,
+      softnessSlider, softnessLabel
+    );
+    wrap.appendChild(this.brushControlsRibbon);
+
+    // Viewport
+    this.viewport = makeElement('div', {
+      style: {
+        position: 'relative', minHeight: '520px', maxHeight: '720px', overflow: 'hidden',
+        background: 'radial-gradient(circle at 50% 25%, #151e33 0%, #0b0f19 100%)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0', boxSizing: 'border-box'
+      }
+    });
+
+    this.zoomScaffold = makeElement('div', {
+      style: { position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }
+    });
+
+    this.stageBox = makeElement('div', {
+      id: 'quora-composite-stage',
+      style: {
+        position: 'relative', boxShadow: '0 16px 45px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+        borderRadius: '6px', background: 'transparent', overflow: 'visible', display: 'inline-block'
+      }
+    });
+
+    this.sceneCanvas = document.createElement('canvas');
+    this.sceneCanvas.style.cssText = 'position: absolute; top: 0; left: 0; display: block; border-radius: 6px;';
+    this.stageBox.appendChild(this.sceneCanvas);
+
+    this.svgSurface = makeElement('svg:svg', {
+      id: 'quora-vector-svg',
+      style: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', overflow: 'visible', pointerEvents: 'auto' }
+    });
+
+    this.svgDefs = makeElement('svg:defs');
+    this.svgSurface.appendChild(this.svgDefs);
+    this.updateSvgBlurFilter();
+
+    // 8-Layer Z-Order Stack
+    this.diffSvgLayer = makeElement('svg:g', { className: 'qa-diff-tangents', style: { pointerEvents: 'none' } });
+    this.paintLayer = makeElement('svg:g', { className: 'qa-blockout-paint-layer', style: { pointerEvents: 'none' } });
+    this.glowLayer = makeElement('svg:g', { className: 'qa-glow-hover-layer', style: { pointerEvents: 'none' } });
+    this.shadowLayer = makeElement('svg:g', { className: 'qa-crisp-shadows', style: { pointerEvents: 'none' } });
+    this.strokeLayer = makeElement('svg:g', { className: 'qa-crisp-strokes', style: { pointerEvents: 'none' } });
+    this.textBadgesLayer = makeElement('svg:g', { className: 'qa-curve-attached-text' });
+    this.controlsLayer = makeElement('svg:g', { className: 'qa-interactive-controls' });
+
+    this.svgSurface.append(
+      this.diffSvgLayer, this.paintLayer, this.glowLayer, this.shadowLayer,
+      this.strokeLayer, this.textBadgesLayer, this.controlsLayer
+    );
+    this.stageBox.appendChild(this.svgSurface);
+
+    this.setupEdgePullHandles();
+
+    this.zoomScaffold.appendChild(this.stageBox);
+    this.viewport.appendChild(this.zoomScaffold);
+    wrap.appendChild(this.viewport);
+
+    this.setupInteractions();
+    this.setupZoomWheel();
+    this.setupPasteAndDropListener();
+    this.loadDefaultDemo();
+
+    container.appendChild(wrap);
   }
 
-  launchColorPicker(targetMode = 'curve', triggerBtn = null) {
-      const curColor = (targetMode === 'paint') ? this.stageState.brushColor : this.stageState.currentColor;
-
-      if (typeof ColorPicker === 'undefined') {
-        console.error('[QuoraToys] Library/ColorPicker.js is required but not loaded in global scope.');
-        return;
-      }
-
-      if (!this._colorPickerInstance) {
-        this._colorPickerInstance = new ColorPicker();
-      }
-      const picker = this._colorPickerInstance;
-
-      const onColorChosen = (newCol) => {
-        if (targetMode === 'paint') {
-          this.stageState.brushColor = newCol;
-        } else {
-          this.stageState.currentColor = newCol;
-          if (this.stageState.selectedCurve) {
-            this.stageState.selectedCurve.color = newCol;
-          }
-        }
-        this.renderStage();
-      };
-
-      if (triggerBtn) {
-        picker.openSmartPicker(triggerBtn, curColor, onColorChosen);
-      }
-    }
   updateSvgBlurFilter() {
+    if (!this.svgDefs) return;
     let filter = this.svgDefs.querySelector('#qa-brush-blur');
     if (!filter) {
-      filter = makeElement('svg:filter', { id: 'qa-brush-blur', x: '-30%', y: '-30%', width: '160%', height: '160%' });
+      filter = makeElement('svg:filter', {
+        id: 'qa-brush-blur', x: '-30%', y: '-30%', width: '160%', height: '160%'
+      });
       this.svgDefs.appendChild(filter);
     }
-    filter.innerHTML = `<feGaussianBlur stdDeviation="${this.stageState.brushSoftness}" />`;
+    filter.innerHTML = `<feGaussianBlur stdDeviation="${this.stageState.brushSoftness || 0}" />`;
   }
 
-  loadDefaultDemo() {
-    const c = document.createElement('canvas');
-    c.width = 680;
-    c.height = 340;
-    const ctx = c.getContext('2d');
-    const grad = ctx.createLinearGradient(0, 0, 680, 340);
-    grad.addColorStop(0, '#0f172a');
-    grad.addColorStop(1, '#1e293b');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 680, 340);
-    ctx.fillStyle = '#f8fafc';
-    ctx.font = 'bold 20px system-ui, sans-serif';
-    ctx.fillText('Universal Graphic Studio & Solution Compositor', 30, 50);
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '12px monospace';
-    ctx.fillText('• 🖌️ Mask Brush: Freehand, Box Rect, or Oval blockout for Gemini AI inpainting', 30, 85);
-    ctx.fillText('• 〰️ Cubic Spline: Draw curves with auto arrowheads & attached text labels', 30, 110);
-    ctx.fillText('• ⭕ Contiguous Erase Circle: Backtrack mouse into circle to cleanly rewind vertices', 30, 135);
-    ctx.fillText('• 📐 Edge Pulling: Grab right/bottom edge to expand canvas frame without clipping', 30, 160);
+  openSpotDiffWorkflow() {
+    const overlayHost = document.createElement('div');
+    overlayHost.id = 'qa-diff-workflow-modal';
 
-    const img = new Image();
-    img.onload = () => {
-      this.stageState.baseImage = img;
-      this.stageState.cropRect = { x: 0, y: 0, width: 680, height: 340 };
-      this.stageState.baseOrigin = { x: 0, y: 0 };
-      this.renderStage();
+    const leftSafe = (typeof SidePanel !== 'undefined' && SidePanel.getInstances()?.left?.isOpen)
+      ? (SidePanel.getInstances().left.width || 300)
+      : 0;
+
+    overlayHost.style.cssText = [
+      'position: fixed;', 'top: 0;', `left: ${leftSafe}px;`,
+      `width: calc(100vw - ${leftSafe}px);`, 'height: 100vh;', 'z-index: 200000;',
+      'background: rgba(11, 15, 25, 0.98);', 'overflow: hidden;', 'display: flex;',
+      'flex-direction: column;', 'box-shadow: 0 0 35px rgba(0,0,0,0.8);',
+      'backdrop-filter: blur(12px);', 'transition: left 0.25s ease, width 0.25s ease;'
+    ].join('\n');
+    document.body.appendChild(overlayHost);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '✕ Return to Studio';
+    closeBtn.className = 'dr-nav-btn';
+    closeBtn.style.cssText = [
+      'position: fixed;', 'top: 12px;', 'right: 18px;', 'z-index: 2147483647;',
+      'background: #1e293b;', 'color: #f8fafc;', 'border: 1.5px solid #00e676;',
+      'padding: 6px 14px;', 'font-family: monospace;', 'font-size: 11px;',
+      'font-weight: bold;', 'border-radius: 6px;', 'cursor: pointer;',
+      'box-shadow: 0 4px 14px rgba(0,0,0,0.6);'
+    ].join('\n');
+
+    closeBtn.onclick = () => {
+      overlayHost.remove();
+      closeBtn.remove();
     };
-    img.src = c.toDataURL('image/png');
+    document.body.appendChild(closeBtn);
+
+    const app = new QuoraToys();
+    app.run({ container: overlayHost });
+
+    if (this.stageState.baseImage) {
+      setTimeout(() => {
+        app.loadImageFromUrl(this.stageState.baseImage.src, 'Studio Active Image');
+      }, 80);
+    }
   }
 
-  importDataset(data) {
-    if (!data || !data.sourceImage) return;
+  // ── Multi-Image Plates & Dynamic Canvas Auto-Bounds ──
+  addNewImagePlate(img, x = 60, y = 60) {
+    let w = img.naturalWidth || img.width;
+    let h = img.naturalHeight || img.height;
 
-    this.stageState.baseImage = data.sourceImage;
-    this.stageState.cropRect = data.activeCrop || { x: 0, y: 0, width: data.sourceImage.naturalWidth, height: data.sourceImage.naturalHeight };
-    this.stageState.baseOrigin = data.baseOrigin || { x: 0, y: 0 };
-
-    const w = this.stageState.cropRect.width;
-    const h = this.stageState.cropRect.height;
-
-    // Layer B (New Image / Crop Overlay)
-    this.cropCanvas = document.createElement('canvas');
-    this.cropCanvas.width = w;
-    this.cropCanvas.height = h;
-    this.cropCanvas.getContext('2d').drawImage(
-      this.stageState.baseImage,
-      this.stageState.cropRect.x, this.stageState.cropRect.y, w, h, 0, 0, w, h
-    );
-
-    // Layer A (Old Image / Base)
-    this.baseCropCanvas = document.createElement('canvas');
-    this.baseCropCanvas.width = w;
-    this.baseCropCanvas.height = h;
-    this.baseCropCanvas.getContext('2d').drawImage(
-      this.stageState.baseImage,
-      this.stageState.baseOrigin.x, this.stageState.baseOrigin.y, w, h, 0, 0, w, h
-    );
-
-    this.stageState.diffCallouts = (data.diffCircles || []).map((diff, i) => {
-      return {
-        id: diff.id || 'diff_' + Date.now() + '_' + i,
-        index: i + 1,
-        cropX: diff.cropX,
-        cropY: diff.cropY,
-        radius: diff.radius || 24,
-        dragX: (typeof diff.dragX === 'number' && Math.hypot(diff.dragX - diff.cropX, diff.dragY - diff.cropY) > 5)
-          ? diff.dragX
-          : diff.cropX + (diff.radius * 2.2),
-        dragY: (typeof diff.dragY === 'number' && Math.hypot(diff.dragX - diff.cropX, diff.dragY - diff.cropY) > 5)
-          ? diff.dragY
-          : diff.cropY,
-        color: diff.color || '#00e676'
-      };
-    });
-
-    const pill = document.getElementById('qa-status-pill');
-    if (pill) {
-      pill.textContent = `Comparison Loaded (${this.stageState.diffCallouts.length} Lenses)`;
-      pill.style.background = 'rgba(0, 230, 118, 0.2)';
-      pill.style.color = '#00e676';
+    const maxInit = 560;
+    if (w > maxInit || h > maxInit) {
+      const ratio = Math.min(maxInit / w, maxInit / h);
+      w = Math.round(w * ratio);
+      h = Math.round(h * ratio);
     }
 
-    this.stageState.manualSizing = false;
+    const plate = {
+      id: 'img_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      img: img,
+      x: x,
+      y: y,
+      width: w,
+      height: h,
+      aspect: w / h
+    };
+
+    this.stageState.placedImages.push(plate);
+    this.stageState.activeImage = plate;
+
+    if (!this.stageState.baseImage) {
+      this.stageState.baseImage = img;
+      this.stageState.cropRect = { x: 0, y: 0, width: w, height: h };
+    }
+
     this.renderStage();
+    this.showKnotToast(`Added image plate (${w}×${h}px)`);
   }
 
-  // Pure Framing & Auto-Bounds Engine: Brush strokes do NOT expand bounds!
   computeAutoBounds() {
-    const crop = this.stageState.cropRect || { width: 680, height: 340 };
-    const pad = this.stageState.padding;
+    const pad = this.stageState.padding || 45;
+    let minX = 0, minY = 0, maxX = 680, maxY = 380;
 
-    // If user has manually resized canvas, preserve manual dimensions
-    if (this.stageState.manualSizing) {
-      return {
-        totalW: this.stageState.canvasWidth,
-        totalH: this.stageState.canvasHeight,
-        offsetX: pad,
-        offsetY: pad,
-        cropW: crop.width,
-        cropH: crop.height
-      };
-    }
-
-    let minX = 0, minY = 0, maxX = crop.width, maxY = crop.height;
-
-    // Only First-Class Difference Callouts expand auto bounds
-    this.stageState.diffCallouts.forEach(diff => {
-      const r = diff.radius;
-      let cosA = 0, sinA = 1;
-
-      if (this.stageState.lensAlignment === 'horizontal') {
-        cosA = 1; sinA = 0;
-      } else if (this.stageState.lensAlignment === 'vertical') {
-        cosA = 0; sinA = 1;
-      } else {
-        const ang = (Math.hypot(diff.dragX - diff.cropX, diff.dragY - diff.cropY) >= 0.5)
-          ? Math.atan2(diff.dragY - diff.cropY, diff.dragX - diff.cropX) + Math.PI / 2
-          : 0;
-        cosA = Math.cos(ang);
-        sinA = Math.sin(ang);
-      }
-
-      const c1x = diff.dragX - r * cosA;
-      const c1y = diff.dragY - r * sinA;
-      const c2x = diff.dragX + r * cosA;
-      const c2y = diff.dragY + r * sinA;
-
-      minX = Math.min(minX, c1x - r - 10, c2x - r - 10, diff.cropX - r - 10);
-      maxX = Math.max(maxX, c1x + r + 10, c2x + r + 10, diff.cropX + r + 10);
-      minY = Math.min(minY, c1y - r - 10, c2y - r - 10, diff.cropY - r - 10);
-      maxY = Math.max(maxY, c1y + r + 10, c2y + r + 10, diff.cropY + r + 10);
+    (this.stageState.placedImages || []).forEach(plate => {
+      minX = Math.min(minX, plate.x);
+      minY = Math.min(minY, plate.y);
+      maxX = Math.max(maxX, plate.x + plate.width);
+      maxY = Math.max(maxY, plate.y + plate.height);
     });
 
-    const totalW = Math.max(480, Math.round((maxX - minX) + (pad * 2)));
-    const totalH = Math.max(260, Math.round((maxY - minY) + (pad * 2)));
+    (this.stageState.diffCallouts || []).forEach(diff => {
+      const r = diff.radius;
+      minX = Math.min(minX, diff.cropX - r - 10);
+      maxX = Math.max(maxX, diff.cropX + r + 10);
+      minY = Math.min(minY, diff.cropY - r - 10);
+      maxY = Math.max(maxY, diff.cropY + r + 10);
+    });
+
+    const totalW = Math.max(1100, Math.round((maxX - minX) + (pad * 2)));
+    const totalH = Math.max(640, Math.round((maxY - minY) + (pad * 2)));
 
     this.stageState.canvasWidth = totalW;
     this.stageState.canvasHeight = totalH;
 
     return {
-      totalW,
-      totalH,
+      totalW, totalH,
       offsetX: Math.round(-minX + pad),
-      offsetY: Math.round(-minY + pad),
-      cropW: crop.width,
-      cropH: crop.height
+      offsetY: Math.round(-minY + pad)
     };
   }
 
-  renderStage() {
-      const tf = this.computeAutoBounds();
+  // ── Multi-Point Curve: Dynamic Relaxation of Prior Chain & Dashed Lead ──
+  updatePenTentativeSpline(mousePt) {
+    if (!this._penNodes || this._penNodes.length === 0) return;
 
-      this.stageBox.style.width = `${tf.totalW}px`;
-      this.stageBox.style.height = `${tf.totalH}px`;
+    const committedVerts = this._penNodes.map(pt => new BezierVertex(pt.slice()));
+    const tentativeVert = new BezierVertex(mousePt.slice());
+    tentativeVert.isTentative = true;
+    const allVerts = [...committedVerts, tentativeVert];
 
-      // 1. Scene Canvas
-      this.sceneCanvas.width = tf.totalW;
-      this.sceneCanvas.height = tf.totalH;
-      const sCtx = this.sceneCanvas.getContext('2d');
-      sCtx.clearRect(0, 0, tf.totalW, tf.totalH);
+    if (typeof UpdateControlPoints !== 'undefined') {
+      UpdateControlPoints.run(allVerts, 6);
+    }
 
-      if (this.stageState.canvasBgMode === 'matte') {
-        sCtx.fillStyle = this.stageState.canvasBgColor || '#090d16';
-        sCtx.fillRect(0, 0, tf.totalW, tf.totalH);
-      }
+    const beziers = this.verticesToBeziers(allVerts);
+    if (!beziers || beziers.length === 0) return;
 
-      if (this.cropCanvas) {
-        sCtx.save();
-        sCtx.shadowColor = 'rgba(0, 0, 0, 0.7)';
-        sCtx.shadowBlur = 18;
-        sCtx.fillRect(tf.offsetX, tf.offsetY, tf.cropW, tf.cropH);
-        sCtx.restore();
-
-        sCtx.save();
-        sCtx.beginPath();
-        sCtx.rect(tf.offsetX, tf.offsetY, tf.cropW, tf.cropH);
-        sCtx.clip();
-        sCtx.filter = 'blur(3px)';
-        sCtx.drawImage(this.cropCanvas, tf.offsetX, tf.offsetY);
-        sCtx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-        sCtx.fillRect(tf.offsetX, tf.offsetY, tf.cropW, tf.cropH);
-        sCtx.restore();
-
-        sCtx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-        sCtx.lineWidth = 1.5;
-        sCtx.strokeRect(tf.offsetX, tf.offsetY, tf.cropW, tf.cropH);
-      } else if (this.stageState.baseImage) {
-        sCtx.drawImage(this.stageState.baseImage, tf.offsetX, tf.offsetY, tf.cropW, tf.cropH);
-      }
-
-      this.renderPlacedImages(sCtx);
-
-      // 2. Difference Callouts (Twin Magnifier Lenses)
-      this.diffCanvas.width = tf.totalW;
-      this.diffCanvas.height = tf.totalH;
-      const dCtx = this.diffCanvas.getContext('2d');
-      dCtx.clearRect(0, 0, tf.totalW, tf.totalH);
-      this.diffSvgLayer.innerHTML = '';
-
-      if (this.cropCanvas && this.baseCropCanvas) {
-        this.stageState.diffCallouts.forEach(diff => {
-          const origX = diff.cropX + tf.offsetX;
-          const origY = diff.cropY + tf.offsetY;
-          const dragX = diff.dragX + tf.offsetX;
-          const dragY = diff.dragY + tf.offsetY;
-          const r = diff.radius;
-          const col = diff.color || '#00e676';
-
-          let cosA = 0, sinA = 1;
-          if (this.stageState.lensAlignment === 'horizontal') {
-            cosA = 1; sinA = 0;
-          } else if (this.stageState.lensAlignment === 'vertical') {
-            cosA = 0; sinA = 1;
-          } else {
-            const ang = (Math.hypot(diff.dragX - diff.cropX, diff.dragY - diff.cropY) >= 0.5)
-              ? Math.atan2(diff.dragY - diff.cropY, diff.dragX - diff.cropX) + Math.PI / 2
-              : 0;
-            cosA = Math.cos(ang);
-            sinA = Math.sin(ang);
-          }
-
-          const c1x = dragX - r * cosA;
-          const c1y = dragY - r * sinA;
-          const c2x = dragX + r * cosA;
-          const c2y = dragY + r * sinA;
-
-          dCtx.save();
-          dCtx.beginPath();
-          dCtx.arc(origX, origY, r, 0, Math.PI * 2);
-          dCtx.clip();
-          dCtx.drawImage(this.cropCanvas, origX - diff.cropX, origY - diff.cropY);
-          dCtx.globalAlpha = 0.5;
-          dCtx.drawImage(this.baseCropCanvas, origX - diff.cropX, origY - diff.cropY);
-          dCtx.restore();
-
-          const tangentLine = makeElement('svg:line', {
-            x1: origX, y1: origY, x2: dragX, y2: dragY,
-            stroke: col, 'stroke-width': '2', 'stroke-dasharray': '4,4'
-          });
-          const anchorCirc = makeElement('svg:circle', {
-            cx: origX, cy: origY, r: r,
-            fill: 'none', stroke: col, 'stroke-width': '2', 'stroke-dasharray': '3,3'
-          });
-          this.diffSvgLayer.append(tangentLine, anchorCirc);
-
-          dCtx.save();
-          dCtx.beginPath();
-          dCtx.arc(c1x, c1y, r, 0, Math.PI * 2);
-          dCtx.clip();
-          dCtx.drawImage(this.cropCanvas, c1x - diff.cropX, c1y - diff.cropY);
-          dCtx.restore();
-
-          dCtx.save();
-          dCtx.beginPath();
-          dCtx.arc(c2x, c2y, r, 0, Math.PI * 2);
-          dCtx.clip();
-          dCtx.drawImage(this.baseCropCanvas, c2x - diff.cropX, c2y - diff.cropY);
-          dCtx.restore();
-
-          const sL1 = makeElement('svg:circle', { cx: c1x + 2, cy: c1y + 2, r, fill: 'none', stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': '5.5' });
-          const cL1 = makeElement('svg:circle', { cx: c1x, cy: c1y, r, fill: 'none', stroke: col, 'stroke-width': '3.2' });
-          const sL2 = makeElement('svg:circle', { cx: c2x + 2, cy: c2y + 2, r, fill: 'none', stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': '5.5' });
-          const cL2 = makeElement('svg:circle', { cx: c2x, cy: c2y, r, fill: 'none', stroke: col, 'stroke-width': '3.2' });
-
-          const badge = makeElement('svg:text', {
-            x: c1x - r + 4, y: c1y - r - 4,
-            fill: col, 'font-family': 'monospace', 'font-size': '11', 'font-weight': 'bold'
-          }, `#${diff.index}`);
-
-          this.diffSvgLayer.append(sL1, cL1, sL2, cL2, badge);
-        });
-      }
-
-      // 3. Text & Tight Bracket / Box Rendering
-      this.textBadgesLayer.innerHTML = '';
-      const oldTextShadows = this.shadowLayer.querySelectorAll('.qa-attached-text-shadow');
-      oldTextShadows.forEach(el => el.remove());
-
-      const shadowOffset = 2.0;
-      const shadowColor = 'rgba(10, 15, 25, 0.95)';
-
-      this.stageState.annotations.forEach(ann => {
-        if (ann.type === 'curve' && ann.text && ann.beziers && ann.beziers.length > 0) {
-          const lastSeg = ann.beziers[ann.beziers.length - 1];
-          const tailPt = lastSeg[3];
-
-          const exitDx = tailPt[0] - lastSeg[2][0];
-          const isLeft = (ann.justifySide === 'left') || (exitDx >= 0);
-          const textAnchor = isLeft ? 'start' : 'end';
-
-          const fontF = ann.fontFamily || this.stageState.fontFamily || "'Architects Daughter', cursive, sans-serif";
-          const fontS = ann.fontSize || this.stageState.fontSize || 22;
-          const strokeW = ann.strokeWidth || this.stageState.curveStrokeWidth || 3.2;
-          const boxStyle = ann.boxStyle || (ann.hasTextBox ? 'box' : 'none');
-
-          this.ensureFontLoaded(fontF);
-
-          const lines = String(ann.text).split('\n');
-          const lineHeight = fontS * 1.25;
-
-          const charW = fontS * (fontF.includes('mono') ? 0.60 : 0.52);
-          let maxLineChars = 0;
-          lines.forEach(l => { if (l.length > maxLineChars) maxLineChars = l.length; });
-
-          const paddingX = boxStyle !== 'none' ? 8 : 2;
-          const paddingY = boxStyle !== 'none' ? 4 : 2;
-          const txtWidth = Math.round(maxLineChars * charW);
-          const boxWidth = txtWidth + paddingX * 2;
-          const boxHeight = Math.round(lines.length * lineHeight + paddingY * 2);
-
-          const lOff = ann.labelOffset || [0, 0];
-          const boxX = (isLeft ? tailPt[0] : tailPt[0] - boxWidth) + lOff[0];
-          const boxY = Math.round(tailPt[1] - boxHeight / 2) + lOff[1];
-          const textX = isLeft ? boxX + paddingX : boxX + boxWidth - paddingX;
-          const textStartY = Math.round(boxY + paddingY + fontS * 0.92);
-
-          const labelGroup = makeElement('svg:g', {
-            className: 'qa-movable-label-group',
-            style: { cursor: 'move', userSelect: 'none' }
-          });
-
-          let draggingLabel = false;
-          let startM = [0, 0];
-          let initialTail = [tailPt[0], tailPt[1]];
-
-          labelGroup.addEventListener('mousedown', (e) => {
-            e.stopPropagation();
-            draggingLabel = true;
-            startM = [e.clientX, e.clientY];
-            if (ann.vertices && ann.vertices.length > 0) {
-              const vTail = ann.vertices[ann.vertices.length - 1];
-              initialTail = [vTail.point[0], vTail.point[1]];
-            } else {
-              initialTail = [tailPt[0], tailPt[1]];
-            }
-          });
-
-          const onLabelMove = (e) => {
-            if (!draggingLabel) return;
-            const z = this.stageState.zoom;
-            const dx = (e.clientX - startM[0]) / z;
-            const dy = (e.clientY - startM[1]) / z;
-
-            if (ann.vertices && ann.vertices.length > 0) {
-              const vTail = ann.vertices[ann.vertices.length - 1];
-              vTail.point[0] = initialTail[0] + dx;
-              vTail.point[1] = initialTail[1] + dy;
-              ann.beziers = this.verticesToBeziers(ann.vertices);
-
-              let d = 'M ' + ann.beziers[0][0].join(' ');
-              for (let i = 0; i < ann.beziers.length; i++) {
-                const [start, cp1, cp2, end] = ann.beziers[i];
-                d += ` C ${cp1.join(' ')}, ${cp2.join(' ')}, ${end.join(' ')}`;
-              }
-              if (ann.elements[0]) ann.elements[0].setAttribute('d', d);
-              if (ann.elements[1]) ann.elements[1].setAttribute('d', d);
-            }
-
-            this.renderStage();
-          };
-
-          const onLabelUp = () => { draggingLabel = false; };
-          window.addEventListener('mousemove', onLabelMove);
-          window.addEventListener('mouseup', onLabelUp);
-
-          if (boxStyle === 'box') {
-            const boxShadow = makeElement('svg:rect', {
-              className: 'qa-attached-text-shadow',
-              x: boxX + shadowOffset, y: boxY + shadowOffset,
-              width: boxWidth, height: boxHeight, rx: '5',
-              fill: shadowColor, stroke: shadowColor,
-              'stroke-width': String(strokeW + 2.3),
-              'stroke-linecap': 'round', 'stroke-linejoin': 'round'
-            });
-            this.shadowLayer.appendChild(boxShadow);
-
-            const boxRect = makeElement('svg:rect', {
-              x: boxX, y: boxY, width: boxWidth, height: boxHeight, rx: '5',
-              fill: 'rgba(15, 23, 42, 0.96)', stroke: ann.color,
-              'stroke-width': String(strokeW),
-              'stroke-linecap': 'round', 'stroke-linejoin': 'round'
-            });
-            labelGroup.appendChild(boxRect);
-          } else if (boxStyle === 'bracket') {
-            const bottomY = boxY + boxHeight;
-            const sideX = isLeft ? boxX : boxX + boxWidth;
-            const oppX = isLeft ? boxX + boxWidth : boxX;
-
-            const bracketD = `M ${sideX} ${boxY} L ${sideX} ${bottomY} L ${oppX} ${bottomY}`;
-
-            const bracketShadow = makeElement('svg:path', {
-              className: 'qa-attached-text-shadow',
-              d: bracketD,
-              transform: `translate(${shadowOffset}, ${shadowOffset})`,
-              fill: 'none', stroke: shadowColor,
-              'stroke-width': String(strokeW + 2.3),
-              'stroke-linecap': 'round', 'stroke-linejoin': 'round'
-            });
-            this.shadowLayer.appendChild(bracketShadow);
-
-            const bracketFg = makeElement('svg:path', {
-              d: bracketD,
-              fill: 'none', stroke: ann.color,
-              'stroke-width': String(strokeW),
-              'stroke-linecap': 'round', 'stroke-linejoin': 'round'
-            });
-            labelGroup.appendChild(bracketFg);
-          }
-
-          const textShadow = makeElement('svg:text', {
-            className: 'qa-attached-text-shadow',
-            x: textX + shadowOffset,
-            y: textStartY + shadowOffset,
-            'text-anchor': textAnchor,
-            fill: shadowColor, stroke: shadowColor,
-            'stroke-width': '2.5',
-            'stroke-linejoin': 'round',
-            'font-family': fontF,
-            'font-size': `${fontS}px`,
-            'font-weight': 'bold',
-            style: { userSelect: 'none' }
-          });
-
-          lines.forEach((line, i) => {
-            textShadow.appendChild(makeElement('svg:tspan', {
-              x: textX + shadowOffset,
-              dy: i === 0 ? '0' : `${lineHeight}px`
-            }, line));
-          });
-          this.shadowLayer.appendChild(textShadow);
-
-          const fgText = makeElement('svg:text', {
-            x: textX, y: textStartY,
-            'text-anchor': textAnchor,
-            fill: ann.color,
-            'font-family': fontF,
-            'font-size': `${fontS}px`,
-            'font-weight': 'bold',
-            style: { userSelect: 'none' },
-            ondblclick: (e) => {
-              e.stopPropagation();
-              this._promptInlineTailText(ann, tailPt, isLeft ? 'left' : 'right');
-            }
-          });
-
-          lines.forEach((line, i) => {
-            fgText.appendChild(makeElement('svg:tspan', {
-              x: textX,
-              dy: i === 0 ? '0' : `${lineHeight}px`
-            }, line));
-          });
-
-          labelGroup.appendChild(fgText);
-          this.textBadgesLayer.appendChild(labelGroup);
-        }
-      });
-
-      if (this.stageState.activeTool === 'select') {
-        this.exposeDiffLensDragHandles(tf);
+    const k = committedVerts.length - 1;
+    let dSolid = '';
+    if (k > 0) {
+      dSolid = 'M ' + beziers[0][0].join(' ');
+      for (let i = 0; i < k; i++) {
+        const [start, cp1, cp2, end] = beziers[i];
+        dSolid += ` C ${cp1.join(' ')}, ${cp2.join(' ')}, ${end.join(' ')}`;
       }
     }
-  exposeDiffLensDragHandles(tf) {
-    this.controlsLayer.innerHTML = '';
 
-    this.stageState.diffCallouts.forEach(diff => {
-      const dragX = diff.dragX + tf.offsetX;
-      const dragY = diff.dragY + tf.offsetY;
+    const lastSeg = beziers[k];
+    const dDashed = `M ${lastSeg[0].join(' ')} C ${lastSeg[1].join(' ')}, ${lastSeg[2].join(' ')}, ${lastSeg[3].join(' ')}`;
 
-      const handle = makeElement('svg:circle', {
-        cx: dragX, cy: dragY, r: '12',
-        fill: 'rgba(0, 242, 254, 0.8)',
-        stroke: '#ffffff', 'stroke-width': '2',
-        title: `Drag Lens Pair #${diff.index}`,
-        style: { cursor: 'move' }
+    if (!this.svgSurface._penSolidPreview) {
+      this.svgSurface._penSolidPreview = makeElement('svg:path', {
+        stroke: this.stageState.currentColor,
+        'stroke-width': String(this.stageState.curveStrokeWidth || 3.2),
+        fill: 'none', style: { pointerEvents: 'none' }
       });
+      this.strokeLayer.appendChild(this.svgSurface._penSolidPreview);
+    }
+    this.svgSurface._penSolidPreview.setAttribute('d', dSolid);
 
-      let dragging = false;
-      let startM = [0, 0];
-      let startD = [diff.dragX, diff.dragY];
+    if (!this.svgSurface._penDashedPreview) {
+      this.svgSurface._penDashedPreview = makeElement('svg:path', {
+        stroke: this.stageState.currentColor,
+        'stroke-width': String(this.stageState.curveStrokeWidth || 3.2),
+        'stroke-dasharray': '5,4',
+        fill: 'none', style: { pointerEvents: 'none' }
+      });
+      this.strokeLayer.appendChild(this.svgSurface._penDashedPreview);
+    }
+    this.svgSurface._penDashedPreview.setAttribute('d', dDashed);
+  }
 
-      handle.onmousedown = (e) => {
-        dragging = true;
-        startM = [e.clientX, e.clientY];
-        startD = [diff.dragX, diff.dragY];
-        e.stopPropagation();
+  commitPenNodes() {
+    if (!this._penNodes || this._penNodes.length < 2) {
+      this.cancelPenNodes();
+      return;
+    }
+
+    const committedPoints = [...this._penNodes];
+    this.cancelPenNodes();
+
+    const vertices = committedPoints.map(pt => new BezierVertex(pt.slice()));
+    if (typeof UpdateControlPoints !== 'undefined') {
+      UpdateControlPoints.run(vertices, 8);
+    }
+    const beziers = this.verticesToBeziers(vertices);
+
+    if (beziers && beziers.length > 0) {
+      this.commitSpline(beziers, this.stageState.currentColor, this.stageState.hasArrow);
+      const lastAnn = this.stageState.annotations[this.stageState.annotations.length - 1];
+      if (lastAnn && lastAnn.type === 'curve') {
+        lastAnn.vertices = vertices;
+      }
+    }
+  }
+
+  cancelPenNodes() {
+    this._penNodes = null;
+    this.controlsLayer.querySelectorAll('.qa-pen-active-anchor').forEach(el => el.remove());
+    if (this.svgSurface._penSolidPreview) {
+      this.svgSurface._penSolidPreview.remove();
+      this.svgSurface._penSolidPreview = null;
+    }
+    if (this.svgSurface._penDashedPreview) {
+      this.svgSurface._penDashedPreview.remove();
+      this.svgSurface._penDashedPreview = null;
+    }
+  }
+
+  // ── Smart Knot & Curve Actions ──
+  addKnotToActiveCurve() {
+    const curve = this.getActiveCurve();
+    if (!curve || !curve.vertices || curve.vertices.length < 2) {
+      this.showKnotToast('Select a curve to insert an on-curve point');
+      return;
+    }
+
+    const idx = Math.max(0, Math.min(this._activeKnotIdx || 0, curve.vertices.length - 2));
+    const v1 = curve.vertices[idx];
+    const v2 = curve.vertices[idx + 1];
+
+    const midPt = [(v1.point[0] + v2.point[0]) / 2, (v1.point[1] + v2.point[1]) / 2];
+    const newKnot = new BezierVertex(midPt);
+    newKnot.curvature = 1.0;
+    newKnot.balance = 1.0;
+    newKnot.tangentAngleOffset = 0;
+
+    curve.vertices.splice(idx + 1, 0, newKnot);
+    this._activeKnotIdx = idx + 1;
+
+    this.commitCurveGeometryUpdate();
+    this.exposeBezierHandles(curve);
+    this.showKnotToast(`✓ Point inserted at position ${idx + 2}`);
+  }
+
+  toggleArrowhead() {
+    this.stageState.hasArrow = !this.stageState.hasArrow;
+    if (this.arrowBtn) {
+      this.arrowBtn.classList.toggle('primary', this.stageState.hasArrow);
+      this.arrowBtn.textContent = this.stageState.hasArrow ? '🏹 Arrow: ON' : '🏹 Arrow: OFF';
+    }
+
+    const curve = this.getActiveCurve();
+    if (curve) {
+      curve.arrowEnd = this.stageState.hasArrow ? 'tip' : 'none';
+      this.commitCurveGeometryUpdate();
+    }
+  }
+
+  triggerTextOnActiveOrCanvas() {
+    const curve = this.getActiveCurve();
+    if (curve && curve.beziers?.length > 0) {
+      const termSeg = (curve.textEnd !== 'tip') ? curve.beziers[curve.beziers.length - 1] : curve.beziers[0];
+      const anchorPt = (curve.textEnd !== 'tip') ? termSeg[3] : termSeg[0];
+      this._promptInlineTailText(curve, anchorPt, 'left');
+    } else {
+      const tf = this.computeAutoBounds();
+      this.promptDirectTextBadge(tf.totalW / 2 - 40, tf.totalH / 2 - 20);
+    }
+  }
+
+  // ── Synchronous Color Picker Launch ──
+  launchColorPicker(targetMode = 'curve', triggerBtn = null) {
+    const curColor = this.stageState.currentColor;
+    if (typeof ColorPicker === 'undefined') return;
+
+    if (!this._colorPickerInstance) {
+      this._colorPickerInstance = new ColorPicker();
+    }
+
+    const onColorChosen = (newCol) => {
+      this.stageState.currentColor = newCol;
+      if (this.colorIndicatorDot) this.colorIndicatorDot.style.background = newCol;
+
+      const curCurve = this.getActiveCurve();
+      if (curCurve) {
+        curCurve.color = newCol;
+      }
+      this.renderStage();
+    };
+
+    const targetEl = triggerBtn || this.colorPickerBtn;
+    this._colorPickerInstance.openSmartPicker(targetEl, curColor, onColorChosen);
+
+    // Initial color sync: safely parses and initializes HueRing and Triangle
+    setTimeout(() => {
+      if (ColorPicker.activeInstance) {
+        if (ColorPicker.activeInstance.currentTriangle) {
+          ColorPicker.activeInstance.currentTriangle.setColor(curColor);
+        }
+        if (ColorPicker.activeInstance.currentHueRing) {
+          const parseColor = (c) => {
+            if (typeof AppColorUtils !== 'undefined' && AppColorUtils.rgbStringToRgbArray) {
+              const arr = AppColorUtils.rgbStringToRgbArray(c);
+              if (arr) return arr;
+            }
+            if (c && c.startsWith('#')) {
+              let hex = c.slice(1);
+              if (hex.length === 3) hex = hex.split('').map(x => x + x).join('');
+              return [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)];
+            }
+            return [0, 230, 118];
+          };
+
+          const rgb = parseColor(curColor);
+          const hsv = AppColorUtils.rgbToHsv(rgb[0], rgb[1], rgb[2]);
+          const ryb = ColorPicker.activeInstance._rgbToRyb(hsv.h);
+          ColorPicker.activeInstance.currentHueRing.setHue(ryb);
+          ColorPicker.activeInstance.currentHueRing.setThumbColor(curColor);
+          ColorPicker.activeInstance.currentHueRing.externalColorOverride = true;
+        }
+      }
+    }, 40);
+  }
+
+  async pasteFromClipboardAction() {
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        for (const type of item.types) {
+          if (type.startsWith('image/')) {
+            const blob = await item.getType(type);
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+              const img = new Image();
+              img.onload = () => this.addNewImagePlate(img, 70, 70);
+              img.src = ev.target.result;
+            };
+            reader.readAsDataURL(blob);
+            return;
+          }
+        }
+      }
+      this.showKnotToast('Clipboard has no image. Try Ctrl+V or drop a file.');
+    } catch (e) {
+      this.showKnotToast('Press Ctrl+V to paste image directly');
+    }
+  }
+
+  // ── Physically Colinear Outbound Tangent Vector ──
+  computeCurveExitVector(curveRecord, knotIdx) {
+    if (!curveRecord || !curveRecord.beziers || curveRecord.beziers.length === 0) return [1, 0];
+    const beziers = curveRecord.beziers;
+    const n = beziers.length;
+
+    if (knotIdx === 0) {
+      const p0 = beziers[0][0];
+      const p1 = beziers[0][1];
+      const dx = p0[0] - p1[0];
+      const dy = p0[1] - p1[1];
+      const len = Math.hypot(dx, dy) || 1;
+      return [dx / len, dy / len];
+    }
+
+    if (knotIdx >= n) {
+      const lastSeg = beziers[n - 1];
+      const p2 = lastSeg[2];
+      const p3 = lastSeg[3];
+      const dx = p3[0] - p2[0];
+      const dy = p3[1] - p2[1];
+      const len = Math.hypot(dx, dy) || 1;
+      return [dx / len, dy / len];
+    }
+
+    const segBefore = beziers[knotIdx - 1];
+    const segAfter = beziers[knotIdx];
+    const p2Before = segBefore[2];
+    const p1After = segAfter[1];
+    const dx = p1After[0] - p2Before[0];
+    const dy = p1After[1] - p2Before[1];
+    const len = Math.hypot(dx, dy) || 1;
+    return [dx / len, dy / len];
+  }
+
+  renderOutboundTangentRay(curveRecord, knotIdx, updateGeometryFn) {
+    const existing = document.getElementById('qa-outbound-tangent-ray');
+    if (existing) existing.remove();
+
+    const vertices = curveRecord.vertices;
+    if (!vertices || vertices.length < 2) return;
+    const v = vertices[knotIdx] || vertices[0];
+    const prevV = vertices[knotIdx - 1];
+    const nextV = vertices[knotIdx + 1];
+
+    const pt = v.point;
+    const rayLength = 54;
+    const actualDir = this.computeCurveExitVector(curveRecord, knotIdx);
+    const actualAngle = Math.atan2(actualDir[1], actualDir[0]);
+
+    let naturalDir = [1, 0];
+    if (!prevV && nextV) {
+      const dx = v.point[0] - nextV.point[0];
+      const dy = v.point[1] - nextV.point[1];
+      const l = Math.hypot(dx, dy) || 1;
+      naturalDir = [dx / l, dy / l];
+    } else if (prevV && !nextV) {
+      const dx = v.point[0] - prevV.point[0];
+      const dy = v.point[1] - prevV.point[1];
+      const l = Math.hypot(dx, dy) || 1;
+      naturalDir = [dx / l, dy / l];
+    } else if (prevV && nextV) {
+      const dx = nextV.point[0] - prevV.point[0];
+      const dy = nextV.point[1] - prevV.point[1];
+      const l = Math.hypot(dx, dy) || 1;
+      naturalDir = [dx / l, dy / l];
+    }
+    const naturalAngle = Math.atan2(naturalDir[1], naturalDir[0]);
+
+    const isNonDefault = Math.abs(v.tangentAngleOffset || 0) > 0.001;
+    const g = makeElement('svg:g', { id: 'qa-outbound-tangent-ray' });
+
+    if (isNonDefault) {
+      const naturalEnd = [pt[0] + Math.cos(naturalAngle) * rayLength, pt[1] + Math.sin(naturalAngle) * rayLength];
+      g.appendChild(makeElement('svg:line', {
+        x1: pt[0], y1: pt[1], x2: naturalEnd[0], y2: naturalEnd[1],
+        stroke: 'rgba(0, 242, 254, 0.45)', 'stroke-width': '1.5', 'stroke-dasharray': '2,4',
+        style: { pointerEvents: 'none' }
+      }));
+    }
+
+    const rayEnd = [pt[0] + Math.cos(actualAngle) * rayLength, pt[1] + Math.sin(actualAngle) * rayLength];
+
+    const line = makeElement('svg:line', {
+      x1: pt[0], y1: pt[1], x2: rayEnd[0], y2: rayEnd[1],
+      stroke: isNonDefault ? '#ffd700' : '#00f2fe',
+      'stroke-width': '2.2', 'stroke-linecap': 'round',
+      style: { pointerEvents: 'none', filter: 'drop-shadow(0 0 4px rgba(0,0,0,0.8))' }
+    });
+
+    const handle = makeElement('svg:circle', {
+      className: 'qa-tangent-handle',
+      cx: rayEnd[0], cy: rayEnd[1], r: '6.5',
+      fill: isNonDefault ? '#ffd700' : '#00f2fe',
+      stroke: '#ffffff', 'stroke-width': '2',
+      style: { cursor: 'crosshair', filter: 'drop-shadow(0 0 6px rgba(0,0,0,0.8))' },
+      title: 'Drag to adjust outbound angle • Snaps to natural baseline'
+    });
+
+    let draggingRay = false;
+    handle.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      draggingRay = true;
+
+      const onRayMove = (ev) => {
+        if (!draggingRay) return;
+        const rect = this.stageBox.getBoundingClientRect();
+        const z = this.stageState.zoom;
+        const mX = (ev.clientX - rect.left) / z;
+        const mY = (ev.clientY - rect.top) / z;
+
+        const cursorAngle = Math.atan2(mY - pt[1], mX - pt[0]);
+        let offsetRad = cursorAngle - naturalAngle;
+
+        while (offsetRad > Math.PI) offsetRad -= Math.PI * 2;
+        while (offsetRad < -Math.PI) offsetRad += Math.PI * 2;
+
+        if (Math.abs(offsetRad) < 0.10) {
+          offsetRad = 0;
+          this.showKnotToast('⚡ Snapped to Natural Zero-Strain Tangent');
+        } else if (v._savedConstraint && Math.abs(offsetRad - v._savedConstraint.offset) < 0.10) {
+          offsetRad = v._savedConstraint.offset;
+          this.showKnotToast('⚡ Locked to Original Tangency');
+        }
+
+        v.tangentAngleOffset = offsetRad;
+        updateGeometryFn();
+
+        const curAng = naturalAngle + offsetRad;
+        const newEnd = [pt[0] + Math.cos(curAng) * rayLength, pt[1] + Math.sin(curAng) * rayLength];
+        line.setAttribute('x2', newEnd[0]);
+        line.setAttribute('y2', newEnd[1]);
+        line.setAttribute('stroke', offsetRad === 0 ? '#00f2fe' : '#ffd700');
+        handle.setAttribute('cx', newEnd[0]);
+        handle.setAttribute('cy', newEnd[1]);
+        handle.setAttribute('fill', offsetRad === 0 ? '#00f2fe' : '#ffd700');
+        this.updateDynamicKeyInHUD();
       };
 
-      window.addEventListener('mousemove', (e) => {
-        if (!dragging) return;
-        const z = this.stageState.zoom || 1.0;
-        diff.dragX = startD[0] + (e.clientX - startM[0]) / z;
-        diff.dragY = startD[1] + (e.clientY - startM[1]) / z;
-        this.renderStage();
+      const onRayUp = () => {
+        draggingRay = false;
+        window.removeEventListener('mousemove', onRayMove);
+        window.removeEventListener('mouseup', onRayUp);
+      };
+
+      window.addEventListener('mousemove', onRayMove);
+      window.addEventListener('mouseup', onRayUp);
+    });
+
+    g.append(line, handle);
+    this.controlsLayer.appendChild(g);
+  }
+
+  // ── Stationary Segment Midpoint Split Points (t = 0.5) ──
+  renderSegmentMidpointIndicators(curveRecord) {
+    this.controlsLayer.querySelectorAll('.qa-segment-midpoint-group').forEach(el => el.remove());
+    if (!curveRecord || !curveRecord.beziers) return;
+
+    curveRecord.beziers.forEach((seg, segIdx) => {
+      const midPt = CurveFitter.bezier_q(seg, 0.5);
+
+      const g = makeElement('svg:g', {
+        className: 'qa-segment-midpoint-group',
+        style: { cursor: 'pointer' },
+        title: `Click or drag midpoint to split segment ${segIdx + 1}`
       });
 
-      window.addEventListener('mouseup', () => { dragging = false; });
-      this.controlsLayer.appendChild(handle);
+      const hitArea = makeElement('svg:circle', {
+        cx: midPt[0], cy: midPt[1], r: '14', fill: 'transparent'
+      });
+
+      const dot = makeElement('svg:circle', {
+        cx: midPt[0], cy: midPt[1], r: '3.5',
+        fill: 'rgba(0, 242, 254, 0.8)', stroke: '#ffffff', 'stroke-width': '1.2',
+        style: { transition: 'r 0.15s ease, fill 0.15s ease', pointerEvents: 'none' }
+      });
+
+      g.addEventListener('mouseenter', () => {
+        dot.setAttribute('r', '5.5');
+        dot.setAttribute('fill', '#00f2fe');
+        dot.style.filter = 'drop-shadow(0 0 6px #00f2fe)';
+      });
+
+      g.addEventListener('mouseleave', () => {
+        dot.setAttribute('r', '3.5');
+        dot.setAttribute('fill', 'rgba(0, 242, 254, 0.8)');
+        dot.style.filter = '';
+      });
+
+      let isDraggingMid = false;
+      let newKnot = null;
+
+      g.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        isDraggingMid = true;
+
+        if (!curveRecord.vertices || curveRecord.vertices.length === 0) {
+          curveRecord.vertices = this.beziersToVertices(curveRecord.beziers);
+        }
+
+        newKnot = new BezierVertex([midPt[0], midPt[1]]);
+        newKnot.curvature = 1.0;
+        newKnot.balance = 1.0;
+        newKnot.tangentAngleOffset = 0;
+
+        curveRecord.vertices.splice(segIdx + 1, 0, newKnot);
+        this._activeKnotIdx = segIdx + 1;
+
+        this.commitCurveGeometryUpdate();
+        this.exposeBezierHandles(curveRecord);
+
+        const onMidDrag = (ev) => {
+          if (!isDraggingMid) return;
+          const rect = this.stageBox.getBoundingClientRect();
+          const z = this.stageState.zoom;
+          newKnot.point[0] = (ev.clientX - rect.left) / z;
+          newKnot.point[1] = (ev.clientY - rect.top) / z;
+          this.commitCurveGeometryUpdate();
+          this.exposeBezierHandles(curveRecord);
+        };
+
+        const onMidUp = () => {
+          isDraggingMid = false;
+          window.removeEventListener('mousemove', onMidDrag);
+          window.removeEventListener('mouseup', onMidUp);
+          this.showKnotToast(`✓ Inserted knot #${segIdx + 2}`);
+        };
+
+        window.addEventListener('mousemove', onMidDrag);
+        window.addEventListener('mouseup', onMidUp);
+      });
+
+      g.append(hitArea, dot);
+      this.controlsLayer.appendChild(g);
     });
   }
 
-  getArrowMarker(color) {
-      const cleanId = 'arr_' + color.replace(/[^a-zA-Z0-9]/g, '_');
-      if (!this.svgDefs.querySelector(`#${cleanId}`)) {
-        // orient="auto-start-reverse" allows marker-start to point in the inward tangent direction
-        const marker = makeElement('svg:marker', {
-          id: cleanId, viewBox: '0 0 10 10', refX: '2', refY: '5',
-          markerWidth: '6.5', markerHeight: '6.5', orient: 'auto-start-reverse'
-        }, [
-          makeElement('svg:path', {
-            d: 'M 9 1.5 L 0 5 L 9 8.5 z', fill: color,
-            stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': '0.8'
-          })
-        ]);
-        this.svgDefs.appendChild(marker);
-      }
-      return cleanId;
+  // ── Unified Smart Curve Terminals ──
+  swapActiveCurveTerminals() {
+    const curve = this.getActiveCurve();
+    if (!curve || !curve.beziers || curve.beziers.length === 0) {
+      this.showKnotToast('No active curve to swap');
+      return;
     }
 
-  setupInteractions() {
-      this.setupKeyInMatrixHud();
-      this.setupImageDragDrop();
+    curve.arrowEnd = (curve.arrowEnd === 'tail') ? 'tip' : 'tail';
+    curve.textEnd = (curve.arrowEnd === 'tail') ? 'tip' : 'tail';
 
-      let isDrawing = false;
-      let strokePoints = [];
-      let activeTetherLine = null;
-      let activeEraseCircle = null;
+    this.commitCurveGeometryUpdate();
+    this.renderStage();
+    this.showKnotToast(`⇄ Swapped: Arrow is now at ${curve.arrowEnd.toUpperCase()}`);
+  }
 
-      const getStagePt = (e) => {
-        const rect = this.stageBox.getBoundingClientRect();
-        const z = this.stageState.zoom;
-        return [(e.clientX - rect.left) / z, (e.clientY - rect.top) / z];
-      };
+  // ── Direct Typography Tool ──
+  promptDirectTextBadge(x, y) {
+    this._promptInlineTailText(null, [x, y], 'left');
+  }
 
-      const rewindContiguousVertices = (cursorPt, radius = 24) => {
-        let poppedAny = false;
-        while (strokePoints.length > 1) {
-          const tip = strokePoints[strokePoints.length - 1];
-          const dist = Math.hypot(tip[0] - cursorPt[0], tip[1] - cursorPt[1]);
-          if (dist <= radius) {
-            strokePoints.pop();
-            poppedAny = true;
-          } else {
-            break;
-          }
-        }
-        return poppedAny;
-      };
+  _promptInlineTailText(curveRecord, anchorPt, justifySide = 'left') {
+      const existing = document.getElementById('qa-inline-tail-editor');
+      if (existing) existing.remove();
 
-      // Global Key-in Dispatcher
-      if (!this._hasBoundGlobalKeys) {
-        this._hasBoundGlobalKeys = true;
-        window.addEventListener('keydown', (e) => {
-          if (e.target.closest('input, textarea, [contenteditable="true"]')) return;
+      const isLeft = (justifySide === 'left');
+      const width = 260;
+      const posX = isLeft ? anchorPt[0] + 4 : anchorPt[0] - width - 4;
+      const posY = anchorPt[1] - 22;
 
-          if (e.code === 'Space') {
-            e.preventDefault();
-            this.executeKeyInCommand('toggle_tool', e);
-            return;
-          }
-          if (e.key === 'Tab') {
-            e.preventDefault();
-            this.executeKeyInCommand('next_knot', e);
-            return;
-          }
-          if (e.key === 'c' || e.key === 'C') {
-            if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-              e.preventDefault();
-              this.executeKeyInCommand('toggle_cusp', e);
-              return;
-            }
-          }
-          if (e.key === 'b' || e.key === 'B') {
-            if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-              e.preventDefault();
-              this.executeKeyInCommand('cycle_balance', e);
-              return;
-            }
-          }
-          if (e.key === 's' || e.key === 'S') {
-            if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-              e.preventDefault();
-              this.executeKeyInCommand('straighten', e);
-              return;
-            }
-          }
-          if (e.key === 'r' || e.key === 'R') {
-            if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-              e.preventDefault();
-              this.executeKeyInCommand('reset_knot', e);
-              return;
-            }
-          }
-          if (e.key === 'w' || e.key === 'W') {
-            if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-              e.preventDefault();
-              this.executeKeyInCommand('wipe_curve', e);
-              return;
-            }
-          }
-          if (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '_') {
-            if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-              e.preventDefault();
-              this.executeKeyInCommand('tune_curvature', e);
-              return;
-            }
-          }
-          if (e.key === '[' || e.key === ']') {
-            if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-              e.preventDefault();
-              this.executeKeyInCommand('tune_tangent', e);
-              return;
-            }
-          }
-          if (e.key === 'd' || e.key === 'D') {
-            if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-              e.preventDefault();
-              this.openDevDeckDialog();
-              return;
-            }
-          }
-          if (e.key === 'Delete' || e.key === 'Backspace') {
-            e.preventDefault();
-            this.executeKeyInCommand('delete_curve', e);
-            return;
-          }
-          if (e.key === 'Enter') {
-            if (this._activePenVertices && this._activePenVertices.length >= 2) {
-              e.preventDefault();
-              this.commitPenCurve();
-              return;
-            }
-          }
-          if (e.key === 'Escape') {
-            if (this._activePenVertices && this._activePenVertices.length > 0) {
-              e.preventDefault();
-              this.cancelPenCurve();
-              return;
-            }
-          }
-        });
-      }
+      let fontF = curveRecord?.fontFamily || this.stageState.fontFamily;
+      let fontS = curveRecord?.fontSize || this.stageState.fontSize;
+      let boxStyle = curveRecord?.boxStyle || 'bracket';
+      const color = curveRecord?.color || this.stageState.currentColor;
 
-      let brushStampCircle = null;
-      const updateBrushCursor = (pt) => {
-        if (this.stageState.activeTool !== 'paint') {
-          if (brushStampCircle) { brushStampCircle.remove(); brushStampCircle = null; }
-          return;
-        }
-        if (!brushStampCircle) {
-          brushStampCircle = makeElement('svg:circle', {
-            fill: 'none', stroke: '#00f2fe', 'stroke-width': '1.2', 'stroke-dasharray': '3,3',
-            style: { pointerEvents: 'none' }
-          });
-          this.controlsLayer.appendChild(brushStampCircle);
-        }
-        brushStampCircle.setAttribute('cx', pt[0]);
-        brushStampCircle.setAttribute('cy', pt[1]);
-        brushStampCircle.setAttribute('r', String(this.stageState.brushSize / 2));
-      };
-
-      this.svgSurface.addEventListener('mouseenter', (e) => {
-        if (this.stageState.activeTool === 'paint') updateBrushCursor(getStagePt(e));
-      });
-
-      this.svgSurface.addEventListener('mouseleave', () => {
-        if (brushStampCircle) { brushStampCircle.remove(); brushStampCircle = null; }
-      });
-
-      // Handle Discrete Node placement click versus Drag-Tether
-      this.svgSurface.addEventListener('click', (e) => {
-        if (e.target.closest('.qa-on-curve-knot-handle, #qa-tail-settings-hud, foreignObject, .qa-movable-label-group, #qa-keyin-matrix-hud')) return;
-        if (this.stageState.activeTool === 'click_nodes') {
-          const pt = getStagePt(e);
-          this.addPenVertex(pt);
+      const editorWrap = makeElement('div', {
+        id: 'qa-inline-tail-editor',
+        style: {
+          position: 'absolute', top: `${posY}px`, left: `${posX}px`, width: `${width}px`,
+          zIndex: '70', display: 'flex', flexDirection: 'column', gap: '6px'
         }
       });
 
-      this.svgSurface.addEventListener('dblclick', (e) => {
-        if (this.stageState.activeTool === 'click_nodes') {
-          e.preventDefault();
+      const textarea = makeElement('textarea', {
+        placeholder: 'Type callout text...',
+        value: curveRecord?.text || '',
+        rows: 1,
+        style: {
+          width: '100%', minHeight: '36px', maxHeight: '160px', padding: '6px 8px',
+          fontSize: `${fontS}px`, fontFamily: fontF, fontWeight: 'bold', lineHeight: '1.25',
+          color: color, background: boxStyle === 'box' ? 'rgba(15, 23, 42, 0.96)' : 'rgba(0, 0, 0, 0.75)',
+          border: boxStyle === 'box' ? `2px solid ${color}` : (boxStyle === 'bracket' ? `none` : '1.5px dashed rgba(255, 255, 255, 0.4)'),
+          borderBottom: (boxStyle === 'bracket') ? `2.5px solid ${color}` : undefined,
+          borderLeft: (boxStyle === 'bracket' && isLeft) ? `2.5px solid ${color}` : undefined,
+          borderRight: (boxStyle === 'bracket' && !isLeft) ? `2.5px solid ${color}` : undefined,
+          borderRadius: boxStyle === 'box' ? '6px' : '0', outline: 'none', resize: 'none',
+          boxSizing: 'border-box', textAlign: isLeft ? 'left' : 'right'
+        }
+      });
+
+      const autoGrow = () => {
+        textarea.style.height = 'auto';
+        textarea.style.height = `${Math.max(36, textarea.scrollHeight)}px`;
+      };
+
+      const controlsRow = makeElement('div', {
+        style: {
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px',
+          background: 'rgba(15, 23, 42, 0.98)', border: '1px solid rgba(255,255,255,0.18)',
+          borderRadius: '6px', padding: '4px 8px', fontSize: '10px'
+        }
+      });
+
+      const styleBtn = makeElement('button', {
+        className: 'dr-nav-btn primary',
+        style: { padding: '2px 6px', fontSize: '10px' },
+        title: 'Cycle Frame: 2-Side Bracket ➔ 4-Side Box ➔ Plain',
+        onclick: (e) => {
           e.stopPropagation();
-          this.commitPenCurve();
+          const styles = ['bracket', 'box', 'none'];
+          boxStyle = styles[(styles.indexOf(boxStyle) + 1) % styles.length];
+          if (curveRecord) curveRecord.boxStyle = boxStyle;
+          styleBtn.textContent = boxStyle === 'bracket' ? '◺ Bracket' : (boxStyle === 'box' ? '◻ Box' : 'Plain');
+          textarea.style.border = boxStyle === 'box' ? `2px solid ${color}` : (boxStyle === 'bracket' ? `none` : '1.5px dashed rgba(255, 255, 255, 0.4)');
+          textarea.style.borderBottom = (boxStyle === 'bracket') ? `2.5px solid ${color}` : '';
+          textarea.style.borderLeft = (boxStyle === 'bracket' && isLeft) ? `2.5px solid ${color}` : '';
+          textarea.style.borderRight = (boxStyle === 'bracket' && !isLeft) ? `2.5px solid ${color}` : '';
+          textarea.style.borderRadius = boxStyle === 'box' ? '6px' : '0';
+          if (curveRecord) this.renderStage();
+        }
+      }, boxStyle === 'bracket' ? '◺ Bracket' : (boxStyle === 'box' ? '◻ Box' : 'Plain'));
+
+      const fontSelect = makeElement('select', {
+        style: {
+          background: '#0d1117', color: '#00f2fe', border: '1px solid #30363d',
+          borderRadius: '4px', padding: '1px 4px', fontSize: '9.5px', fontFamily: 'monospace', outline: 'none'
+        },
+        onchange: (e) => {
+          fontF = e.target.value;
+          this.ensureFontLoaded(fontF);
+          if (curveRecord) curveRecord.fontFamily = fontF;
+          textarea.style.fontFamily = fontF;
+          autoGrow();
+          if (curveRecord) this.renderStage();
+        }
+      }, [
+        makeElement('option', { value: "'Architects Daughter', cursive, sans-serif", selected: fontF.includes('Architects') }, "Architect"),
+        makeElement('option', { value: "monospace", selected: fontF === 'monospace' }, "Mono"),
+        makeElement('option', { value: "'Plus Jakarta Sans', system-ui, sans-serif", selected: fontF.includes('Jakarta') }, "Sans")
+      ]);
+
+      const sizeSlider = makeElement('input', {
+        type: 'range', min: '14', max: '48', value: String(fontS),
+        style: { width: '55px', accentColor: '#00f2fe', cursor: 'pointer' },
+        oninput: (e) => {
+          fontS = parseInt(e.target.value, 10);
+          if (curveRecord) curveRecord.fontSize = fontS;
+          textarea.style.fontSize = `${fontS}px`;
+          autoGrow();
+          if (curveRecord) this.renderStage();
         }
       });
 
-      this.svgSurface.addEventListener('mousedown', (e) => {
-        if (e.target.closest('.qa-on-curve-knot-handle, #qa-tail-settings-hud, foreignObject, .qa-movable-label-group, #qa-keyin-matrix-hud')) return;
+      let committed = false;
+      let onOutClick = null;
 
-        const pt = getStagePt(e);
+      const commit = () => {
+        if (committed) return;
+        committed = true;
+        if (onOutClick) window.removeEventListener('mousedown', onOutClick);
 
-        // Select / Tweak Tool
-        if (this.stageState.activeTool === 'select') {
-          let bestCurve = null;
-          let bestDist = 32;
-
-          this.stageState.annotations.forEach(ann => {
-            if (ann.type === 'curve' && ann.beziers) {
-              ann.beziers.forEach(seg => {
-                for (let t = 0; t <= 1; t += 0.15) {
-                  const q = CurveFitter.bezier_q(seg, t);
-                  const d = Math.hypot(q[0] - pt[0], q[1] - pt[1]);
-                  if (d < bestDist) {
-                    bestDist = d;
-                    bestCurve = ann;
-                  }
-                }
-              });
-            }
+        const textVal = textarea.value.trim();
+        if (curveRecord) {
+          curveRecord.text = textVal;
+          curveRecord.justifySide = isLeft ? 'left' : 'right';
+          curveRecord.fontSize = fontS;
+          curveRecord.fontFamily = fontF;
+          curveRecord.boxStyle = boxStyle;
+        } else if (textVal) {
+          this.stageState.annotations.push({
+            id: 'text_' + Date.now(),
+            type: 'text_badge',
+            x: anchorPt[0],
+            y: anchorPt[1],
+            text: textVal,
+            fontSize: fontS,
+            fontFamily: fontF,
+            boxStyle: boxStyle,
+            color: color
           });
-
-          if (bestCurve) {
-            this.exposeBezierHandles(bestCurve);
-            if (this._devDeckDialog) this.updateDevDeckUI();
-          } else {
-            this.controlsLayer.innerHTML = '';
-            this.stageState.selectedItem = null;
-            document.querySelectorAll('.qa-crisp-strokes path').forEach(p => p.style.filter = '');
-            if (this._devDeckDialog) this.updateDevDeckUI();
-          }
-          return;
         }
 
-        if (this.stageState.activeTool === 'click_nodes') {
-          // Managed by click listener above
-          return;
+        editorWrap.remove();
+        this.renderStage();
+      };
+
+      const okBtn = makeElement('button', {
+        className: 'dr-nav-btn primary',
+        style: { padding: '2px 7px', fontSize: '10px', background: '#238636', borderColor: '#2ea043' },
+        onclick: (e) => { e.stopPropagation(); commit(); }
+      }, '✓ OK');
+
+      controlsRow.append(styleBtn, fontSelect, sizeSlider, okBtn);
+      editorWrap.append(textarea, controlsRow);
+      this.stageBox.appendChild(editorWrap);
+
+      textarea.addEventListener('input', autoGrow);
+      textarea.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey) {
+          e.preventDefault(); commit();
+        } else if (e.key === 'Escape') {
+          e.preventDefault(); textarea.value = ''; commit();
         }
-
-        this.controlsLayer.innerHTML = '';
-        this.stageState.selectedItem = null;
-
-        if (this.stageState.activeTool === 'crop') {
-          this.startCropMarquee(pt);
-          return;
-        }
-
-        if (this.stageState.activeTool === 'balloon') {
-          this.createSpeechCallout(pt[0], pt[1]);
-          return;
-        }
-
-        isDrawing = true;
-        strokePoints = [pt];
       });
 
-      window.addEventListener('mousemove', (e) => {
-        const pt = getStagePt(e);
-        if (this.stageState.activeTool === 'paint') updateBrushCursor(pt);
+      onOutClick = (ev) => {
+        if (!editorWrap.contains(ev.target)) commit();
+      };
 
-        if (this.stageState.activeTool === 'click_nodes') {
-          this.updatePenTentativePreview(pt);
-          return;
-        }
-
-        if (!isDrawing) return;
-
-        if (this.stageState.activeTool === 'crop') {
-          this.updateCropMarquee(pt);
-          return;
-        }
-
-        if (this.stageState.activeTool === 'paint') {
-          if (this.stageState.brushMode === 'rect') {
-            this.previewBlockoutRect(strokePoints[0], pt);
-            return;
-          } else if (this.stageState.brushMode === 'oval') {
-            this.previewBlockoutOval(strokePoints[0], pt);
-            return;
-          }
-
-          strokePoints.push(pt);
-          const pathD = strokePoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p[0]} ${p[1]}`).join(' ');
-          if (!this.svgSurface._paintPreview) {
-            this.svgSurface._paintPreview = makeElement('svg:path', {
-              stroke: this.stageState.brushColor,
-              'stroke-width': String(this.stageState.brushSize),
-              'stroke-linecap': 'round',
-              'stroke-linejoin': 'round',
-              fill: 'none',
-              ...(this.stageState.brushSoftness > 0 ? { filter: 'url(#qa-brush-blur)' } : {})
-            });
-            this.paintLayer.appendChild(this.svgSurface._paintPreview);
-          }
-          this.svgSurface._paintPreview.setAttribute('d', pathD);
-          return;
-        }
-
-        // Spline draw with kinetic string-tether
-        const isShiftRewinding = e.shiftKey;
-        const isTethering = (this.stageState.tetherActive || e.ctrlKey || e.metaKey) && !isShiftRewinding;
-
-        const showEraseTarget = isShiftRewinding || (strokePoints.length > 2 && Math.hypot(pt[0] - strokePoints[strokePoints.length - 1][0], pt[1] - strokePoints[strokePoints.length - 1][1]) < this.stageState.eraseRadius);
-
-        if (showEraseTarget) {
-          if (!activeEraseCircle) {
-            activeEraseCircle = makeElement('svg:circle', {
-              r: String(this.stageState.eraseRadius),
-              fill: 'rgba(255, 45, 85, 0.16)',
-              stroke: '#ff2d55',
-              'stroke-width': '1.5',
-              'stroke-dasharray': '3,3',
-              style: { pointerEvents: 'none' }
-            });
-            this.controlsLayer.appendChild(activeEraseCircle);
-          }
-          activeEraseCircle.setAttribute('cx', pt[0]);
-          activeEraseCircle.setAttribute('cy', pt[1]);
-
-          const didRewind = rewindContiguousVertices(pt, this.stageState.eraseRadius);
-          if (didRewind) {
-            const updatedD = strokePoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p[0]} ${p[1]}`).join(' ');
-            if (this.svgSurface._preview) this.svgSurface._preview.setAttribute('d', updatedD);
-            return;
-          }
-        } else if (activeEraseCircle) {
-          activeEraseCircle.remove();
-          activeEraseCircle = null;
-        }
-
-        if (isTethering) {
-          if (!activeTetherLine) {
-            activeTetherLine = makeElement('svg:line', {
-              stroke: '#ffffff', 'stroke-width': '1.8', 'stroke-dasharray': '3,3',
-              filter: 'drop-shadow(0 0 4px #00e676)'
-            });
-            this.strokeLayer.appendChild(activeTetherLine);
-          }
-          const last = strokePoints[strokePoints.length - 1];
-          activeTetherLine.setAttribute('x1', last[0]);
-          activeTetherLine.setAttribute('y1', last[1]);
-          activeTetherLine.setAttribute('x2', pt[0]);
-          activeTetherLine.setAttribute('y2', pt[1]);
-
-          const dist = Math.hypot(pt[0] - last[0], pt[1] - last[1]);
-          if (dist > this.stageState.tetherLength) {
-            const ux = (pt[0] - last[0]) / dist;
-            const uy = (pt[1] - last[1]) / dist;
-            const leadPt = [pt[0] - ux * this.stageState.tetherLength, pt[1] - uy * this.stageState.tetherLength];
-            strokePoints.push(leadPt);
-          }
-        } else {
-          if (activeTetherLine) {
-            activeTetherLine.remove();
-            activeTetherLine = null;
-          }
-          strokePoints.push(pt);
-        }
-
-        const pathData = strokePoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p[0]} ${p[1]}`).join(' ');
-        if (!this.svgSurface._preview) {
-          this.svgSurface._preview = makeElement('svg:path', {
-            stroke: this.stageState.currentColor, 'stroke-width': '3.2', 'stroke-dasharray': '4,3', fill: 'none'
-          });
-          this.strokeLayer.appendChild(this.svgSurface._preview);
-        }
-        this.svgSurface._preview.setAttribute('d', pathData);
-      });
-
-      window.addEventListener('mouseup', (e) => {
-        if (!isDrawing) return;
-        isDrawing = false;
-
-        if (activeTetherLine) {
-          activeTetherLine.remove();
-          activeTetherLine = null;
-        }
-        if (activeEraseCircle) {
-          activeEraseCircle.remove();
-          activeEraseCircle = null;
-        }
-        if (this.svgSurface._preview) {
-          this.svgSurface._preview.remove();
-          this.svgSurface._preview = null;
-        }
-
-        if (this.stageState.activeTool === 'crop') {
-          this.finishCropMarquee();
-          return;
-        }
-
-        if (this.stageState.activeTool === 'paint') {
-          const pt = getStagePt(e);
-          if (this.stageState.brushMode === 'rect') {
-            this.commitBlockoutRect(strokePoints[0], pt);
-          } else if (this.stageState.brushMode === 'oval') {
-            this.commitBlockoutOval(strokePoints[0], pt);
-          } else if (this.svgSurface._paintPreview) {
-            this.stageState.annotations.push({
-              type: 'paint',
-              points: [...strokePoints],
-              color: this.stageState.brushColor,
-              width: this.stageState.brushSize,
-              softness: this.stageState.brushSoftness,
-              element: this.svgSurface._paintPreview
-            });
-            this.svgSurface._paintPreview = null;
-            this.renderStage();
-          }
-          strokePoints = [];
-          return;
-        }
-
-        if (strokePoints.length < 2) return;
-
-        const beziers = (typeof CurveFitter !== 'undefined') ? CurveFitter.fit(strokePoints, 4) : [];
-        if (beziers && beziers.length > 0) {
-          this.commitSpline(beziers, this.stageState.currentColor, this.stageState.hasArrow);
-          if (this._devDeckDialog) this.updateDevDeckUI();
-        }
-        strokePoints = [];
-      });
+      setTimeout(() => {
+        textarea.focus();
+        autoGrow();
+        window.addEventListener('mousedown', onOutClick);
+      }, 40);
     }
-  // Blockout Presets
+  // ── Blockout Painting Methods ──
   previewBlockoutRect(p1, p2) {
-    const x = Math.min(p1[0], p2[0]);
-    const y = Math.min(p1[1], p2[1]);
-    const w = Math.abs(p2[0] - p1[0]);
-    const h = Math.abs(p2[1] - p1[1]);
-
+    const x = Math.min(p1[0], p2[0]), y = Math.min(p1[1], p2[1]);
+    const w = Math.abs(p2[0] - p1[0]), h = Math.abs(p2[1] - p1[1]);
     if (!this.svgSurface._rectPreview) {
       this.svgSurface._rectPreview = makeElement('svg:rect', {
-        fill: this.stageState.brushColor,
-        opacity: '0.9',
+        fill: this.stageState.brushColor, opacity: '0.9',
         ...(this.stageState.brushSoftness > 0 ? { filter: 'url(#qa-brush-blur)' } : {})
       });
       this.paintLayer.appendChild(this.svgSurface._rectPreview);
@@ -1766,15 +1180,11 @@ class QuoraAnnotationComponent {
       this.svgSurface._rectPreview.remove();
       this.svgSurface._rectPreview = null;
     }
-    const x = Math.min(p1[0], p2[0]);
-    const y = Math.min(p1[1], p2[1]);
-    const w = Math.abs(p2[0] - p1[0]);
-    const h = Math.abs(p2[1] - p1[1]);
+    const x = Math.min(p1[0], p2[0]), y = Math.min(p1[1], p2[1]);
+    const w = Math.abs(p2[0] - p1[0]), h = Math.abs(p2[1] - p1[1]);
     if (w < 4 || h < 4) return;
-
     const rectEl = makeElement('svg:rect', {
-      x, y, width: w, height: h,
-      fill: this.stageState.brushColor,
+      x, y, width: w, height: h, fill: this.stageState.brushColor,
       ...(this.stageState.brushSoftness > 0 ? { filter: 'url(#qa-brush-blur)' } : {})
     });
     this.paintLayer.appendChild(rectEl);
@@ -1783,15 +1193,11 @@ class QuoraAnnotationComponent {
   }
 
   previewBlockoutOval(p1, p2) {
-    const cx = (p1[0] + p2[0]) / 2;
-    const cy = (p1[1] + p2[1]) / 2;
-    const rx = Math.abs(p2[0] - p1[0]) / 2;
-    const ry = Math.abs(p2[1] - p1[1]) / 2;
-
+    const cx = (p1[0] + p2[0]) / 2, cy = (p1[1] + p2[1]) / 2;
+    const rx = Math.abs(p2[0] - p1[0]) / 2, ry = Math.abs(p2[1] - p1[1]) / 2;
     if (!this.svgSurface._ovalPreview) {
       this.svgSurface._ovalPreview = makeElement('svg:ellipse', {
-        fill: this.stageState.brushColor,
-        opacity: '0.9',
+        fill: this.stageState.brushColor, opacity: '0.9',
         ...(this.stageState.brushSoftness > 0 ? { filter: 'url(#qa-brush-blur)' } : {})
       });
       this.paintLayer.appendChild(this.svgSurface._ovalPreview);
@@ -1807,15 +1213,11 @@ class QuoraAnnotationComponent {
       this.svgSurface._ovalPreview.remove();
       this.svgSurface._ovalPreview = null;
     }
-    const cx = (p1[0] + p2[0]) / 2;
-    const cy = (p1[1] + p2[1]) / 2;
-    const rx = Math.abs(p2[0] - p1[0]) / 2;
-    const ry = Math.abs(p2[1] - p1[1]) / 2;
+    const cx = (p1[0] + p2[0]) / 2, cy = (p1[1] + p2[1]) / 2;
+    const rx = Math.abs(p2[0] - p1[0]) / 2, ry = Math.abs(p2[1] - p1[1]) / 2;
     if (rx < 4 || ry < 4) return;
-
     const ovalEl = makeElement('svg:ellipse', {
-      cx, cy, rx, ry,
-      fill: this.stageState.brushColor,
+      cx, cy, rx, ry, fill: this.stageState.brushColor,
       ...(this.stageState.brushSoftness > 0 ? { filter: 'url(#qa-brush-blur)' } : {})
     });
     this.paintLayer.appendChild(ovalEl);
@@ -1823,1827 +1225,821 @@ class QuoraAnnotationComponent {
     this.renderStage();
   }
 
-  commitSpline(beziers, color, hasArrow) {
-      if (!beziers || beziers.length === 0) return;
+  // ── Spatial Proximity & Unobscured Knot Handles ──
+  findNearestCurveAtPoint(mousePt, maxDist = 28) {
+    let nearest = null;
+    let minDist = maxDist;
 
-      let d = 'M ' + beziers[0][0].join(' ');
-      for (let i = 0; i < beziers.length; i++) {
-        const [start, cp1, cp2, end] = beziers[i];
-        d += ` C ${cp1.join(' ')}, ${cp2.join(' ')}, ${end.join(' ')}`;
-      }
-
-      const shadowOffset = 2.0;
-      const shadowColor = 'rgba(10, 15, 25, 0.95)';
-
-      const shadowPath = makeElement('svg:path', {
-        d,
-        transform: `translate(${shadowOffset}, ${shadowOffset})`,
-        stroke: shadowColor,
-        'stroke-width': '5.5',
-        'stroke-linecap': 'round',
-        'stroke-linejoin': 'round',
-        fill: 'none'
-      });
-
-      const splinePath = makeElement('svg:path', {
-        d,
-        stroke: color,
-        'stroke-width': '3.2',
-        'stroke-linecap': 'round',
-        'stroke-linejoin': 'round',
-        fill: 'none',
-        style: { cursor: 'pointer' }
-      });
-
-      let arrowShadow = null;
-      let arrowForeground = null;
-
-      if (hasArrow) {
-        const p0 = beziers[0][0];
-        const p1 = beziers[0][1];
-        const p2 = beziers[0][2];
-        const p3 = beziers[0][3];
-
-        let tSample = 0.25;
-        let q = CurveFitter.bezier_q([p0, p1, p2, p3], tSample);
-        let dist = Math.hypot(q[0] - p0[0], q[1] - p0[1]);
-        if (dist < 10 && beziers.length > 1) {
-          q = beziers[1][0];
-          dist = Math.hypot(q[0] - p0[0], q[1] - p0[1]);
-        }
-
-        const ux = dist > 0.001 ? (q[0] - p0[0]) / dist : 1;
-        const uy = dist > 0.001 ? (q[1] - p0[1]) / dist : 0;
-        const nx = -uy;
-        const ny = ux;
-
-        const barbLen = 18;
-        const barbSpread = 11;
-        const b1 = [p0[0] + ux * barbLen + nx * barbSpread, p0[1] + uy * barbLen + ny * barbSpread];
-        const b2 = [p0[0] + ux * barbLen - nx * barbSpread, p0[1] + uy * barbLen - ny * barbSpread];
-
-        const ctrl1 = [p0[0] + ux * (barbLen * 0.45) + nx * (barbSpread * 0.15), p0[1] + uy * (barbLen * 0.45) + ny * (barbSpread * 0.15)];
-        const ctrl2 = [p0[0] + ux * (barbLen * 0.45) - nx * (barbSpread * 0.15), p0[1] + uy * (barbLen * 0.45) - ny * (barbSpread * 0.15)];
-
-        const arrowD = `M ${b1[0]} ${b1[1]} Q ${ctrl1[0]} ${ctrl1[1]} ${p0[0]} ${p0[1]} M ${p0[0]} ${p0[1]} Q ${ctrl2[0]} ${ctrl2[1]} ${b2[0]} ${b2[1]}`;
-
-        arrowShadow = makeElement('svg:path', {
-          d: arrowD,
-          transform: `translate(${shadowOffset}, ${shadowOffset})`,
-          stroke: shadowColor,
-          'stroke-width': '5.5',
-          'stroke-linecap': 'round',
-          'stroke-linejoin': 'round',
-          fill: 'none'
-        });
-
-        arrowForeground = makeElement('svg:path', {
-          d: arrowD,
-          stroke: color,
-          'stroke-width': '3.2',
-          'stroke-linecap': 'round',
-          'stroke-linejoin': 'round',
-          fill: 'none'
-        });
-      }
-
-      this.shadowLayer.appendChild(shadowPath);
-      if (arrowShadow) this.shadowLayer.appendChild(arrowShadow);
-
-      this.strokeLayer.appendChild(splinePath);
-      if (arrowForeground) this.strokeLayer.appendChild(arrowForeground);
-
-      const vertices = this.beziersToVertices(beziers);
-
-      const curveRecord = {
-        id: 'curve_' + Date.now(),
-        type: 'curve',
-        beziers,
-        vertices,
-        color,
-        hasArrow: !!hasArrow,
-        text: '', // Start clean with no forced dialog
-        hasTextBox: this.stageState.hasBorder,
-        fontFamily: this.stageState.fontFamily,
-        fontSize: this.stageState.fontSize || 22,
-        elements: [shadowPath, splinePath, ...(arrowShadow ? [arrowShadow, arrowForeground] : [])]
-      };
-
-      splinePath.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.exposeBezierHandles(curveRecord);
-      });
-
-      this.stageState.annotations.push(curveRecord);
-
-      // Mount points immediately so you can tweak them without extra clicks
-      this.exposeBezierHandles(curveRecord);
-    }
-
-  exposeBezierHandles(curveRecord) {
-      this.controlsLayer.innerHTML = '';
-      if (!curveRecord || !curveRecord.beziers || curveRecord.beziers.length === 0) return;
-
-      this.stageState.selectedItem = curveRecord;
-
-      if (!curveRecord.vertices || curveRecord.vertices.length === 0) {
-        curveRecord.vertices = this.beziersToVertices(curveRecord.beziers);
-      }
-      const vertices = curveRecord.vertices;
-
-      const [shadowEl, splineEl] = curveRecord.elements;
-      let arrowShadowEl = curveRecord.elements[2] || null;
-      let arrowForegroundEl = curveRecord.elements[3] || null;
-
-      const getStagePt = (e) => {
-        const rect = this.stageBox.getBoundingClientRect();
-        const z = this.stageState.zoom;
-        return [(e.clientX - rect.left) / z, (e.clientY - rect.top) / z];
-      };
-
-      splineEl.style.filter = 'drop-shadow(0 0 6px #00f2fe)';
-
-      const updateCurveGeometry = (affectedRange = null) => {
-        curveRecord.beziers = this.verticesToBeziers(vertices, affectedRange);
-
-        let d = 'M ' + curveRecord.beziers[0][0].join(' ');
-        for (let i = 0; i < curveRecord.beziers.length; i++) {
-          const [start, cp1, cp2, end] = curveRecord.beziers[i];
-          d += ` C ${cp1.join(' ')}, ${cp2.join(' ')}, ${end.join(' ')}`;
-        }
-        splineEl.setAttribute('d', d);
-        shadowEl.setAttribute('d', d);
-
-        if (curveRecord.hasArrow && arrowForegroundEl && arrowShadowEl) {
-          const p0 = curveRecord.beziers[0][0];
-          let q = curveRecord.beziers[0][1];
-          let dist = Math.hypot(q[0] - p0[0], q[1] - p0[1]);
-          if (dist < 8) {
-            q = curveRecord.beziers[0][3];
-            dist = Math.hypot(q[0] - p0[0], q[1] - p0[1]);
-          }
-
-          const ux = dist > 0.001 ? (q[0] - p0[0]) / dist : 1;
-          const uy = dist > 0.001 ? (q[1] - p0[1]) / dist : 0;
-          const nx = -uy;
-          const ny = ux;
-
-          const barbLen = 18;
-          const barbSpread = 11;
-          const b1 = [p0[0] + ux * barbLen + nx * barbSpread, p0[1] + uy * barbLen + ny * barbSpread];
-          const b2 = [p0[0] + ux * barbLen - nx * barbSpread, p0[1] + uy * barbLen - ny * barbSpread];
-          const ctrl1 = [p0[0] + ux * (barbLen * 0.45) + nx * (barbSpread * 0.15), p0[1] + uy * (barbLen * 0.45) + ny * (barbSpread * 0.15)];
-          const ctrl2 = [p0[0] + ux * (barbLen * 0.45) - nx * (barbSpread * 0.15), p0[1] + uy * (barbLen * 0.45) - ny * (barbSpread * 0.15)];
-
-          const arrowD = `M ${b1[0]} ${b1[1]} Q ${ctrl1[0]} ${ctrl1[1]} ${p0[0]} ${p0[1]} M ${p0[0]} ${p0[1]} Q ${ctrl2[0]} ${ctrl2[1]} ${b2[0]} ${b2[1]}`;
-          arrowForegroundEl.setAttribute('d', arrowD);
-          arrowShadowEl.setAttribute('d', arrowD);
-        }
-
-        this.renderStage();
-        if (this._devDeckDialog) this.updateDevDeckUI();
-      };
-
-      // Render Nodes directly on curve
-      vertices.forEach((v, idx) => {
-        const isTip = (idx === 0 && curveRecord.hasArrow);
-        const isTail = (idx === vertices.length - 1);
-
-        const nodeCircle = makeElement('svg:circle', {
-          cx: v.point[0],
-          cy: v.point[1],
-          r: isTip ? '7' : (isTail ? '6.5' : '5'),
-          fill: isTip ? '#ffd700' : (isTail ? '#00f2fe' : '#00e676'),
-          stroke: '#ffffff',
-          'stroke-width': '2',
-          className: 'qa-on-curve-knot-handle',
-          style: {
-            cursor: 'move',
-            filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.9))'
+    this.stageState.annotations.forEach(ann => {
+      if (ann.type === 'curve' && ann.beziers) {
+        ann.beziers.forEach((seg, segIdx) => {
+          for (let t = 0; t <= 1.0; t += 0.05) {
+            const q = CurveFitter.bezier_q(seg, t);
+            const d = Math.hypot(q[0] - mousePt[0], q[1] - mousePt[1]);
+            if (d < minDist) {
+              minDist = d;
+              nearest = { ann, segIdx, t, pt: q, dist: d };
+            }
           }
         });
-
-        // Mouse Wheel Real-Time Parameter Tuning
-        nodeCircle.addEventListener('wheel', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          this._activeKnotIdx = idx;
-
-          const delta = e.deltaY > 0 ? -1 : 1;
-          if (e.shiftKey) {
-            v.tangentAngleOffset = (v.tangentAngleOffset || 0) + delta * 0.087;
-            this.showKnotToast(`Node ${idx + 1} Tangent: ${Math.round(v.tangentAngleOffset * (180 / Math.PI))}°`);
-          } else if (e.altKey || e.ctrlKey) {
-            v.balance = Math.max(0.1, Math.min(1.9, (v.balance || 1) + delta * 0.08));
-            this.showKnotToast(`Node ${idx + 1} Balance: ${v.balance.toFixed(2)}`);
-          } else {
-            v.curvature = Math.max(0.2, Math.min(3.0, (v.curvature || 1) + delta * 0.1));
-            this.showKnotToast(`Node ${idx + 1} Curvature: ${v.curvature.toFixed(2)}`);
-          }
-          updateCurveGeometry();
-        }, { passive: false });
-
-        let dragging = false;
-        const savedNodes = [];
-
-        nodeCircle.addEventListener('mousedown', (e) => {
-          if (e.button === 2) return;
-          e.stopPropagation();
-          this._activeKnotIdx = idx;
-          dragging = true;
-
-          savedNodes.length = 0;
-
-          // Clear constraints on grabbed node AND on adjacent nodes on either side
-          const clearNode = (node, i) => {
-            if (!node) return;
-            savedNodes.push({
-              idx: i,
-              pt: [...node.point],
-              tangentOffset: node.tangentAngleOffset,
-              curvature: node.curvature,
-              balance: node.balance
-            });
-            node.tangentAngleOffset = 0;
-            node.curvature = 1.0;
-            node.balance = 1.0;
-            node.tangents = [null, null];
-          };
-
-          clearNode(v, idx);
-          if (idx > 0) clearNode(vertices[idx - 1], idx - 1);
-          if (idx < vertices.length - 1) clearNode(vertices[idx + 1], idx + 1);
-
-          const localRange = {
-            start: Math.max(0, idx - 1),
-            end: Math.min(vertices.length - 1, idx + 1)
-          };
-
-          const restoreAll = () => {
-            savedNodes.forEach(s => {
-              const targetNode = vertices[s.idx];
-              if (targetNode) {
-                targetNode.point = [...s.pt];
-                targetNode.tangentAngleOffset = s.tangentOffset;
-                targetNode.curvature = s.curvature;
-                targetNode.balance = s.balance;
-              }
-            });
-            nodeCircle.setAttribute('cx', v.point[0]);
-            nodeCircle.setAttribute('cy', v.point[1]);
-            updateCurveGeometry(localRange);
-          };
-
-          const onEsc = (kev) => {
-            if (kev.key === 'Escape' && dragging) {
-              dragging = false;
-              restoreAll();
-              cleanupDragListeners();
-            }
-          };
-
-          const onRightClickCancel = (mev) => {
-            if (mev.button === 2 && dragging) {
-              mev.preventDefault();
-              mev.stopPropagation();
-              dragging = false;
-              restoreAll();
-              cleanupDragListeners();
-            }
-          };
-
-          const onDrag = (ev) => {
-            if (!dragging) return;
-            const pt = getStagePt(ev);
-            v.point[0] = pt[0];
-            v.point[1] = pt[1];
-            nodeCircle.setAttribute('cx', pt[0]);
-            nodeCircle.setAttribute('cy', pt[1]);
-            updateCurveGeometry(localRange);
-          };
-
-          const onUp = () => {
-            if (dragging) {
-              dragging = false;
-              cleanupDragListeners();
-            }
-          };
-
-          const cleanupDragListeners = () => {
-            window.removeEventListener('keydown', onEsc);
-            window.removeEventListener('mousedown', onRightClickCancel, true);
-            window.removeEventListener('mousemove', onDrag);
-            window.removeEventListener('mouseup', onUp);
-          };
-
-          window.addEventListener('keydown', onEsc);
-          window.addEventListener('mousedown', onRightClickCancel, true);
-          window.addEventListener('mousemove', onDrag);
-          window.addEventListener('mouseup', onUp);
-        });
-
-        this.controlsLayer.appendChild(nodeCircle);
-      });
-    }
-  createSpeechCallout(targetX, targetY) {
-    const bubbleX = targetX + 50;
-    const bubbleY = targetY - 40;
-    const markerId = this.getArrowMarker(this.stageState.currentColor);
-
-    const tailShadow = makeElement('svg:line', {
-      x1: bubbleX + 1.5, y1: bubbleY + 1.5, x2: targetX + 1.5, y2: targetY + 1.5,
-      stroke: 'rgba(10, 15, 25, 0.9)', 'stroke-width': '4.5', 'stroke-linecap': 'round'
-    });
-    const tail = makeElement('svg:line', {
-      x1: bubbleX, y1: bubbleY, x2: targetX, y2: targetY,
-      stroke: this.stageState.currentColor, 'stroke-width': '2.5', 'stroke-linecap': 'round',
-      'marker-end': `url(#${markerId})`
-    });
-
-    this.shadowLayer.appendChild(tailShadow);
-    this.strokeLayer.appendChild(tail);
-
-    const card = makeElement('div', {
-      style: {
-        position: 'absolute',
-        left: `${bubbleX}px`,
-        top: `${bubbleY - 20}px`,
-        minWidth: '80px',
-        maxWidth: '220px',
-        background: 'rgba(15, 23, 42, 0.96)',
-        border: `2px solid ${this.stageState.currentColor}`,
-        borderRadius: '8px',
-        padding: '6px 10px',
-        color: '#f8fafc',
-        boxShadow: '0 8px 24px rgba(0,0,0,0.7)',
-        pointerEvents: 'auto',
-        cursor: 'move',
-        zIndex: '20'
       }
     });
-
-    const text = makeElement('div', {
-      contentEditable: 'true',
-      style: { outline: 'none', color: '#fff', fontSize: '12px', lineHeight: '1.4' }
-    }, 'Type callout...');
-    card.appendChild(text);
-    this.balloonsLayer.appendChild(card);
-
-    let isDragging = false;
-    let startMouse = [0, 0];
-    let startPos = [0, 0];
-
-    card.addEventListener('mousedown', (e) => {
-      if (e.target === text) return;
-      isDragging = true;
-      startMouse = [e.clientX, e.clientY];
-      startPos = [parseFloat(card.style.left), parseFloat(card.style.top)];
-      e.stopPropagation();
-    });
-
-    window.addEventListener('mousemove', (e) => {
-      if (!isDragging) return;
-      const z = this.stageState.zoom || 1.0;
-      const nx = startPos[0] + (e.clientX - startMouse[0]) / z;
-      const ny = startPos[1] + (e.clientY - startMouse[1]) / z;
-      card.style.left = `${nx}px`;
-      card.style.top = `${ny}px`;
-
-      tail.setAttribute('x1', nx);
-      tail.setAttribute('y1', ny + 15);
-      tailShadow.setAttribute('x1', nx + 1.5);
-      tailShadow.setAttribute('y1', ny + 16.5);
-    });
-
-    window.addEventListener('mouseup', () => { isDragging = false; });
-    this.stageState.annotations.push({ type: 'balloon', elements: [tailShadow, tail, card] });
-
-    setTimeout(() => text.focus(), 50);
+    return nearest;
   }
 
-  startCropMarquee(pt) {
-    this.removeCropMarquee();
-    this.cropStartPt = pt;
-    this.cropMarquee = makeElement('div', {
-      id: 'qa-crop-marquee',
-      style: {
-        position: 'absolute',
-        left: `${pt[0]}px`,
-        top: `${pt[1]}px`,
-        width: '0px',
-        height: '0px',
-        border: '2px dashed #00f2fe',
-        background: 'rgba(0, 242, 254, 0.15)',
-        pointerEvents: 'none',
-        zIndex: '30'
-      }
-    });
-    this.stageBox.appendChild(this.cropMarquee);
-  }
-
-  updateCropMarquee(pt) {
-    if (!this.cropMarquee || !this.cropStartPt) return;
-    const x = Math.min(this.cropStartPt[0], pt[0]);
-    const y = Math.min(this.cropStartPt[1], pt[1]);
-    const w = Math.abs(pt[0] - this.cropStartPt[0]);
-    const h = Math.abs(pt[1] - this.cropStartPt[1]);
-
-    this.cropMarquee.style.left = `${x}px`;
-    this.cropMarquee.style.top = `${y}px`;
-    this.cropMarquee.style.width = `${w}px`;
-    this.cropMarquee.style.height = `${h}px`;
-    this.currentMarqueeRect = { x, y, width: w, height: h };
-  }
-
-  finishCropMarquee() {
-    if (!this.currentMarqueeRect || this.currentMarqueeRect.width < 15 || this.currentMarqueeRect.height < 15) {
-      this.removeCropMarquee();
+  updateSpatialHover(mousePt) {
+    if (this._isDrawingActive) {
+      this.clearHoverHighlight();
       return;
     }
 
-    const r = this.currentMarqueeRect;
-    const confirmBtn = makeElement('button', {
-      id: 'qa-crop-confirm-btn',
-      className: 'dr-nav-btn primary',
-      style: {
-        position: 'absolute',
-        left: `${r.x + r.width / 2 - 45}px`,
-        top: `${r.y + r.height / 2 - 12}px`,
-        zIndex: '35',
-        padding: '4px 10px',
-        fontSize: '11px',
-        fontWeight: 'bold',
-        pointerEvents: 'auto'
-      },
-      onclick: () => {
-        this.applyStageCrop(r);
-        this.removeCropMarquee();
+    const hit = this.findNearestCurveAtPoint(mousePt, this._hoveredCurve ? 36 : 24);
+
+    if (hit) {
+      if (this._hoveredCurve !== hit.ann) {
+        this.clearHoverHighlight();
+        this._hoveredCurve = hit.ann;
+        this.applyCurveGlow(hit.ann);
+        this.renderEphemeralKnotHandles(hit.ann);
+        this.renderSegmentMidpointIndicators(hit.ann);
       }
-    }, '✂️ Crop Here');
-    this.stageBox.appendChild(confirmBtn);
-  }
-
-  removeCropMarquee() {
-    const el = document.getElementById('qa-crop-marquee');
-    if (el) el.remove();
-    const btn = document.getElementById('qa-crop-confirm-btn');
-    if (btn) btn.remove();
-    this.cropMarquee = null;
-    this.currentMarqueeRect = null;
-  }
-
-  applyStageCrop(rect) {
-    if (this.stageState.baseImage) {
-      const croppedCanvas = document.createElement('canvas');
-      croppedCanvas.width = rect.width;
-      croppedCanvas.height = rect.height;
-      const ctx = croppedCanvas.getContext('2d');
-      ctx.drawImage(this.sceneCanvas, rect.x, rect.y, rect.width, rect.height, 0, 0, rect.width, rect.height);
-
-      const newImg = new Image();
-      newImg.onload = () => {
-        this.stageState.baseImage = newImg;
-        this.stageState.cropRect = { x: 0, y: 0, width: rect.width, height: rect.height };
-        this.stageState.baseOrigin = { x: 0, y: 0 };
-        this.cropCanvas = null;
-        this.baseCropCanvas = null;
-        this.stageState.diffCallouts = [];
-        this.stageState.canvasWidth = rect.width;
-        this.stageState.canvasHeight = rect.height;
-        this.stageState.manualSizing = true;
-        this.renderStage();
-      };
-      newImg.src = croppedCanvas.toDataURL('image/png');
+    } else {
+      this.clearHoverHighlight();
     }
   }
 
-  async captureScreen() {
-    try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: { cursor: 'always' } });
-      const video = document.createElement('video');
-      video.srcObject = stream;
-      await video.play();
+  applyCurveGlow(ann) {
+    if (!ann || !ann.elements?.[1]) return;
+    const d = ann.elements[1].getAttribute('d');
+    if (!d) return;
 
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0);
+    let glow = document.getElementById('qa-active-hover-glow');
+    if (!glow) {
+      glow = makeElement('svg:path', {
+        id: 'qa-active-hover-glow', fill: 'none', stroke: 'rgba(0, 242, 254, 0.3)',
+        'stroke-width': '20', 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+        style: { pointerEvents: 'none', filter: 'drop-shadow(0 0 10px rgba(0, 242, 254, 0.6))' }
+      });
+      this.glowLayer.appendChild(glow);
+    }
+    glow.setAttribute('d', d);
+  }
 
-      stream.getTracks().forEach(t => t.stop());
+  clearHoverHighlight() {
+    this._hoveredCurve = null;
+    const glow = document.getElementById('qa-active-hover-glow');
+    if (glow) glow.remove();
+    this.controlsLayer.querySelectorAll('.qa-segment-midpoint-group').forEach(el => el.remove());
+    this.controlsLayer.querySelectorAll('.qa-ephemeral-knots').forEach(el => el.remove());
+  }
 
-      const img = new Image();
-      img.onload = () => {
-        this.stageState.baseImage = img;
-        this.stageState.cropRect = { x: 0, y: 0, width: img.naturalWidth, height: img.naturalHeight };
-        this.stageState.baseOrigin = { x: 0, y: 0 };
-        this.cropCanvas = null;
-        this.baseCropCanvas = null;
-        this.stageState.diffCallouts = [];
-        this.renderStage();
-      };
-      img.src = canvas.toDataURL('image/png');
-    } catch (e) {
-      console.warn('[ScreenCapture] Cancelled:', e);
+  deleteSelectedEntity() {
+    const curve = this.getActiveCurve();
+    if (!curve) {
+      this.showKnotToast('No curve selected to delete');
+      return;
+    }
+
+    const vertices = curve.vertices;
+
+    if (vertices && vertices.length > 2 && this._activeKnotIdx !== null) {
+      const knotNum = this._activeKnotIdx + 1;
+      vertices.splice(this._activeKnotIdx, 1);
+      this._activeKnotIdx = Math.max(0, Math.min(this._activeKnotIdx, vertices.length - 1));
+      this.commitCurveGeometryUpdate();
+      this.exposeBezierHandles(curve);
+      this.showKnotToast(`🗑️ Deleted knot #${knotNum} (${vertices.length} remaining)`);
+      this.updateDynamicKeyInHUD();
+      return;
+    }
+
+    const idx = this.stageState.annotations.indexOf(curve);
+    if (idx !== -1) {
+      this.stageState.annotations.splice(idx, 1);
+    }
+    if (curve.elements) {
+      curve.elements.forEach(el => el.remove());
+    }
+    if (curve._arrowFg) curve._arrowFg.remove();
+    if (curve._arrowSh) curve._arrowSh.remove();
+    this.controlsLayer.innerHTML = '';
+    this.stageState.selectedItem = null;
+    this._activeKnotIdx = null;
+    this.renderStage();
+    this.showKnotToast('🗑️ Deleted curve');
+    this.updateDynamicKeyInHUD();
+  }
+
+  updateDynamicKeyInHUD() {
+    const delPill = document.querySelector('.qa-keyin-row[data-action="delete_curve"]');
+    if (!delPill) return;
+
+    const curve = this.getActiveCurve();
+    const labelSpan = delPill.querySelector('span:first-child');
+
+    if (!curve) {
+      if (labelSpan) labelSpan.textContent = 'Delete (Select Curve)';
+      delPill.style.opacity = '0.5';
+    } else if (curve.vertices && curve.vertices.length > 2 && this._activeKnotIdx !== null) {
+      if (labelSpan) labelSpan.textContent = `Delete Knot #${this._activeKnotIdx + 1}`;
+      delPill.style.opacity = '1.0';
+    } else {
+      if (labelSpan) labelSpan.textContent = 'Delete Entire Curve';
+      delPill.style.opacity = '1.0';
     }
   }
 
-  copyCompositeToClipboard(btn) {
-    const tf = this.computeAutoBounds();
-    const w = tf.totalW;
-    const h = tf.totalH;
-    const dpr = Math.max(2, window.devicePixelRatio || 2);
+  renderConcaveArrowhead(p0, exitTangent, color, shadowOffset = 2.0) {
+    const ux = exitTangent[0];
+    const uy = exitTangent[1];
+    const nx = -uy;
+    const ny = ux;
 
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(w * dpr);
-    canvas.height = Math.round(h * dpr);
-    const ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
+    const barbLen = 18;
+    const barbSpread = 11;
+    const b1 = [p0[0] + ux * barbLen + nx * barbSpread, p0[1] + uy * barbLen + ny * barbSpread];
+    const b2 = [p0[0] + ux * barbLen - nx * barbSpread, p0[1] + uy * barbLen - ny * barbSpread];
+    const c1 = [p0[0] + ux * 8 + nx * 2.5, p0[1] + uy * 8 + ny * 2.5];
+    const c2 = [p0[0] + ux * 8 - nx * 2.5, p0[1] + uy * 8 - ny * 2.5];
 
-    // 1. Draw Scene Canvas
-    ctx.drawImage(this.sceneCanvas, 0, 0, w, h);
+    const arrowD = `M ${b1[0]} ${b1[1]} Q ${c1[0]} ${c1[1]} ${p0[0]} ${p0[1]} M ${p0[0]} ${p0[1]} Q ${c2[0]} ${c2[1]} ${b2[0]} ${b2[1]}`;
 
-    // 2. Draw Native Difference Lenses
-    ctx.drawImage(this.diffCanvas, 0, 0, w, h);
+    const arrowShadow = makeElement('svg:path', {
+      d: arrowD, transform: `translate(${shadowOffset}, ${shadowOffset})`,
+      stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': '5.5', fill: 'none',
+      'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+    });
 
-    // 3. Draw Vector SVG (Paint Blockouts, Crisp Keylines, Splines, Attached Text Badges)
-    const svgXml = new XMLSerializer().serializeToString(this.svgSurface);
-    const blob = new Blob([svgXml], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const img = new Image();
+    const arrowForeground = makeElement('svg:path', {
+      d: arrowD, stroke: color, 'stroke-width': '3.2', fill: 'none',
+      'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+    });
 
-    img.onload = () => {
-      ctx.drawImage(img, 0, 0, w, h);
-      URL.revokeObjectURL(url);
+    return { shadow: arrowShadow, foreground: arrowForeground };
+  }
 
-      // 4. Draw Speech Balloons
-      document.querySelectorAll('.qa-balloons-container > div').forEach(card => {
-        const r = card.getBoundingClientRect();
-        const stageR = this.stageBox.getBoundingClientRect();
-        const z = this.stageState.zoom || 1.0;
-        const relX = (r.left - stageR.left) / z;
-        const relY = (r.top - stageR.top) / z;
+  // ── Blended Interaction Loop (Draw & Tweak Coexisting) ──
+  setupInteractions() {
+    this.setupKeyInMatrixHud();
 
-        ctx.save();
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.96)';
-        ctx.strokeStyle = card.style.borderColor || '#00e676';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.roundRect(relX, relY, r.width / z, r.height / z, 8);
-        ctx.fill();
-        ctx.stroke();
+    let isDrawing = false;
+    let strokePoints = [];
+    let startPt = null;
+    let hasExceededDeadzone = false;
 
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '12px system-ui, sans-serif';
-        const txt = card.innerText || '';
-        ctx.fillText(txt, relX + 8, relY + 18);
-        ctx.restore();
-      });
+    let deadzoneCircle = null;
+    let tipPointIndicator = null;
+    let activeTetherLine = null;
 
-      canvas.toBlob((pngBlob) => {
-        if (!pngBlob) return;
-        navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]).then(() => {
-          if (btn) {
-            const orig = btn.textContent;
-            btn.textContent = '✓ Copied Hi-Res PNG!';
-            setTimeout(() => { btn.textContent = orig; }, 1800);
-          }
-        });
-      });
+    const getStagePt = (e) => {
+      const rect = this.stageBox.getBoundingClientRect();
+      const z = this.stageState.zoom;
+      return [(e.clientX - rect.left) / z, (e.clientY - rect.top) / z];
     };
-    img.src = url;
+
+    const cleanupGestureIndicators = () => {
+      if (deadzoneCircle) { deadzoneCircle.remove(); deadzoneCircle = null; }
+      if (tipPointIndicator) { tipPointIndicator.remove(); tipPointIndicator = null; }
+      if (activeTetherLine) { activeTetherLine.remove(); activeTetherLine = null; }
+      if (this.svgSurface._preview) { this.svgSurface._preview.remove(); this.svgSurface._preview = null; }
+    };
+
+    if (!this._hasBoundGlobalKeys) {
+      this._hasBoundGlobalKeys = true;
+
+      window.addEventListener('keydown', (e) => {
+        if (e.target.closest('input, textarea, [contenteditable="true"]')) return;
+
+        if ((e.key === 'h' || e.key === 'H') && !this._metaHelpActive) {
+          this._metaHelpActive = true;
+          this.showMetaHelpOverlay();
+          return;
+        }
+
+        if (e.code === 'Space') {
+          e.preventDefault();
+          this.executeKeyInCommand('toggle_tool', e);
+          return;
+        }
+        if (e.key === 'a' || e.key === 'A') {
+          if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+            e.preventDefault();
+            this.toggleArrowhead();
+            return;
+          }
+        }
+        if (e.key === 't' || e.key === 'T') {
+          if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+            e.preventDefault();
+            this.triggerTextOnActiveOrCanvas();
+            return;
+          }
+        }
+        if (e.key === 'x' || e.key === 'X') {
+          if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+            e.preventDefault();
+            this.swapActiveCurveTerminals();
+            return;
+          }
+        }
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          this.executeKeyInCommand('next_knot', e);
+          return;
+        }
+        if (e.key === 'c' || e.key === 'C') {
+          if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+            e.preventDefault();
+            this.executeKeyInCommand('toggle_cusp', e);
+            return;
+          }
+        }
+        if (e.key === 's' || e.key === 'S') {
+          if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+            e.preventDefault();
+            this.executeKeyInCommand('straighten', e);
+            return;
+          }
+        }
+        if (e.key === 'r' || e.key === 'R') {
+          if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+            e.preventDefault();
+            this.executeKeyInCommand('reset_knot', e);
+            return;
+          }
+        }
+        if (e.key === '+' || e.key === '=') {
+          if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+            e.preventDefault();
+            this.addKnotToActiveCurve();
+            return;
+          }
+        }
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          e.preventDefault();
+          this.deleteSelectedEntity();
+          return;
+        }
+        if (e.key === 'Enter') {
+          if (this._penNodes && this._penNodes.length >= 2) {
+            e.preventDefault();
+            this.commitPenNodes();
+            return;
+          }
+        }
+        if (e.key === 'Escape') {
+          if (this._penNodes && this._penNodes.length > 0) {
+            e.preventDefault();
+            this.cancelPenNodes();
+            return;
+          }
+        }
+      });
+
+      window.addEventListener('keyup', (e) => {
+        if (e.key === 'h' || e.key === 'H') {
+          this._metaHelpActive = false;
+          this.hideMetaHelpOverlay();
+        }
+      });
+    }
+
+    this.svgSurface.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.qa-on-curve-knot-handle, .qa-tangent-handle, .qa-segment-midpoint-group, .qa-movable-label-group, .qa-image-plate-control, #qa-keyin-matrix-hud')) return;
+
+      const pt = getStagePt(e);
+
+      // Direct Text Tool Placement
+      if (this.stageState.activeTool === 'text') {
+        this.promptDirectTextBadge(pt[0], pt[1]);
+        return;
+      }
+
+      const isForceDraw = e.shiftKey;
+
+      if (!isForceDraw) {
+        const hit = this.findNearestCurveAtPoint(pt, 24);
+        if (hit) {
+          this.exposeBezierHandles(hit.ann);
+          this.renderSegmentMidpointIndicators(hit.ann);
+          this.updateDynamicKeyInHUD();
+          return;
+        }
+      }
+
+      if (this._handRestActive) {
+        this._handRestActive = false;
+        isDrawing = true;
+        this._isDrawingActive = true;
+        this.hideClutchHandRestBadge();
+        return;
+      }
+
+      if (this._penNodes && this._penNodes.length > 0) {
+        this._penNodes.push(pt);
+        this.renderPenNodesMarkers();
+        this.showKnotToast(`Point ${this._penNodes.length} placed • Right-click or Enter to finish`);
+        return;
+      }
+
+      this.controlsLayer.innerHTML = '';
+      this.stageState.selectedItem = null;
+
+      isDrawing = true;
+      this._isDrawingActive = true;
+      startPt = pt;
+      hasExceededDeadzone = false;
+      strokePoints = [pt];
+
+      deadzoneCircle = makeElement('svg:circle', {
+        id: 'qa-deadzone-circle', cx: pt[0], cy: pt[1], r: String(this.stageState.tetherLength),
+        fill: 'rgba(255, 255, 255, 0.12)', stroke: 'rgba(255, 255, 255, 0.75)',
+        'stroke-width': '1.2', 'stroke-dasharray': '3,3', style: { pointerEvents: 'none' }
+      });
+      this.controlsLayer.appendChild(deadzoneCircle);
+
+      tipPointIndicator = makeElement('svg:circle', {
+        id: 'qa-tip-point', cx: pt[0], cy: pt[1], r: '5', fill: '#ffffff',
+        stroke: '#00e676', 'stroke-width': '2', style: { pointerEvents: 'none' }
+      });
+      this.controlsLayer.appendChild(tipPointIndicator);
+    });
+
+    this.svgSurface.addEventListener('dblclick', (e) => {
+      if (e.target.closest('.qa-on-curve-knot-handle, .qa-tangent-handle, .qa-segment-midpoint-group, .qa-movable-label-group, .qa-image-plate-control')) return;
+      const pt = getStagePt(e);
+      this.promptDirectTextBadge(pt[0], pt[1]);
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      const pt = getStagePt(e);
+
+      if (!isDrawing && !this._penNodes) {
+        this.updateSpatialHover(pt);
+      }
+
+      if (this._penNodes && this._penNodes.length > 0) {
+        this.updatePenTentativeSpline(pt);
+        return;
+      }
+
+      if (!isDrawing) return;
+
+      if (this.stageState.activeTool === 'paint') {
+        if (this.stageState.brushMode === 'rect') {
+          this.previewBlockoutRect(strokePoints[0], pt);
+          return;
+        } else if (this.stageState.brushMode === 'oval') {
+          this.previewBlockoutOval(strokePoints[0], pt);
+          return;
+        }
+
+        strokePoints.push(pt);
+        const pathD = strokePoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p[0]} ${p[1]}`).join(' ');
+        if (!this.svgSurface._paintPreview) {
+          this.svgSurface._paintPreview = makeElement('svg:path', {
+            stroke: this.stageState.brushColor,
+            'stroke-width': String(this.stageState.brushSize),
+            'stroke-linecap': 'round',
+            'stroke-linejoin': 'round',
+            fill: 'none',
+            ...(this.stageState.brushSoftness > 0 ? { filter: 'url(#qa-brush-blur)' } : {})
+          });
+          this.paintLayer.appendChild(this.svgSurface._paintPreview);
+        }
+        this.svgSurface._paintPreview.setAttribute('d', pathD);
+        return;
+      }
+
+      const dFromStart = Math.hypot(pt[0] - startPt[0], pt[1] - startPt[1]);
+      if (!hasExceededDeadzone && dFromStart > this.stageState.tetherLength) {
+        hasExceededDeadzone = true;
+      }
+
+      if (!hasExceededDeadzone) {
+        if (tipPointIndicator) {
+          tipPointIndicator.setAttribute('cx', startPt[0]);
+          tipPointIndicator.setAttribute('cy', startPt[1]);
+        }
+        return;
+      }
+
+      if (e.ctrlKey || e.metaKey) {
+        this._clutchActive = true;
+        const last = strokePoints[strokePoints.length - 1];
+        const newR = Math.max(12, Math.min(180, Math.hypot(pt[0] - last[0], pt[1] - last[1])));
+        this.stageState.tetherLength = Math.round(newR);
+
+        if (!activeTetherLine) {
+          activeTetherLine = makeElement('svg:line', {
+            id: 'qa-drawstring-line', stroke: '#ffd700', 'stroke-width': '2.2', 'stroke-dasharray': '4,3'
+          });
+          this.controlsLayer.appendChild(activeTetherLine);
+        }
+        activeTetherLine.setAttribute('x1', last[0]);
+        activeTetherLine.setAttribute('y1', last[1]);
+        activeTetherLine.setAttribute('x2', pt[0]);
+        activeTetherLine.setAttribute('y2', pt[1]);
+        this.showKnotToast(`⏸️ Tether: ${Math.round(newR)}px (Hold Ctrl)`);
+        return;
+      } else {
+        this._clutchActive = false;
+      }
+
+      if (!activeTetherLine) {
+        activeTetherLine = makeElement('svg:line', {
+          id: 'qa-drawstring-line', stroke: '#ffffff', 'stroke-width': '2.0'
+        });
+        this.controlsLayer.appendChild(activeTetherLine);
+      }
+
+      const last = strokePoints[strokePoints.length - 1];
+      const dist = Math.hypot(pt[0] - last[0], pt[1] - last[1]);
+
+      if (dist > this.stageState.tetherLength) {
+        const ux = (pt[0] - last[0]) / dist;
+        const uy = (pt[1] - last[1]) / dist;
+        const leadPt = [pt[0] - ux * this.stageState.tetherLength, pt[1] - uy * this.stageState.tetherLength];
+        strokePoints.push(leadPt);
+
+        if (tipPointIndicator) {
+          tipPointIndicator.setAttribute('cx', leadPt[0]);
+          tipPointIndicator.setAttribute('cy', leadPt[1]);
+        }
+      }
+
+      const curTip = strokePoints[strokePoints.length - 1];
+      activeTetherLine.setAttribute('x1', curTip[0]);
+      activeTetherLine.setAttribute('y1', curTip[1]);
+      activeTetherLine.setAttribute('x2', pt[0]);
+      activeTetherLine.setAttribute('y2', pt[1]);
+
+      const pathData = strokePoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p[0]} ${p[1]}`).join(' ');
+      if (!this.svgSurface._preview) {
+        this.svgSurface._preview = makeElement('svg:path', {
+          stroke: this.stageState.currentColor, 'stroke-width': '3.2', 'stroke-dasharray': '4,3', fill: 'none'
+        });
+        this.strokeLayer.appendChild(this.svgSurface._preview);
+      }
+      this.svgSurface._preview.setAttribute('d', pathData);
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (!isDrawing) return;
+
+      if (e.ctrlKey || e.metaKey || this._clutchActive) {
+        this._handRestActive = true;
+        isDrawing = false;
+        this._isDrawingActive = false;
+        this.showClutchHandRestBadge(strokePoints[strokePoints.length - 1]);
+        return;
+      }
+
+      isDrawing = false;
+      this._isDrawingActive = false;
+      cleanupGestureIndicators();
+
+      if (this.stageState.activeTool === 'paint') {
+        const pt = getStagePt(e);
+        if (this.stageState.brushMode === 'rect') {
+          this.commitBlockoutRect(strokePoints[0], pt);
+        } else if (this.stageState.brushMode === 'oval') {
+          this.commitBlockoutOval(strokePoints[0], pt);
+        } else if (this.svgSurface._paintPreview) {
+          this.stageState.annotations.push({
+            type: 'paint',
+            points: [...strokePoints],
+            color: this.stageState.brushColor,
+            width: this.stageState.brushSize,
+            softness: this.stageState.brushSoftness,
+            element: this.svgSurface._paintPreview
+          });
+          this.svgSurface._paintPreview = null;
+          this.renderStage();
+        }
+        strokePoints = [];
+        return;
+      }
+
+      if (!hasExceededDeadzone) {
+        this._penNodes = [startPt];
+        this.renderPenNodesMarkers();
+        this.showKnotToast('Point 1 placed. Click for next • Right-click or Enter to finish');
+        strokePoints = [];
+        return;
+      }
+
+      if (strokePoints.length >= 2) {
+        const beziers = (typeof CurveFitter !== 'undefined') ? CurveFitter.fit(strokePoints, 4) : [];
+        if (beziers && beziers.length > 0) {
+          this.commitSpline(beziers, this.stageState.currentColor, this.stageState.hasArrow);
+        }
+      }
+      strokePoints = [];
+    });
+
+    this.stageBox.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (e.target.closest('.qa-on-curve-knot-handle, .qa-tangent-handle')) return;
+
+      if (this._penNodes && this._penNodes.length >= 2) {
+        this.commitPenNodes();
+        return;
+      } else if (this._penNodes) {
+        this.cancelPenNodes();
+        return;
+      }
+
+      if (isDrawing) {
+        isDrawing = false;
+        this._isDrawingActive = false;
+        cleanupGestureIndicators();
+        strokePoints = [];
+        this.showKnotToast('Stroke canceled');
+      }
+    });
   }
 
-  static launchStandalone(initialImage = null) {
-      const existing = document.getElementById('quora-annotation-standalone-mount');
-      if (existing) existing.remove();
-
-      const leftSafe = (typeof SidePanel !== 'undefined' && SidePanel.getInstances()?.left?.isOpen)
-        ? (SidePanel.getInstances().left.width || 300)
-        : 0;
-
-      const host = document.createElement('div');
-      host.id = 'quora-annotation-standalone-mount';
-      host.style.cssText = [
-        'position: fixed;',
-        'top: 0;',
-        `left: ${leftSafe}px;`,
-        `width: calc(100vw - ${leftSafe}px);`,
-        'height: 100vh;',
-        'z-index: 200000;',
-        'background: #0b0f19;',
-        'overflow: hidden;',
-        'display: flex;',
-        'flex-direction: column;',
-        'transition: left 0.25s cubic-bezier(0.16, 1, 0.3, 1), width 0.25s cubic-bezier(0.16, 1, 0.3, 1);'
-      ].join('\n');
-      document.body.appendChild(host);
-
-      const closeBtn = document.createElement('button');
-      closeBtn.textContent = '✕ Return to Living Dossier';
-      closeBtn.className = 'dr-nav-btn';
-      closeBtn.style.cssText = [
-        'position: fixed;',
-        'top: 10px;',
-        'right: 16px;',
-        'z-index: 2147483647;',
-        'background: #1e293b;',
-        'color: #f8fafc;',
-        'border: 1.5px solid #00f2fe;',
-        'padding: 6px 14px;',
-        'font-family: monospace;',
-        'font-size: 11px;',
-        'font-weight: bold;',
-        'border-radius: 6px;',
-        'cursor: pointer;',
-        'box-shadow: 0 4px 14px rgba(0,0,0,0.6);'
-      ].join('\n');
-
-      closeBtn.onclick = () => {
-        if (host._safeAreaListener) {
-          window.removeEventListener('layout-safe-area-change', host._safeAreaListener);
-        }
-        host.remove();
-        closeBtn.remove();
-      };
-      document.body.appendChild(closeBtn);
-
-      host._safeAreaListener = (e) => {
-        const l = e.detail?.left || 0;
-        host.style.left = `${l}px`;
-        host.style.width = `calc(100vw - ${l}px)`;
-      };
-      window.addEventListener('layout-safe-area-change', host._safeAreaListener);
-
-      QuoraAnnotationComponent.render(host);
-
-      if (initialImage && QuoraAnnotationComponent.activeInstance) {
-        setTimeout(() => {
-          const inst = QuoraAnnotationComponent.activeInstance;
-          inst.stageState.baseImage = initialImage;
-          inst.stageState.cropRect = { x: 0, y: 0, width: initialImage.naturalWidth, height: initialImage.naturalHeight };
-          inst.stageState.baseOrigin = { x: 0, y: 0 };
-          inst.cropCanvas = null;
-          inst.baseCropCanvas = null;
-          inst.stageState.diffCallouts = [];
-          inst.stageState.manualSizing = false;
-          inst.renderStage();
-        }, 50);
-      }
-    }
-  _promptInlineTailText(curveRecord, tailPt, justifySide) {
-      const existing = document.getElementById('qa-inline-tail-editor');
-      if (existing) existing.remove();
-
-      const availableFonts = [
-        { id: "'Architects Daughter', cursive, sans-serif", label: "Architect's Daughter" },
-        { id: "monospace", label: "Monospace" },
-        { id: "'Plus Jakarta Sans', system-ui, sans-serif", label: "Sans-Serif" },
-        { id: "'Newsreader', Georgia, serif", label: "Serif" },
-        { id: "'JetBrains Mono', monospace", label: "JetBrains" }
-      ];
-
-      const pushRecentFont = (fId) => {
-        this.stageState.fontFamily = fId;
-        curveRecord.fontFamily = fId;
-        this.ensureFontLoaded(fId);
-        const list = this.stageState.recentFonts.filter(x => x !== fId);
-        list.unshift(fId);
-        this.stageState.recentFonts = list.slice(0, 3);
-      };
-
-      if (!curveRecord.fontFamily) {
-        curveRecord.fontFamily = this.stageState.fontFamily;
-      }
-      pushRecentFont(curveRecord.fontFamily);
-
-      if (!curveRecord.fontSize) {
-        curveRecord.fontSize = this.stageState.fontSize || 22;
-      }
-      if (curveRecord.boxStyle === undefined) {
-        curveRecord.boxStyle = this.stageState.boxStyle || 'box'; // 'none' | 'box' | 'bracket'
-      }
-
-      const isLeft = (justifySide === 'left');
-      const width = 240;
-
-      const posX = isLeft ? tailPt[0] + 4 : tailPt[0] - width - 4;
-      const posY = tailPt[1] - 20;
-
-      const editorWrap = makeElement('div', {
-        id: 'qa-inline-tail-editor',
-        style: {
-          position: 'absolute',
-          top: `${posY}px`,
-          left: `${posX}px`,
-          width: `${width}px`,
-          zIndex: '70',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '6px'
-        }
-      });
-
-      const strokeW = curveRecord.strokeWidth || this.stageState.curveStrokeWidth || 3.2;
-
-      const textarea = makeElement('textarea', {
-        placeholder: 'Label',
-        value: curveRecord.text || '',
-        rows: 1,
-        style: {
-          width: '100%',
-          minHeight: '34px',
-          maxHeight: '160px',
-          padding: '5px 8px',
-          fontSize: `${curveRecord.fontSize}px`,
-          fontFamily: curveRecord.fontFamily,
-          fontWeight: 'bold',
-          lineHeight: '1.25',
-          color: curveRecord.color,
-          background: curveRecord.boxStyle === 'box' ? 'rgba(15, 23, 42, 0.96)' : 'rgba(0, 0, 0, 0.65)',
-          border: curveRecord.boxStyle === 'box'
-            ? `${strokeW}px solid ${curveRecord.color}`
-            : (curveRecord.boxStyle === 'bracket' ? `none` : '1.5px dashed rgba(255, 255, 255, 0.4)'),
-          borderBottom: (curveRecord.boxStyle === 'bracket') ? `${strokeW}px solid ${curveRecord.color}` : undefined,
-          borderLeft: (curveRecord.boxStyle === 'bracket' && isLeft) ? `${strokeW}px solid ${curveRecord.color}` : undefined,
-          borderRight: (curveRecord.boxStyle === 'bracket' && !isLeft) ? `${strokeW}px solid ${curveRecord.color}` : undefined,
-          borderRadius: curveRecord.boxStyle === 'box' ? '6px' : '0',
-          outline: 'none',
-          resize: 'none',
-          boxSizing: 'border-box',
-          textAlign: isLeft ? 'left' : 'right',
-          boxShadow: curveRecord.boxStyle === 'box' ? `0 8px 24px rgba(0,0,0,0.85)` : 'none'
-        }
-      });
-
-      const autoGrow = () => {
-        textarea.style.height = 'auto';
-        textarea.style.height = `${Math.max(34, textarea.scrollHeight)}px`;
-      };
-
-      // Controls Row: Box Style Cycle (Plain ➔ 4-Side Box ➔ 2-Side Bracket) + Slider + OK
-      const controlsRow = makeElement('div', {
-        style: {
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px',
-          background: 'rgba(15, 23, 42, 0.98)', border: '1px solid rgba(255,255,255,0.18)',
-          borderRadius: '6px', padding: '4px 8px', fontSize: '10px'
-        }
-      });
-
-      const styleBtn = makeElement('button', {
-        className: 'dr-nav-btn primary',
-        style: { padding: '2px 6px', fontSize: '10px' },
-        title: 'Cycle Frame: 4-Side Box ➔ 2-Side Bracket ➔ Plain Text',
-        onclick: (e) => {
-          e.stopPropagation();
-          const styles = ['box', 'bracket', 'none'];
-          const next = styles[(styles.indexOf(curveRecord.boxStyle) + 1) % styles.length];
-          curveRecord.boxStyle = next;
-          this.stageState.boxStyle = next;
-          styleBtn.textContent = next === 'box' ? '◻ Box' : (next === 'bracket' ? '◺ Bracket' : 'Plain');
-          this.renderStage();
-        }
-      }, curveRecord.boxStyle === 'box' ? '◻ Box' : (curveRecord.boxStyle === 'bracket' ? '◺ Bracket' : 'Plain'));
-
-      const sizeSlider = makeElement('input', {
-        type: 'range', min: '14', max: '48', value: String(curveRecord.fontSize),
-        style: { width: '65px', accentColor: '#00f2fe', cursor: 'pointer' },
-        oninput: (e) => {
-          const sz = parseInt(e.target.value, 10);
-          curveRecord.fontSize = sz;
-          this.stageState.fontSize = sz;
-          textarea.style.fontSize = `${sz}px`;
-          autoGrow();
-          this.renderStage();
-        }
-      });
-
-      let committed = false;
-      let onOutClick = null;
-
-      const commit = () => {
-        if (committed) return;
-        committed = true;
-        if (onOutClick) {
-          window.removeEventListener('mousedown', onOutClick);
-          onOutClick = null;
-        }
-        curveRecord.text = textarea.value.trim();
-        curveRecord.justifySide = isLeft ? 'left' : 'right';
-        editorWrap.remove();
-        this.renderStage();
-      };
-
-      const okBtn = makeElement('button', {
-        className: 'dr-nav-btn primary',
-        style: { padding: '2px 8px', fontSize: '10px', background: '#238636', borderColor: '#2ea043' },
-        onclick: (e) => {
-          e.stopPropagation();
-          commit();
-        }
-      }, '✓ OK');
-
-      controlsRow.append(styleBtn, sizeSlider, okBtn);
-      editorWrap.append(textarea, controlsRow);
-      this.stageBox.appendChild(editorWrap);
-
-      textarea.addEventListener('input', () => {
-        autoGrow();
-        curveRecord.text = textarea.value;
-        curveRecord.justifySide = isLeft ? 'left' : 'right';
-        this.renderStage();
-      });
-
-      textarea.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey) {
-          e.preventDefault();
-          commit();
-        } else if (e.key === 'Escape') {
-          e.preventDefault();
-          textarea.value = '';
-          commit();
-        }
-      });
-
-      onOutClick = (ev) => {
-        if (!editorWrap.contains(ev.target)) {
-          commit();
-        }
-      };
-
-      setTimeout(() => {
-        textarea.focus();
-        autoGrow();
-        window.addEventListener('mousedown', onOutClick);
-      }, 40);
-    }
-  ensureFontLoaded(fontFamily) {
-      if (!fontFamily) return;
-      if (fontFamily.includes('Architects Daughter') && !this._loadedFonts.has('Architects Daughter')) {
-        this._loadedFonts.add('Architects Daughter');
-        const link = document.createElement('link');
-        link.rel = 'stylesheet';
-        link.href = 'https://fonts.googleapis.com/css2?family=Architects+Daughter&display=swap';
-        document.head.appendChild(link);
-        if (document.fonts) {
-          document.fonts.load('14px "Architects Daughter"').then(() => {
-            this.renderStage();
-          }).catch(() => {});
-        }
-      }
-    }
-
-  undoLastAnnotation() {
-      if (this.stageState.annotations.length === 0) return;
-      const item = this.stageState.annotations.pop();
-      if (item.elements) {
-        item.elements.forEach(el => el.remove());
-      } else if (item.element) {
-        item.element.remove();
-      }
-      const inlineEditor = document.getElementById('qa-inline-tail-editor');
-      if (inlineEditor) inlineEditor.remove();
-      this.controlsLayer.innerHTML = '';
-      this.renderStage();
-    }
-
-  beziersToVertices(beziers) {
-      if (!beziers || beziers.length === 0) return [];
-
-      const n = beziers.length;
-      const vertices = [];
-
-      // 1. Create on-curve Knots directly at the segment endpoints
-      for (let i = 0; i <= n; i++) {
-        const pt = (i < n) ? beziers[i][0].slice(0, 2) : beziers[n - 1][3].slice(0, 2);
-        const v = new BezierVertex(pt);
-        v.tangents = [null, null];
-        v.tangentAngleOffset = 0;
-        v.curvature = 1.0;
-        v.balance = 1.0;
-        vertices.push(v);
-      }
-
-      const norm2D = (v) => {
-        const m = Math.hypot(v[0], v[1]);
-        return m > 1e-6 ? [v[0] / m, v[1] / m] : [1, 0];
-      };
-
-      const angleBetweenRad = (baseV, targetV) => {
-        const dot = baseV[0] * targetV[0] + baseV[1] * targetV[1];
-        const cross = baseV[0] * targetV[1] - baseV[1] * targetV[0];
-        return Math.atan2(cross, dot);
-      };
-
-      // 2. Solve the exact angular shift (tangentAngleOffset) so curves maintain their profile
-      for (let i = 0; i < vertices.length; i++) {
-        const v = vertices[i];
-        const prevV = vertices[i - 1];
-        const nextV = vertices[i + 1];
-
-        if (prevV && nextV) {
-          // Intermediate Knot: shift relative to the neighbor-averaged baseline
-          const inHandle = beziers[i - 1][2];
-          const outHandle = beziers[i][1];
-          const pt = v.point;
-
-          const actualTan = norm2D([outHandle[0] - inHandle[0], outHandle[1] - inHandle[1]]);
-          const toNext = norm2D([nextV.point[0] - pt[0], nextV.point[1] - pt[1]]);
-          const fromPrev = norm2D([pt[0] - prevV.point[0], pt[1] - prevV.point[1]]);
-          const baseTan = norm2D([toNext[0] + fromPrev[0], toNext[1] + fromPrev[1]]);
-
-          v.tangentAngleOffset = angleBetweenRad(baseTan, actualTan);
-
-          const dNext = Math.hypot(nextV.point[0] - pt[0], nextV.point[1] - pt[1]);
-          const dPrev = Math.hypot(pt[0] - prevV.point[0], pt[1] - prevV.point[1]);
-          const lOut = Math.hypot(outHandle[0] - pt[0], outHandle[1] - pt[1]);
-          const lIn = Math.hypot(pt[0] - inHandle[0], pt[1] - inHandle[1]);
-
-          const sOut = dNext > 1e-4 ? (3 * lOut) / dNext : 1;
-          const sIn = dPrev > 1e-4 ? (3 * lIn) / dPrev : 1;
-          const sumS = sOut + sIn;
-          if (sumS > 1e-4) {
-            v.curvature = Math.max(0.2, Math.min(3.0, sumS / 2));
-            v.balance = Math.max(0.1, Math.min(1.9, (2 * sIn) / sumS));
-          }
-        } else if (nextV) {
-          // Start Knot (Arrowhead tip, i = 0)
-          // Baseline is the chord to next knot: (next - curr)
-          const chord = norm2D([nextV.point[0] - v.point[0], nextV.point[1] - v.point[1]]);
-          const outHandle = beziers[0][1];
-          const actualTan = norm2D([outHandle[0] - v.point[0], outHandle[1] - v.point[1]]);
-
-          // Shift relative to the straight chord (preserves S-curve and C-curve departure angle!)
-          v.tangentAngleOffset = angleBetweenRad(chord, actualTan);
-
-          const dist = Math.hypot(nextV.point[0] - v.point[0], nextV.point[1] - v.point[1]);
-          const lOut = Math.hypot(outHandle[0] - v.point[0], outHandle[1] - v.point[1]);
-          if (dist > 1e-4) {
-            v.curvature = Math.max(0.2, Math.min(3.0, (3 * lOut) / dist));
-          }
-        } else if (prevV) {
-          // End Knot (Tail, i = n)
-          // Baseline is the forward departure from prev: (curr - prev)
-          const chord = norm2D([v.point[0] - prevV.point[0], v.point[1] - prevV.point[1]]);
-          const inHandle = beziers[n - 1][2];
-          const actualTan = norm2D([v.point[0] - inHandle[0], v.point[1] - inHandle[1]]);
-
-          // Shift relative to the chord (preserves S-curve and C-curve entry angle!)
-          v.tangentAngleOffset = angleBetweenRad(chord, actualTan);
-
-          const dist = Math.hypot(v.point[0] - prevV.point[0], v.point[1] - prevV.point[1]);
-          const lIn = Math.hypot(v.point[0] - inHandle[0], v.point[1] - inHandle[1]);
-          if (dist > 1e-4) {
-            v.curvature = Math.max(0.2, Math.min(3.0, (3 * lIn) / dist));
-          }
-        }
-      }
-
-      // 3. Relax through UpdateControlPoints: the initial curve now matches the drawn gesture
-      if (typeof UpdateControlPoints !== 'undefined') {
-        UpdateControlPoints.run(vertices, 6);
-      }
-
-      return vertices;
-    }
-
-  verticesToBeziers(vertices, affectedRange = null) {
-      if (!vertices || vertices.length < 2) return [];
-
-      if (typeof UpdateControlPoints !== 'undefined') {
-        UpdateControlPoints.run(vertices, 6, affectedRange);
-      }
-
-      const beziers = [];
-      for (let i = 0; i < vertices.length - 1; i++) {
-        const vStart = vertices[i];
-        const vEnd = vertices[i + 1];
-
-        const p0 = [vStart.point[0], vStart.point[1]];
-        const p1 = [vStart.controlPoints[1][0], vStart.controlPoints[1][1]];
-        const p2 = [vEnd.controlPoints[0][0], vEnd.controlPoints[0][1]];
-        const p3 = [vEnd.point[0], vEnd.point[1]];
-
-        beziers.push([p0, p1, p2, p3]);
-      }
-      return beziers;
-    }
-  setupClipboardAndDrop(wrapEl) {
-      this._onPaste = (e) => {
-        if (e.target.closest('input, textarea, [contenteditable="true"]')) return;
-        if (e.clipboardData && e.clipboardData.items) {
-          for (const item of e.clipboardData.items) {
-            if (item.type.startsWith('image/')) {
-              const file = item.getAsFile();
-              if (file) {
-                this.loadBlobOrFile(file);
-                e.preventDefault();
-                return;
-              }
+  setupPasteAndDropListener() {
+    window.addEventListener('paste', (e) => {
+      if (e.target.closest('input, textarea, [contenteditable="true"]')) return;
+      if (e.clipboardData && e.clipboardData.items) {
+        for (const item of e.clipboardData.items) {
+          if (item.type.startsWith('image/')) {
+            const file = item.getAsFile();
+            if (file) {
+              const reader = new FileReader();
+              reader.onload = (ev) => {
+                const img = new Image();
+                img.onload = () => {
+                  this.addNewImagePlate(img, 80, 80);
+                };
+                img.src = ev.target.result;
+              };
+              reader.readAsDataURL(file);
+              e.preventDefault();
+              return;
             }
           }
         }
-      };
-      window.addEventListener('paste', this._onPaste);
+      }
+    });
 
-      const vp = this.viewport || wrapEl;
-      vp.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        this.stageBox.style.outlineColor = '#00e676';
-      });
-      vp.addEventListener('dragleave', () => {
-        this.stageBox.style.outlineColor = 'rgba(0, 242, 254, 0.35)';
-      });
-      vp.addEventListener('drop', (e) => {
-        e.preventDefault();
-        this.stageBox.style.outlineColor = 'rgba(0, 242, 254, 0.35)';
-        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-          this.loadBlobOrFile(e.dataTransfer.files[0]);
-        } else {
-          const url = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('URL');
-          if (url && (url.startsWith('http') || url.startsWith('data:image/'))) {
+    this.viewport.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.stageBox.style.outline = '2px dashed #00f2fe';
+    });
+
+    this.viewport.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      this.stageBox.style.outline = '1.5px dashed rgba(0, 242, 254, 0.35)';
+    });
+
+    this.viewport.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.stageBox.style.outline = '1.5px dashed rgba(0, 242, 254, 0.35)';
+
+      const files = e.dataTransfer?.files;
+      if (!files || files.length === 0) return;
+
+      const rect = this.stageBox.getBoundingClientRect();
+      const z = this.stageState.zoom;
+      const dropX = Math.round((e.clientX - rect.left) / z);
+      const dropY = Math.round((e.clientY - rect.top) / z);
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.type.startsWith('image/')) {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
             const img = new Image();
-            img.crossOrigin = 'anonymous';
             img.onload = () => {
-              this.stageState.baseImage = img;
-              this.stageState.cropRect = { x: 0, y: 0, width: img.naturalWidth, height: img.naturalHeight };
-              this.stageState.baseOrigin = { x: 0, y: 0 };
-              this.cropCanvas = null;
-              this.baseCropCanvas = null;
-              this.stageState.diffCallouts = [];
-              this.stageState.manualSizing = false;
-              this.renderStage();
+              this.addNewImagePlate(img, dropX + i * 25, dropY + i * 25);
             };
-            img.src = url;
-          }
+            img.src = ev.target.result;
+          };
+          reader.readAsDataURL(file);
         }
-      });
-    }
+      }
+    });
+  }
 
-  loadBlobOrFile(file) {
-      if (!file || !file.type.startsWith('image/')) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const img = new Image();
-        img.onload = () => {
-          this.stageState.baseImage = img;
-          this.stageState.cropRect = { x: 0, y: 0, width: img.naturalWidth, height: img.naturalHeight };
-          this.stageState.baseOrigin = { x: 0, y: 0 };
-          this.cropCanvas = null;
-          this.baseCropCanvas = null;
-          this.stageState.diffCallouts = [];
-          this.stageState.manualSizing = false;
-          this.renderStage();
-
-          const pill = document.getElementById('qa-status-pill');
-          if (pill) {
-            pill.textContent = `Image Loaded (${img.naturalWidth}×${img.naturalHeight})`;
-            pill.style.background = 'rgba(0, 230, 118, 0.2)';
-            pill.style.color = '#00e676';
-          }
-        };
-        img.src = ev.target.result;
-      };
-      reader.readAsDataURL(file);
-    }
-
-  addPenVertex(pt) {
-      if (!this._activePenVertices) this._activePenVertices = [];
-
-      const vertex = new BezierVertex([pt[0], pt[1]]);
-      vertex.curvature = 1.0;
-      vertex.balance = 1.0;
-      vertex.tangentAngleOffset = 0;
-      this._activePenVertices.push(vertex);
-
-      // Visual anchor marker for this point on the curve
-      const marker = makeElement('svg:circle', {
-        cx: pt[0], cy: pt[1], r: '5',
-        fill: '#00e676', stroke: '#ffffff', 'stroke-width': '1.8',
+  renderPenNodesMarkers() {
+    this.controlsLayer.querySelectorAll('.qa-pen-active-anchor').forEach(el => el.remove());
+    if (!this._penNodes) return;
+    this._penNodes.forEach((pt, i) => {
+      this.controlsLayer.appendChild(makeElement('svg:circle', {
         className: 'qa-pen-active-anchor',
+        cx: pt[0], cy: pt[1], r: '4.5',
+        fill: i === 0 ? '#ffd700' : '#00e676', stroke: '#ffffff', 'stroke-width': '1.5',
         style: { pointerEvents: 'none' }
-      });
-      this.controlsLayer.appendChild(marker);
+      }));
+    });
+  }
 
-      const pill = document.getElementById('qa-status-pill');
-      if (pill) {
-        pill.textContent = `Point #${this._activePenVertices.length} placed (Enter/Dbl-click to commit)`;
-        pill.style.background = 'rgba(0, 242, 254, 0.2)';
-        pill.style.color = '#00f2fe';
-      }
-    }
-
-  updatePenTentativePreview(mousePt) {
-      if (!this._activePenVertices || this._activePenVertices.length === 0) return;
-
-      const verticesCopy = this._activePenVertices.map(v => {
-        const cp = new BezierVertex(v.point.slice());
-        cp.curvature = v.curvature;
-        cp.balance = v.balance;
-        cp.tangentAngleOffset = v.tangentAngleOffset;
-        return cp;
-      });
-
-      const tentativeVertex = new BezierVertex([mousePt[0], mousePt[1]]);
-      tentativeVertex.isTentative = true;
-      verticesCopy.push(tentativeVertex);
-
-      if (typeof UpdateControlPoints !== 'undefined') {
-        UpdateControlPoints.run(verticesCopy, 5);
-      }
-
-      const beziers = this.verticesToBeziers(verticesCopy);
-      if (!beziers || beziers.length === 0) return;
-
-      let d = 'M ' + beziers[0][0].join(' ');
-      for (let i = 0; i < beziers.length; i++) {
-        const [start, cp1, cp2, end] = beziers[i];
-        d += ` C ${cp1.join(' ')}, ${cp2.join(' ')}, ${end.join(' ')}`;
-      }
-
-      if (!this.svgSurface._penPreview) {
-        this.svgSurface._penPreview = makeElement('svg:path', {
-          stroke: this.stageState.currentColor,
-          'stroke-width': String(this.stageState.curveStrokeWidth || 3.2),
-          'stroke-dasharray': '5,3',
-          fill: 'none',
-          style: { pointerEvents: 'none' }
-        });
-        this.strokeLayer.appendChild(this.svgSurface._penPreview);
-      }
-      this.svgSurface._penPreview.setAttribute('d', d);
-    }
-
-  commitPenCurve() {
-      if (!this._activePenVertices || this._activePenVertices.length < 2) {
-        this.cancelPenCurve();
-        return;
-      }
-
-      if (typeof UpdateControlPoints !== 'undefined') {
-        UpdateControlPoints.run(this._activePenVertices, 8);
-      }
-
-      const beziers = this.verticesToBeziers(this._activePenVertices);
-      const verts = this._activePenVertices;
-
-      this.cancelPenCurve();
-
-      if (beziers && beziers.length > 0) {
-        this.commitSpline(beziers, this.stageState.currentColor, this.stageState.hasArrow);
-        // Attach the solved on-curve vertices directly to the newly created record
-        const lastAnn = this.stageState.annotations[this.stageState.annotations.length - 1];
-        if (lastAnn && lastAnn.type === 'curve') {
-          lastAnn.vertices = verts;
+  showClutchHandRestBadge(tipPt) {
+    let badge = document.getElementById('qa-clutch-rest-badge');
+    if (!badge) {
+      badge = makeElement('div', {
+        id: 'qa-clutch-rest-badge',
+        style: {
+          position: 'absolute', background: 'rgba(245, 158, 11, 0.95)', color: '#070a13',
+          padding: '6px 14px', borderRadius: '20px', fontFamily: 'monospace', fontSize: '11px',
+          fontWeight: 'bold', zIndex: '90', pointerEvents: 'none'
         }
-      }
+      }, '⏸️ Hand-Rest Active — Click down & release Ctrl to resume');
+      this.stageBox.appendChild(badge);
+    }
+    if (tipPt) {
+      badge.style.left = `${tipPt[0] + 16}px`;
+      badge.style.top = `${tipPt[1] - 28}px`;
+    }
+    badge.style.display = 'block';
+  }
+
+  hideClutchHandRestBadge() {
+    const b = document.getElementById('qa-clutch-rest-badge');
+    if (b) b.remove();
+  }
+
+  commitSpline(beziers, color, hasArrow) {
+    if (!beziers || beziers.length === 0) return;
+
+    let d = 'M ' + beziers[0][0].join(' ');
+    for (let i = 0; i < beziers.length; i++) {
+      const [start, cp1, cp2, end] = beziers[i];
+      d += ` C ${cp1.join(' ')}, ${cp2.join(' ')}, ${end.join(' ')}`;
     }
 
-  cancelPenCurve() {
-      this._activePenVertices = [];
-      if (this.svgSurface._penPreview) {
-        this.svgSurface._penPreview.remove();
-        this.svgSurface._penPreview = null;
-      }
-      this.controlsLayer.querySelectorAll('.qa-pen-active-anchor').forEach(el => el.remove());
-      const pill = document.getElementById('qa-status-pill');
-      if (pill) {
-        pill.textContent = 'Ready';
-        pill.style.background = 'rgba(0, 242, 254, 0.15)';
-        pill.style.color = '#00f2fe';
-      }
-    }
+    const shadowOffset = 2.0;
+    const shadowColor = 'rgba(10, 15, 25, 0.95)';
 
-  renderEphemeralKnotHandles(curveRecord) {
-      if (this.stageState.selectedItem === curveRecord) return;
-      if (!curveRecord.vertices || curveRecord.vertices.length === 0) {
-        curveRecord.vertices = this.beziersToVertices(curveRecord.beziers);
-      }
+    const shadowPath = makeElement('svg:path', {
+      d, transform: `translate(${shadowOffset}, ${shadowOffset})`,
+      stroke: shadowColor, 'stroke-width': '5.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none'
+    });
 
-      const ephemeralGroup = makeElement('svg:g', { className: 'qa-ephemeral-knots' });
-      curveRecord.vertices.forEach((v) => {
-        ephemeralGroup.appendChild(makeElement('svg:circle', {
-          cx: v.point[0],
-          cy: v.point[1],
-          r: '4',
-          fill: '#00e676',
+    const splinePath = makeElement('svg:path', {
+      d, stroke: color, 'stroke-width': '3.2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none'
+    });
+
+    const vertices = this.beziersToVertices(beziers);
+
+    const curveRecord = {
+      id: 'curve_' + Date.now(),
+      type: 'curve',
+      beziers,
+      vertices,
+      color,
+      arrowEnd: hasArrow ? 'tip' : 'none',
+      textEnd: 'tail',
+      text: '',
+      hasTextBox: this.stageState.hasBorder,
+      fontFamily: this.stageState.fontFamily,
+      fontSize: this.stageState.fontSize || 22,
+      elements: [shadowPath, splinePath]
+    };
+
+    this.shadowLayer.appendChild(shadowPath);
+    this.strokeLayer.appendChild(splinePath);
+
+    this.stageState.annotations.push(curveRecord);
+    this.commitCurveGeometryUpdate();
+    this.exposeBezierHandles(curveRecord);
+    this.renderSegmentMidpointIndicators(curveRecord);
+    this.renderStage();
+    this.updateDynamicKeyInHUD();
+
+    // Auto-prompt inline text immediately at the tail so you can just type right away!
+    const termSeg = beziers[beziers.length - 1];
+    setTimeout(() => {
+      this._promptInlineTailText(curveRecord, termSeg[3], 'left');
+    }, 40);
+  }
+
+  // ── Stable Knot Dragging (Single-Knot Lock vs Ripple) ──
+  exposeBezierHandles(curveRecord) {
+    this.controlsLayer.innerHTML = '';
+    if (!curveRecord || !curveRecord.vertices) return;
+
+    this.stageState.selectedItem = curveRecord;
+    const vertices = curveRecord.vertices;
+
+    vertices.forEach((v, idx) => {
+      const isTip = (idx === 0 && curveRecord.arrowEnd === 'tip');
+      const isTail = (idx === vertices.length - 1 && curveRecord.arrowEnd === 'tail');
+      const isSelected = (idx === this._activeKnotIdx);
+
+      const fatTarget = makeElement('svg:circle', {
+        cx: v.point[0], cy: v.point[1], r: '14', fill: 'transparent',
+        style: { cursor: 'move', pointerEvents: 'all' }
+      });
+
+      let nodeCircle;
+      if (isTip || isTail) {
+        nodeCircle = makeElement('svg:circle', {
+          cx: v.point[0], cy: v.point[1], r: '3.5',
+          fill: 'none', stroke: isSelected ? '#00f2fe' : '#ffd700',
+          'stroke-width': isSelected ? '2.5' : '1.5',
+          className: 'qa-on-curve-knot-handle',
+          style: { pointerEvents: 'none', filter: isSelected ? 'drop-shadow(0 0 6px #00f2fe)' : 'none' }
+        });
+      } else {
+        nodeCircle = makeElement('svg:circle', {
+          cx: v.point[0], cy: v.point[1],
+          r: isSelected ? '6.5' : '3.5',
+          fill: isSelected ? '#00f2fe' : '#00e676',
           stroke: '#ffffff',
-          'stroke-width': '1.5',
-          opacity: '0.8',
-          style: { pointerEvents: 'none', filter: 'drop-shadow(0 0 4px #00e676)' }
-        }));
-      });
-
-      this.controlsLayer.appendChild(ephemeralGroup);
-      setTimeout(() => { ephemeralGroup.remove(); }, 1800);
-    }
-
-  showKnotToast(msg) {
-      let toast = document.getElementById('qa-knot-mod-toast');
-      if (!toast) {
-        toast = makeElement('div', {
-          id: 'qa-knot-mod-toast',
-          style: {
-            position: 'absolute',
-            bottom: '16px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            background: 'rgba(15, 23, 42, 0.95)',
-            border: '1.5px solid #00f2fe',
-            color: '#00f2fe',
-            padding: '4px 14px',
-            borderRadius: '20px',
-            fontSize: '11px',
-            fontFamily: 'monospace',
-            fontWeight: 'bold',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.8), 0 0 12px rgba(0, 242, 254, 0.35)',
-            pointerEvents: 'none',
-            zIndex: '100',
-            transition: 'opacity 0.2s ease'
-          }
+          'stroke-width': isSelected ? '2' : '1.2',
+          className: 'qa-on-curve-knot-handle',
+          style: { pointerEvents: 'none', filter: isSelected ? 'drop-shadow(0 0 8px #00f2fe)' : 'none' }
         });
-        this.stageBox.appendChild(toast);
-      }
-      toast.textContent = msg;
-      toast.style.opacity = '1';
-      if (this._toastTimer) clearTimeout(this._toastTimer);
-      this._toastTimer = setTimeout(() => { toast.style.opacity = '0'; }, 1600);
-    }
-
-  openCurveDebugDialog() {
-      if (this._curveDebugDialog && this._curveDebugDialog.element?.isConnected) {
-        this._curveDebugDialog.bringToFront();
-        this.updateCurveDebugUI();
-        return;
       }
 
-      const container = makeElement('div', {
-        id: 'qa-curve-debug-root',
-        style: {
-          padding: '12px 14px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '12px',
-          background: '#090d16',
-          color: '#f8fafc',
-          fontFamily: 'monospace',
-          fontSize: '11.5px',
-          boxSizing: 'border-box',
-          height: '100%',
-          overflowY: 'auto'
+      fatTarget.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (vertices.length <= 2) {
+          this.showKnotToast('⚠️ Curve must have at least 2 points');
+          return;
         }
+        vertices.splice(idx, 1);
+        this._activeKnotIdx = Math.max(0, idx - 1);
+        this.commitCurveGeometryUpdate();
+        this.exposeBezierHandles(curveRecord);
+        this.renderSegmentMidpointIndicators(curveRecord);
+        this.showKnotToast(`🗑️ Deleted knot #${idx + 1}`);
       });
 
-      const dialogMaker = (typeof UITools !== 'undefined' && typeof UITools.makeDialog === 'function')
-        ? UITools.makeDialog
-        : (opts => new DialogBox(opts));
+      let dragging = false;
+      fatTarget.addEventListener('mousedown', (e) => {
+        if (e.button === 2) return;
+        e.stopPropagation();
+        this._activeKnotIdx = idx;
+        dragging = true;
 
-      this._curveDebugDialog = dialogMaker({
-        title: '🛠️ Curve Architecture & Command Deck',
-        size: [540, 620],
-        position: [Math.max(20, window.innerWidth - 580), 75],
-        contentElement: container,
-        onClose: () => {
-          this._curveDebugDialog = null;
-          if (this._keyFilterListener) {
-            window.removeEventListener('keydown', this._keyFilterListener, true);
-            this._keyFilterListener = null;
-          }
+        if (!v._savedConstraint) {
+          v._savedConstraint = {
+            offset: v.tangentAngleOffset || 0,
+            curvature: v.curvature || 1.0,
+            balance: v.balance || 1.0
+          };
         }
-      });
 
-      this._debugKeyBuffer = '';
-      this._activeKnotIndex = 0;
-      this.buildCurveDebugContent(container);
+        v.tangentAngleOffset = 0;
 
-      // Global Key Listener for incremental unique typing filter
-      this._keyFilterListener = (e) => {
-        if (e.target.closest('input, textarea, [contenteditable="true"]')) return;
-        if (!this._curveDebugDialog || !this._curveDebugDialog.element?.isConnected) return;
+        const onDrag = (ev) => {
+          if (!dragging) return;
+          const rect = this.stageBox.getBoundingClientRect();
+          const z = this.stageState.zoom;
 
-        const key = e.key;
+          // ONLY update dragged point coordinate; other knots remain strictly fixed
+          v.point[0] = (ev.clientX - rect.left) / z;
+          v.point[1] = (ev.clientY - rect.top) / z;
 
-        if (key === 'Escape') {
-          if (this._debugKeyBuffer.length > 0) {
-            e.preventDefault();
-            e.stopPropagation();
-            this._debugKeyBuffer = '';
-            this.updateCommandMatrixUI();
-            return;
-          }
-        } else if (key === 'Backspace') {
-          if (this._debugKeyBuffer.length > 0) {
-            e.preventDefault();
-            e.stopPropagation();
-            this._debugKeyBuffer = this._debugKeyBuffer.slice(0, -1);
-            this.updateCommandMatrixUI();
-            return;
-          }
-        } else if (key === 'Enter') {
-          const topCmd = this._filteredCommands?.[0];
-          if (topCmd) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.executeDebugCommand(topCmd);
-            this._debugKeyBuffer = '';
-            this.updateCommandMatrixUI();
-            return;
-          }
-        } else if (/^[a-zA-Z0-9_\-]$/.test(key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
-          e.preventDefault();
-          e.stopPropagation();
-          this._debugKeyBuffer += key.toLowerCase();
-          this.updateCommandMatrixUI(true);
-        }
-      };
+          nodeCircle.setAttribute('cx', v.point[0]);
+          nodeCircle.setAttribute('cy', v.point[1]);
+          fatTarget.setAttribute('cx', v.point[0]);
+          fatTarget.setAttribute('cy', v.point[1]);
 
-      window.addEventListener('keydown', this._keyFilterListener, true);
-    }
+          const localScope = (this.stageState.dragLockMode === 'single')
+            ? { start: Math.max(0, idx - 1), end: Math.min(vertices.length - 1, idx + 1) }
+            : null;
 
-  buildCurveDebugContent(container) {
-      container.innerHTML = '';
-
-      // 1. Telemetry Status Card
-      const statusCard = makeElement('div', {
-        id: 'qa-debug-telemetry-card',
-        style: {
-          background: 'rgba(15, 23, 42, 0.96)',
-          border: '1px solid rgba(0, 242, 254, 0.35)',
-          borderRadius: '8px',
-          padding: '10px 12px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '6px',
-          boxShadow: '0 4px 14px rgba(0,0,0,0.5)'
-        }
-      });
-
-      const statusTitleRow = makeElement('div', {
-        style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '6px' }
-      }, [
-        makeElement('strong', { style: { color: '#00f2fe', fontSize: '12px' } }, '📊 CURVE TELEMETRY & KNOT INSPECTOR'),
-        makeElement('span', { id: 'qa-telemetry-badge', style: { color: '#10b981', fontSize: '10px', fontWeight: 'bold' } }, 'Active')
-      ]);
-
-      this._telemetryBody = makeElement('div', {
-        id: 'qa-telemetry-body',
-        style: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px', fontSize: '11px', color: '#cbd5e1' }
-      });
-
-      statusCard.append(statusTitleRow, this._telemetryBody);
-      container.appendChild(statusCard);
-
-      // 2. Interactive Knot Parameter Sliders
-      const slidersCard = makeElement('div', {
-        id: 'qa-debug-sliders-card',
-        style: {
-          background: 'rgba(15, 23, 42, 0.85)',
-          border: '1px solid rgba(255, 255, 255, 0.12)',
-          borderRadius: '8px',
-          padding: '10px 12px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '8px'
-        }
-      });
-
-      const makeSliderRow = (label, min, max, step, getter, setter) => {
-        const row = makeElement('div', {
-          style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }
-        });
-        const lbl = makeElement('span', { style: { color: '#94a3b8', minWidth: '85px' } }, label);
-        const valText = makeElement('span', { style: { color: '#00f2fe', fontFamily: 'monospace', minWidth: '45px', textAlign: 'right' } }, '');
-
-        const slider = makeElement('input', {
-          type: 'range', min: String(min), max: String(max), step: String(step),
-          style: { flex: 1, accentColor: '#00f2fe', cursor: 'pointer' },
-          oninput: (e) => {
-            setter(parseFloat(e.target.value));
-            valText.textContent = parseFloat(e.target.value).toFixed(2);
-            this.commitCurveGeometryUpdate();
-            this.updateCurveDebugUI();
-          }
-        });
-
-        row._updateVal = () => {
-          const v = getter();
-          slider.value = String(v);
-          valText.textContent = Number(v).toFixed(2);
+          this.commitCurveGeometryUpdate(localScope);
+          this.renderOutboundTangentRay(curveRecord, idx, () => this.commitCurveGeometryUpdate());
         };
 
-        row.append(lbl, slider, valText);
-        return row;
-      };
+        const onUp = () => {
+          dragging = false;
+          window.removeEventListener('mousemove', onDrag);
+          window.removeEventListener('mouseup', onUp);
+        };
 
-      const curKnot = () => this.getActiveKnot();
-
-      this._curvSlider = makeSliderRow('Curvature (C):', 0.2, 3.0, 0.05,
-        () => curKnot()?.curvature || 1.0,
-        (val) => { const k = curKnot(); if (k) k.curvature = val; }
-      );
-
-      this._balSlider = makeSliderRow('Balance (B):', 0.1, 1.9, 0.05,
-        () => curKnot()?.balance || 1.0,
-        (val) => { const k = curKnot(); if (k) k.balance = val; }
-      );
-
-      this._tanSlider = makeSliderRow('Tangent (Deg):', -180, 180, 5,
-        () => ((curKnot()?.tangentAngleOffset || 0) * (180 / Math.PI)),
-        (val) => { const k = curKnot(); if (k) k.tangentAngleOffset = val * (Math.PI / 180); }
-      );
-
-      slidersCard.append(
-        makeElement('strong', { style: { color: '#ffd700', fontSize: '11px' } }, '🎛️ ACTIVE KNOT LIVE TUNER'),
-        this._curvSlider, this._balSlider, this._tanSlider
-      );
-      container.appendChild(slidersCard);
-
-      // 3. Mnemonic Command Matrix with Prefix/Fuzzy Filter
-      const matrixCard = makeElement('div', {
-        id: 'qa-command-matrix-card',
-        style: {
-          background: 'rgba(15, 23, 42, 0.95)',
-          border: '1.5px solid #c084fc',
-          borderRadius: '8px',
-          padding: '10px 12px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '8px',
-          boxShadow: '0 8px 24px rgba(192, 132, 252, 0.25)',
-          flex: 1
-        }
+        window.addEventListener('mousemove', onDrag);
+        window.addEventListener('mouseup', onUp);
       });
 
-      const filterHud = makeElement('div', {
-        style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '6px' }
-      }, [
-        makeElement('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, [
-          makeElement('span', { style: { fontSize: '14px' } }, '⌨️'),
-          makeElement('strong', { style: { color: '#c084fc', fontSize: '11.5px' } }, 'MNEMONIC KEYSTROKE DECK:'),
-          this._bufferDisplay = makeElement('span', {
-            style: { background: 'rgba(0, 242, 254, 0.2)', color: '#00f2fe', padding: '1px 6px', borderRadius: '4px', fontWeight: 'bold' }
-          }, '[Type to filter...]')
-        ]),
-        makeElement('button', {
-          className: 'dr-nav-btn',
-          style: { padding: '1px 6px', fontSize: '10px' },
-          onclick: () => {
-            this._debugKeyBuffer = '';
-            this.updateCommandMatrixUI();
-          }
-        }, 'Clear ⌫')
-      ]);
+      this.controlsLayer.appendChild(fatTarget);
+      this.controlsLayer.appendChild(nodeCircle);
+    });
 
-      this._commandListEl = makeElement('div', {
-        id: 'qa-debug-command-list',
-        style: { display: 'flex', flexDirection: 'column', gap: '4px', overflowY: 'auto', flex: 1 }
-      });
+    this.renderOutboundTangentRay(curveRecord, this._activeKnotIdx, () => this.commitCurveGeometryUpdate());
+    this.renderSegmentMidpointIndicators(curveRecord);
+    this.updateDynamicKeyInHUD();
+  }
 
-      matrixCard.append(filterHud, this._commandListEl);
-      container.appendChild(matrixCard);
-
-      this.initCommandRegistry();
-      this.updateCurveDebugUI();
-    }
-
-  initCommandRegistry() {
-      this._commandRegistry = [
-        {
-          id: 'reset_point',
-          key: 'rp',
-          mnemonic: 'Reset Point Constraints',
-          desc: 'Clears tangent offset, curvature=1, balance=1 on selected Knot',
-          action: () => {
-            const k = this.getActiveKnot();
-            if (k) {
-              k.tangentAngleOffset = 0;
-              k.curvature = 1.0;
-              k.balance = 1.0;
-              k.tangents = [null, null];
-              this.commitCurveGeometryUpdate();
-              this.showKnotToast('✓ Reset constraints on active Knot');
-            }
-          }
-        },
-        {
-          id: 'drop_all',
-          key: 'dc',
-          mnemonic: 'Drop All Constraints (Whole Curve)',
-          desc: 'Drops all custom offsets/curvature across entire curve to default relaxation',
-          action: () => {
-            const curve = this.getActiveCurve();
-            if (curve && curve.vertices) {
-              curve.vertices.forEach(v => {
-                v.tangentAngleOffset = 0;
-                v.curvature = 1.0;
-                v.balance = 1.0;
-                v.tangents = [null, null];
-              });
-              this.commitCurveGeometryUpdate();
-              this.showKnotToast('✓ Dropped all constraints on curve');
-            }
-          }
-        },
-        {
-          id: 'toggle_cusp',
-          key: 'tc',
-          mnemonic: 'Toggle Cusp (Break Tangent)',
-          desc: 'Breaks tangency into sharp 45° corner/cusp at active Knot',
-          action: () => {
-            const k = this.getActiveKnot();
-            if (k) {
-              k.tangentAngleOffset = (Math.abs(k.tangentAngleOffset || 0) < 0.01) ? (Math.PI / 4) : 0;
-              this.commitCurveGeometryUpdate();
-              this.showKnotToast(`Cusp toggled: ${Math.round(k.tangentAngleOffset * (180 / Math.PI))}°`);
-            }
-          }
-        },
-        {
-          id: 'straighten',
-          key: 'sc',
-          mnemonic: 'Straighten Curve (Drop Intermediates)',
-          desc: 'Deletes all intermediate knots, creating direct arrow',
-          action: () => {
-            const curve = this.getActiveCurve();
-            if (curve && curve.vertices && curve.vertices.length > 2) {
-              curve.vertices = [curve.vertices[0], curve.vertices[curve.vertices.length - 1]];
-              this.commitCurveGeometryUpdate();
-              this.exposeBezierHandles(curve);
-              this.showKnotToast('✓ Straightened curve to direct line');
-            }
-          }
-        },
-        {
-          id: 'cycle_balance',
-          key: 'cb',
-          mnemonic: 'Cycle Balance Ratio',
-          desc: 'Toggles handle ratio balance (0.5 ➔ 1.5 ➔ 1.0)',
-          action: () => {
-            const k = this.getActiveKnot();
-            if (k) {
-              k.balance = (k.balance === 1.0) ? 1.5 : (k.balance === 1.5 ? 0.5 : 1.0);
-              this.commitCurveGeometryUpdate();
-              this.showKnotToast(`Balance set to: ${k.balance.toFixed(2)}`);
-            }
-          }
-        },
-        {
-          id: 'next_knot',
-          key: 'nk',
-          mnemonic: 'Next Knot Select',
-          desc: 'Advance selection to next knot on curve',
-          action: () => {
-            const curve = this.getActiveCurve();
-            if (curve && curve.vertices) {
-              this._activeKnotIndex = (this._activeKnotIndex + 1) % curve.vertices.length;
-              this.updateCurveDebugUI();
-              this.highlightActiveKnot();
-            }
-          }
-        },
-        {
-          id: 'prev_knot',
-          key: 'pk',
-          mnemonic: 'Previous Knot Select',
-          desc: 'Move selection to previous knot on curve',
-          action: () => {
-            const curve = this.getActiveCurve();
-            if (curve && curve.vertices) {
-              this._activeKnotIndex = (this._activeKnotIndex - 1 + curve.vertices.length) % curve.vertices.length;
-              this.updateCurveDebugUI();
-              this.highlightActiveKnot();
-            }
-          }
-        },
-        {
-          id: 'delete_knot',
-          key: 'dk',
-          mnemonic: 'Delete Active Knot',
-          desc: 'Removes the selected intermediate knot',
-          action: () => {
-            const curve = this.getActiveCurve();
-            if (curve && curve.vertices && curve.vertices.length > 2) {
-              if (this._activeKnotIndex > 0 && this._activeKnotIndex < curve.vertices.length - 1) {
-                curve.vertices.splice(this._activeKnotIndex, 1);
-                this._activeKnotIndex = Math.min(this._activeKnotIndex, curve.vertices.length - 1);
-                this.commitCurveGeometryUpdate();
-                this.exposeBezierHandles(curve);
-                this.showKnotToast('✓ Removed knot');
-              }
-            }
-          }
-        },
-        {
-          id: 'delete_curve',
-          key: 'dx',
-          mnemonic: 'Delete Entire Curve',
-          desc: 'Deletes the active curve and all its annotations',
-          action: () => {
-            const curve = this.getActiveCurve();
-            if (curve) {
-              const idx = this.stageState.annotations.indexOf(curve);
-              if (idx !== -1) this.stageState.annotations.splice(idx, 1);
-              if (curve.elements) curve.elements.forEach(el => el.remove());
-              this.controlsLayer.innerHTML = '';
-              this.stageState.selectedItem = null;
-              this.renderStage();
-              this.showKnotToast('🗑️ Curve deleted');
-            }
-          }
-        }
-      ];
-    }
-
-  updateCommandMatrixUI(autoCommitIfUnique = false) {
-      if (!this._commandListEl) return;
-      this._commandListEl.innerHTML = '';
-
-      const buf = (this._debugKeyBuffer || '').toLowerCase();
-      this._bufferDisplay.textContent = buf ? `"${buf}"` : '[Type to filter...]';
-
-      // Filter registry based on keys or mnemonic match
-      const matches = (this._commandRegistry || []).filter(cmd => {
-        if (!buf) return true;
-        const keyMatch = cmd.key.toLowerCase().startsWith(buf) || cmd.key.toLowerCase().includes(buf);
-        const textMatch = cmd.mnemonic.toLowerCase().includes(buf) || cmd.id.toLowerCase().includes(buf);
-        return keyMatch || textMatch;
-      });
-
-      this._filteredCommands = matches;
-
-      // Unique match auto-execution
-      if (autoCommitIfUnique && buf.length >= 2 && matches.length === 1) {
-        const single = matches[0];
-        this.executeDebugCommand(single);
-        this._debugKeyBuffer = '';
-        this.updateCommandMatrixUI();
-        return;
-      }
-
-      if (matches.length === 0) {
-        this._commandListEl.appendChild(makeElement('div', {
-          style: { color: '#ff7b72', fontStyle: 'italic', padding: '12px', textAlign: 'center' }
-        }, `No commands match "${buf}". Press Escape or Backspace to clear.`));
-        return;
-      }
-
-      matches.forEach((cmd, idx) => {
-        const isTop = (idx === 0);
-
-        const card = makeElement('div', {
-          style: {
-            background: isTop ? 'rgba(0, 242, 254, 0.12)' : 'rgba(255, 255, 255, 0.02)',
-            border: isTop ? '1.5px solid #00f2fe' : '1px solid rgba(255, 255, 255, 0.06)',
-            borderRadius: '6px',
-            padding: '6px 10px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            cursor: 'pointer',
-            transition: 'all 0.1s ease'
-          },
-          onclick: () => {
-            this.executeDebugCommand(cmd);
-            this._debugKeyBuffer = '';
-            this.updateCommandMatrixUI();
-          }
-        });
-
-        // Highlight matched letters in mnemonic and key
-        const keySpan = makeElement('span', {
-          style: {
-            background: '#070a13', border: '1px solid #334155', color: '#ffd700',
-            fontFamily: 'monospace', fontWeight: 'bold', fontSize: '11px',
-            padding: '2px 6px', borderRadius: '4px', minWidth: '24px', textAlign: 'center'
-          }
-        }, cmd.key.toUpperCase());
-
-        const labelWrap = makeElement('div', { style: { display: 'flex', flexDirection: 'column', flex: 1, marginLeft: '10px' } });
-        const mnemonicEl = makeElement('div', { style: { fontWeight: 'bold', color: isTop ? '#00f2fe' : '#f8fafc', fontSize: '11.5px' } });
-        mnemonicEl.appendChild(this._highlightLetters(cmd.mnemonic, buf));
-
-        const descEl = makeElement('div', { style: { color: '#94a3b8', fontSize: '10px', marginTop: '2px' } }, cmd.desc);
-        labelWrap.append(mnemonicEl, descEl);
-
-        card.append(keySpan, labelWrap);
-        this._commandListEl.appendChild(card);
-      });
-    }
-
-  _highlightLetters(text, search) {
-      if (!search) return document.createTextNode(text);
-      const frag = document.createDocumentFragment();
-      const str = String(text);
-      const idx = str.toLowerCase().indexOf(search.toLowerCase());
-
-      if (idx !== -1) {
-        if (idx > 0) frag.appendChild(document.createTextNode(str.slice(0, idx)));
-        const matchSpan = makeElement('span', {
-          style: { color: '#00f2fe', background: 'rgba(0, 242, 254, 0.25)', borderRadius: '2px', padding: '0 2px' }
-        }, str.slice(idx, idx + search.length));
-        frag.appendChild(matchSpan);
-        if (idx + search.length < str.length) {
-          frag.appendChild(document.createTextNode(str.slice(idx + search.length)));
-        }
-      } else {
-        frag.appendChild(document.createTextNode(str));
-      }
-      return frag;
-    }
-
-  executeDebugCommand(cmd) {
-      if (!cmd || typeof cmd.action !== 'function') return;
-      try {
-        cmd.action();
-        this.updateCurveDebugUI();
-      } catch (e) {
-        console.warn('[CurveDebug] Execution error:', e);
-      }
-    }
-
-  getActiveCurve() {
-      if (this.stageState.selectedItem && this.stageState.selectedItem.type === 'curve') {
-        return this.stageState.selectedItem;
-      }
-      const curves = this.stageState.annotations.filter(a => a.type === 'curve');
-      return curves.length > 0 ? curves[curves.length - 1] : null;
-    }
-
-  getActiveKnot() {
-      const curve = this.getActiveCurve();
-      if (!curve || !curve.vertices || curve.vertices.length === 0) return null;
-      const idx = Math.max(0, Math.min(this._activeKnotIdx || 0, curve.vertices.length - 1));
-      return curve.vertices[idx] || null;
-    }
-  highlightActiveKnot() {
-      const handles = this.controlsLayer.querySelectorAll('.qa-on-curve-knot-handle');
-      handles.forEach((h, i) => {
-        const isCur = (i === this._activeKnotIndex);
-        h.setAttribute('stroke', isCur ? '#00f2fe' : '#ffffff');
-        h.setAttribute('stroke-width', isCur ? '3.5' : '2');
-        if (isCur) h.style.filter = 'drop-shadow(0 0 8px #00f2fe)';
-        else h.style.filter = 'drop-shadow(0 2px 6px rgba(0,0,0,0.9))';
-      });
-    }
-
-  updateCurveDebugUI() {
-      if (!this._telemetryBody) return;
-      this._telemetryBody.innerHTML = '';
-
-      const curve = this.getActiveCurve();
-      const badge = document.getElementById('qa-telemetry-badge');
-
-      if (!curve) {
-        if (badge) { badge.textContent = 'No Curve Selected'; badge.style.color = '#94a3b8'; }
-        this._telemetryBody.innerHTML = '<span style="grid-column: span 2; color:#64748b; font-style:italic;">Draw a curve or click a curve to inspect telemetry.</span>';
-        return;
-      }
-
-      if (badge) { badge.textContent = `Curve: ${curve.id.split('_')[1] || 'Active'}`; badge.style.color = '#10b981'; }
-
-      const knot = this.getActiveKnot();
-      const knotsCount = curve.vertices?.length || curve.beziers?.length + 1 || 0;
-      const knotIdx = this._activeKnotIndex || 0;
-
-      const makeItem = (label, val, col = '#00f2fe') => {
-        return makeElement('div', { style: { display: 'flex', justifyContent: 'space-between' } }, [
-          makeElement('span', { style: { color: '#94a3b8' } }, label),
-          makeElement('strong', { style: { color: col, fontFamily: 'monospace' } }, String(val))
-        ]);
-      };
-
-      const tanDeg = knot ? ((knot.tangentAngleOffset || 0) * (180 / Math.PI)).toFixed(1) + '°' : '0.0°';
-      const curvVal = knot ? (knot.curvature || 1.0).toFixed(2) : '1.00';
-      const balVal = knot ? (knot.balance || 1.0).toFixed(2) : '1.00';
-      const ptCoord = knot ? `[${Math.round(knot.point[0])}, ${Math.round(knot.point[1])}]` : '[--,--]';
-
-      this._telemetryBody.append(
-        makeItem('Total Knots:', knotsCount),
-        makeItem('Selected Knot:', `${knotIdx + 1} of ${knotsCount}`),
-        makeItem('Coordinates:', ptCoord),
-        makeItem('Tangent Offset:', tanDeg, '#ffd700'),
-        makeItem('Curvature (C):', curvVal),
-        makeItem('Balance (B):', balVal)
-      );
-
-      // Refresh live sliders to reflect selected knot values
-      if (this._curvSlider?._updateVal) this._curvSlider._updateVal();
-      if (this._balSlider?._updateVal) this._balSlider._updateVal();
-      if (this._tanSlider?._updateVal) this._tanSlider._updateVal();
-
-      this.updateCommandMatrixUI();
-      this.highlightActiveKnot();
-    }
-
-  commitCurveGeometryUpdate() {
+  commitCurveGeometryUpdate(affectedRange = null) {
       const curve = this.getActiveCurve();
       if (!curve || !curve.vertices || curve.vertices.length < 2) return;
 
-      curve.beziers = this.verticesToBeziers(curve.vertices);
-
+      // Respect affectedRange: only adjacent control points recalculate in Single Knot mode
+      curve.beziers = this.verticesToBeziers(curve.vertices, affectedRange);
       const [shadowEl, splineEl] = curve.elements;
-      let arrowShadowEl = curve.elements[2] || null;
-      let arrowForegroundEl = curve.elements[3] || null;
 
       let d = 'M ' + curve.beziers[0][0].join(' ');
       for (let i = 0; i < curve.beziers.length; i++) {
@@ -3653,1043 +2049,562 @@ class QuoraAnnotationComponent {
       if (splineEl) splineEl.setAttribute('d', d);
       if (shadowEl) shadowEl.setAttribute('d', d);
 
-      if (curve.hasArrow && arrowForegroundEl && arrowShadowEl) {
+      if (curve._arrowFg) { curve._arrowFg.remove(); curve._arrowFg = null; }
+      if (curve._arrowSh) { curve._arrowSh.remove(); curve._arrowSh = null; }
+
+      if (curve.arrowEnd === 'tip') {
         const p0 = curve.beziers[0][0];
         const p1 = curve.beziers[0][1];
-        const p2 = curve.beziers[0][2];
-        const p3 = curve.beziers[0][3];
-
-        let tSample = 0.25;
-        let q = CurveFitter.bezier_q([p0, p1, p2, p3], tSample);
-        let dist = Math.hypot(q[0] - p0[0], q[1] - p0[1]);
-        if (dist < 10 && curve.beziers.length > 1) {
-          q = curve.beziers[1][0];
-          dist = Math.hypot(q[0] - p0[0], q[1] - p0[1]);
-        }
-
-        const ux = dist > 0.001 ? (q[0] - p0[0]) / dist : 1;
-        const uy = dist > 0.001 ? (q[1] - p0[1]) / dist : 0;
-        const nx = -uy;
-        const ny = ux;
-
-        const barbLen = 18;
-        const barbSpread = 11;
-        const b1 = [p0[0] + ux * barbLen + nx * barbSpread, p0[1] + uy * barbLen + ny * barbSpread];
-        const b2 = [p0[0] + ux * barbLen - nx * barbSpread, p0[1] + uy * barbLen - ny * barbSpread];
-        const ctrl1 = [p0[0] + ux * (barbLen * 0.45) + nx * (barbSpread * 0.15), p0[1] + uy * (barbLen * 0.45) + ny * (barbSpread * 0.15)];
-        const ctrl2 = [p0[0] + ux * (barbLen * 0.45) - nx * (barbSpread * 0.15), p0[1] + uy * (barbLen * 0.45) - ny * (barbSpread * 0.15)];
-
-        const arrowD = `M ${b1[0]} ${b1[1]} Q ${ctrl1[0]} ${ctrl1[1]} ${p0[0]} ${p0[1]} M ${p0[0]} ${p0[1]} Q ${ctrl2[0]} ${ctrl2[1]} ${b2[0]} ${b2[1]}`;
-        arrowForegroundEl.setAttribute('d', arrowD);
-        arrowShadowEl.setAttribute('d', arrowD);
+        const dist = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) || 1;
+        const arrow = this.renderConcaveArrowhead(p0, [(p1[0] - p0[0]) / dist, (p1[1] - p0[1]) / dist], curve.color, 2.0);
+        curve._arrowSh = arrow.shadow;
+        curve._arrowFg = arrow.foreground;
+        this.shadowLayer.appendChild(arrow.shadow);
+        this.strokeLayer.appendChild(arrow.foreground);
+      } else if (curve.arrowEnd === 'tail') {
+        const lastSeg = curve.beziers[curve.beziers.length - 1];
+        const p2 = lastSeg[2];
+        const p3 = lastSeg[3];
+        const dist = Math.hypot(p3[0] - p2[0], p3[1] - p2[1]) || 1;
+        const arrow = this.renderConcaveArrowhead(p3, [(p2[0] - p3[0]) / dist, (p2[1] - p3[1]) / dist], curve.color, 2.0);
+        curve._arrowSh = arrow.shadow;
+        curve._arrowFg = arrow.foreground;
+        this.shadowLayer.appendChild(arrow.shadow);
+        this.strokeLayer.appendChild(arrow.foreground);
       }
 
       this.renderStage();
     }
+  getActiveCurve() {
+    if (this.stageState.selectedItem?.type === 'curve') return this.stageState.selectedItem;
+    const curves = this.stageState.annotations.filter(a => a.type === 'curve');
+    return curves.length > 0 ? curves[curves.length - 1] : null;
+  }
 
-  applyViewportTransform() {
-      if (!this.zoomScaffold) return;
-      const z = this.stageState.zoom;
-      const px = Math.round(this.stageState.panX);
-      const py = Math.round(this.stageState.panY);
-      this.zoomScaffold.style.transform = `translate(${px}px, ${py}px) scale(${z})`;
-      this.zoomScaffold.style.transformOrigin = '0 0';
-    }
+  getActiveKnot() {
+    const curve = this.getActiveCurve();
+    if (!curve || !curve.vertices) return null;
+    return curve.vertices[this._activeKnotIdx] || null;
+  }
 
-  setupImageDragDrop() {
-      const vp = this.viewport;
-      if (!vp) return;
-
-      ['dragenter', 'dragover'].forEach(evt => {
-        vp.addEventListener(evt, (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          vp.style.boxShadow = 'inset 0 0 20px rgba(0, 242, 254, 0.4)';
-        });
-      });
-
-      ['dragleave', 'drop'].forEach(evt => {
-        vp.addEventListener(evt, (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          vp.style.boxShadow = 'none';
-        });
-      });
-
-      vp.addEventListener('drop', (e) => {
-        const files = e.dataTransfer?.files;
-        if (!files || files.length === 0) return;
-
-        const rect = this.stageBox.getBoundingClientRect();
-        const z = this.stageState.zoom;
-        const dropWorldX = Math.round(((e.clientX - rect.left) / z));
-        const dropWorldY = Math.round(((e.clientY - rect.top) / z));
-
-        for (let i = 0; i < files.length; i++) {
-          const file = files[i];
-          if (file.type.startsWith('image/')) {
-            this.loadDroppedImageFile(file, dropWorldX + i * 20, dropWorldY + i * 20);
-          }
-        }
-      });
-    }
-
-  loadDroppedImageFile(file, posX = 40, posY = 40) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const img = new Image();
-        img.onload = () => {
-          // Natural dimension clamping for viewport
-          let w = img.naturalWidth;
-          let h = img.naturalHeight;
-          const maxInitial = 480;
-          if (w > maxInitial || h > maxInitial) {
-            const ratio = Math.min(maxInitial / w, maxInitial / h);
-            w = Math.round(w * ratio);
-            h = Math.round(h * ratio);
-          }
-
-          const imagePlate = {
-            id: 'img_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-            name: file.name || 'Image Plate',
-            img: img,
-            x: posX,
-            y: posY,
-            width: w,
-            height: h,
-            aspect: w / h
-          };
-
-          this.stageState.placedImages.push(imagePlate);
-          this.stageState.activeImage = imagePlate;
-
-          // If this is the primary first image, establish as base canvas
-          if (!this.stageState.baseImage) {
-            this.stageState.baseImage = img;
-            this.stageState.cropRect = { x: 0, y: 0, width: w, height: h };
-            this.stageState.canvasWidth = Math.max(this.stageState.canvasWidth, w + 80);
-            this.stageState.canvasHeight = Math.max(this.stageState.canvasHeight, h + 80);
-          }
-
-          this.renderStage();
-          if (this._devDeckDialog) this.updateDevDeckUI();
-        };
-        img.src = ev.target.result;
-      };
-      reader.readAsDataURL(file);
-    }
-
-  renderPlacedImages(ctx) {
-      if (!this.stageState.placedImages || this.stageState.placedImages.length === 0) return;
-
-      this.stageState.placedImages.forEach((plate) => {
-        ctx.save();
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
-        ctx.shadowBlur = 12;
-        ctx.drawImage(plate.img, plate.x, plate.y, plate.width, plate.height);
-
-        // Active outline if selected in Move/Tweak tool
-        if (this.stageState.activeImage === plate && this.stageState.activeTool === 'select') {
-          ctx.strokeStyle = '#00f2fe';
-          ctx.lineWidth = 2;
-          ctx.setLineDash([6, 4]);
-          ctx.strokeRect(plate.x, plate.y, plate.width, plate.height);
-        }
-        ctx.restore();
-      });
-    }
-
-  openDevDeckDialog() {
-      if (this._devDeckDialog && this._devDeckDialog.element?.isConnected) {
-        this._devDeckDialog.bringToFront();
-        this.updateDevDeckUI();
-        return;
-      }
-
-      const container = makeElement('div', {
-        id: 'qa-dev-deck-root',
+  showKnotToast(msg) {
+    let toast = document.getElementById('qa-knot-mod-toast');
+    if (!toast) {
+      toast = makeElement('div', {
+        id: 'qa-knot-mod-toast',
         style: {
-          padding: '12px 14px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '12px',
-          background: '#090d16',
-          color: '#f8fafc',
-          fontFamily: 'monospace',
-          fontSize: '11px',
-          boxSizing: 'border-box',
-          height: '100%',
-          overflowY: 'auto'
+          position: 'absolute', bottom: '16px', left: '50%', transform: 'translateX(-50%)',
+          background: 'rgba(15, 23, 42, 0.95)', border: '1.5px solid #00f2fe', color: '#00f2fe',
+          padding: '4px 14px', borderRadius: '20px', fontSize: '11px', fontFamily: 'monospace',
+          fontWeight: 'bold', zIndex: '100', pointerEvents: 'none'
         }
       });
+      this.stageBox.appendChild(toast);
+    }
+    toast.textContent = msg;
+    toast.style.opacity = '1';
+    if (this._toastTimer) clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => { toast.style.opacity = '0'; }, 1600);
+  }
 
-      const dialogMaker = (typeof UITools !== 'undefined' && typeof UITools.makeDialog === 'function')
-        ? UITools.makeDialog
-        : (opts => new DialogBox(opts));
+  showMetaHelpOverlay() {
+    this.hideMetaHelpOverlay();
+    const g = makeElement('svg:g', { id: 'qa-meta-help-layer', style: { pointerEvents: 'none' } });
+    const tf = this.computeAutoBounds();
+    const midX = tf.totalW / 2;
+    const midY = tf.totalH / 2;
 
-      this._devDeckDialog = dialogMaker({
-        title: '🛠️ Curve & Object Architecture Dev Deck',
-        size: [560, 640],
-        position: [Math.max(20, window.innerWidth - 600), 65],
-        contentElement: container,
-        onClose: () => {
-          this._devDeckDialog = null;
-        }
-      });
+    this.drawCalloutLeader(midX - 100, midY, ['🪢 Drawstring Drag-Lead', 'Drag past circle to pull curve'], { direction: 'left' });
+    this.drawCalloutLeader(midX + 70, midY - 60, ['⏸️ Hand-Rest Clutch', 'Hold Ctrl to pause & rest hand'], { direction: 'right' });
+    this.controlsLayer.appendChild(g);
+  }
 
-      this.buildDevDeckContent(container);
+  hideMetaHelpOverlay() {
+    const el = document.getElementById('qa-meta-help-layer');
+    if (el) el.remove();
+  }
+
+  undoLastAnnotation() {
+    if (this.stageState.annotations.length === 0) return;
+    const item = this.stageState.annotations.pop();
+    if (item.elements) item.elements.forEach(el => el.remove());
+    if (item._arrowFg) item._arrowFg.remove();
+    if (item._arrowSh) item._arrowSh.remove();
+    this.controlsLayer.innerHTML = '';
+    this.renderStage();
+    this.updateDynamicKeyInHUD();
+  }
+
+  beziersToVertices(beziers) {
+    if (!beziers || beziers.length === 0) return [];
+    const n = beziers.length;
+    const vertices = [];
+
+    for (let i = 0; i <= n; i++) {
+      const pt = (i < n) ? beziers[i][0].slice(0, 2) : beziers[n - 1][3].slice(0, 2);
+      const v = new BezierVertex(pt);
+      v.tangentAngleOffset = 0;
+      v.curvature = 1.0;
+      v.balance = 1.0;
+      vertices.push(v);
     }
 
-  buildDevDeckContent(container) {
-      container.innerHTML = '';
+    if (typeof UpdateControlPoints !== 'undefined') {
+      UpdateControlPoints.run(vertices, 6);
+    }
+    return vertices;
+  }
 
-      // 1. Top Action Ribbon
-      const topBar = makeElement('div', {
-        style: {
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          paddingBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', flexWrap: 'wrap', gap: '6px'
-        }
-      }, [
-        makeElement('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, [
-          makeElement('button', {
-            className: 'dr-nav-btn primary',
-            style: { padding: '4px 10px', fontSize: '11px', fontWeight: 'bold', background: '#238636', borderColor: '#2ea043' },
-            title: 'Serialize and copy entire drawing & knot state to clipboard for AI prompt pasting',
-            onclick: () => this.copyTelemetryStateToClipboard()
-          }, '📋 Copy State for AI'),
-          makeElement('button', {
-            className: 'dr-nav-btn',
-            style: { padding: '4px 8px', fontSize: '10.5px', color: '#ff7b72', borderColor: '#ff7b7266' },
-            title: 'Wipe all constraints (curvature, balance, tangency offsets) from entire selected curve',
-            onclick: () => this.wipeAllConstraintsFromActiveCurve()
-          }, 'Wipe Curve'),
-          makeElement('button', {
-            className: 'dr-nav-btn',
-            style: { padding: '4px 8px', fontSize: '10.5px', color: '#00f2fe', borderColor: 'rgba(0, 242, 254, 0.4)' },
-            title: 'Open full architectural audit & mathematical specifications dossier',
-            onclick: () => {
-              if (globalThis._quoraToysAppInstance) {
-                globalThis._quoraToysAppInstance.selectChapter('architecture');
-              } else {
-                window.open('documentation.html', '_blank');
-              }
-            }
-          }, '📖 Architecture Spec')
-        ]),
-        makeElement('label', {
-          style: { display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '10.5px', color: '#cbd5e1', cursor: 'pointer' }
-        }, [
-          (this._freeDragCheck = makeElement('input', {
-            type: 'checkbox',
-            checked: this.stageState.freePointOnDrag,
-            onchange: (e) => { this.stageState.freePointOnDrag = e.target.checked; }
-          })),
-          makeElement('span', {}, 'Free Knot on Drag')
-        ])
+  verticesToBeziers(vertices, affectedRange = null) {
+    if (!vertices || vertices.length < 2) return [];
+    if (typeof UpdateControlPoints !== 'undefined') {
+      UpdateControlPoints.run(vertices, 6, affectedRange);
+    }
+
+    const beziers = [];
+    for (let i = 0; i < vertices.length - 1; i++) {
+      beziers.push([
+        [vertices[i].point[0], vertices[i].point[1]],
+        [vertices[i].controlPoints[1][0], vertices[i].controlPoints[1][1]],
+        [vertices[i + 1].controlPoints[0][0], vertices[i + 1].controlPoints[0][1]],
+        [vertices[i + 1].point[0], vertices[i + 1].point[1]]
       ]);
-      container.appendChild(topBar);
-
-      // 2. Interactive Knot Picker Strip
-      const pickerCard = makeElement('div', {
-        id: 'qa-knot-picker-card',
-        style: {
-          background: 'rgba(15, 23, 42, 0.95)',
-          border: '1.5px solid rgba(0, 242, 254, 0.35)',
-          borderRadius: '8px',
-          padding: '8px 10px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '6px'
-        }
-      });
-
-      const pickerHeader = makeElement('div', {
-        style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' }
-      }, [
-        makeElement('strong', { style: { color: '#00f2fe', fontSize: '11.5px' } }, '🎯 SELECT VERTEX / KNOT TO INSPECT:'),
-        this._knotSelectorLabel = makeElement('span', { style: { color: '#ffd700', fontSize: '10.5px', fontWeight: 'bold' } }, 'Knot 1/1')
-      ]);
-
-      this._knotStripContainer = makeElement('div', {
-        id: 'qa-knot-strip',
-        style: { display: 'flex', gap: '5px', overflowX: 'auto', padding: '4px 0' }
-      });
-
-      pickerCard.append(pickerHeader, this._knotStripContainer);
-      container.appendChild(pickerCard);
-
-      // 3. Synchronized Live Sliders
-      const slidersCard = makeElement('div', {
-        id: 'qa-debug-sliders-card',
-        style: {
-          background: 'rgba(15, 23, 42, 0.85)',
-          border: '1px solid rgba(255, 255, 255, 0.12)',
-          borderRadius: '8px',
-          padding: '10px 12px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '8px'
-        }
-      });
-
-      const makeSliderRow = (label, min, max, step, getter, setter) => {
-        const row = makeElement('div', {
-          style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }
-        });
-        const lbl = makeElement('span', { style: { color: '#94a3b8', minWidth: '85px', fontSize: '10.5px' } }, label);
-        const valText = makeElement('span', { style: { color: '#00f2fe', fontFamily: 'monospace', minWidth: '45px', textAlign: 'right', fontSize: '11px' } }, '');
-
-        const slider = makeElement('input', {
-          type: 'range', min: String(min), max: String(max), step: String(step),
-          style: { flex: 1, accentColor: '#00f2fe', cursor: 'pointer' },
-          oninput: (e) => {
-            setter(parseFloat(e.target.value));
-            valText.textContent = parseFloat(e.target.value).toFixed(2);
-            this.commitCurveGeometryUpdate();
-            this.renderKnotTangentRay(this.getActiveKnot());
-            this.updateDevDeckUI(false);
-          }
-        });
-
-        row._updateVal = () => {
-          const v = getter();
-          slider.value = String(v);
-          valText.textContent = Number(v).toFixed(2);
-        };
-
-        row.append(lbl, slider, valText);
-        return row;
-      };
-
-      const curKnot = () => this.getActiveKnot();
-
-      this._curvSlider = makeSliderRow('Curvature (C):', 0.2, 3.0, 0.05,
-        () => curKnot()?.curvature || 1.0,
-        (val) => { const k = curKnot(); if (k) k.curvature = val; }
-      );
-
-      this._balSlider = makeSliderRow('Balance (B):', 0.1, 1.9, 0.05,
-        () => curKnot()?.balance || 1.0,
-        (val) => { const k = curKnot(); if (k) k.balance = val; }
-      );
-
-      this._tanSlider = makeSliderRow('Tangent (Deg):', -180, 180, 5,
-        () => Math.round((curKnot()?.tangentAngleOffset || 0) * (180 / Math.PI)),
-        (val) => { const k = curKnot(); if (k) k.tangentAngleOffset = val * (Math.PI / 180); }
-      );
-
-      slidersCard.append(
-        makeElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
-          makeElement('strong', { style: { color: '#ffd700', fontSize: '11px' } }, '🎛️ SYNCHRONIZED PARAMETERS'),
-          makeElement('button', {
-            className: 'dr-nav-btn',
-            style: { padding: '1px 6px', fontSize: '9.5px', color: '#ff7b72' },
-            title: 'Reset selected knot to default constraints',
-            onclick: () => {
-              const k = curKnot();
-              if (k) {
-                k.tangentAngleOffset = 0;
-                k.curvature = 1.0;
-                k.balance = 1.0;
-                this.commitCurveGeometryUpdate();
-                this.updateDevDeckUI();
-                this.showKnotToast('✓ Reset knot parameters');
-              }
-            }
-          }, 'Reset Knot')
-        ]),
-        this._curvSlider, this._balSlider, this._tanSlider
-      );
-      container.appendChild(slidersCard);
-
-      // 4. Object & Layer Hierarchy Stack
-      const stackCard = makeElement('div', {
-        style: {
-          background: 'rgba(15, 23, 42, 0.95)',
-          border: '1px solid rgba(192, 132, 252, 0.35)',
-          borderRadius: '8px',
-          padding: '10px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '6px',
-          flex: 1
-        }
-      });
-
-      const stackHeader = makeElement('div', {
-        style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '4px' }
-      }, [
-        makeElement('strong', { style: { color: '#c084fc', fontSize: '11.5px' } }, '📑 ENTITY STACK (Z-ORDER)'),
-        makeElement('span', { id: 'qa-entity-count', style: { color: '#94a3b8', fontSize: '10px' } }, '0 Items')
-      ]);
-
-      this._entityListEl = makeElement('div', {
-        id: 'qa-entity-list-items',
-        style: { display: 'flex', flexDirection: 'column', gap: '4px', overflowY: 'auto', flex: 1, maxHeight: '200px' }
-      });
-
-      stackCard.append(stackHeader, this._entityListEl);
-      container.appendChild(stackCard);
-
-      this.updateDevDeckUI();
     }
-  updateDevDeckUI(rebuildStrip = true) {
-      if (!this._entityListEl || !this._knotStripContainer) return;
+    return beziers;
+  }
 
-      const curve = (this.stageState.selectedItem?.type === 'curve')
-        ? this.stageState.selectedItem
-        : this.stageState.annotations.find(a => a.type === 'curve');
-
-      // 1. Build / Synchronize Knot Strip
-      if (curve && curve.vertices && curve.vertices.length > 0) {
-        this._activeKnotIdx = Math.max(0, Math.min(this._activeKnotIdx || 0, curve.vertices.length - 1));
-        this._knotSelectorLabel.textContent = `Knot ${this._activeKnotIdx + 1} of ${curve.vertices.length}`;
-
-        if (rebuildStrip) {
-          this._knotStripContainer.innerHTML = '';
-          curve.vertices.forEach((v, idx) => {
-            const isSelected = (idx === this._activeKnotIdx);
-            const isTip = (idx === 0 && curve.hasArrow);
-            const isTail = (idx === curve.vertices.length - 1);
-            const role = isTip ? 'Tip' : (isTail ? 'Tail' : `${idx + 1}`);
-
-            const chip = makeElement('button', {
-              className: `dr-nav-btn ${isSelected ? 'primary' : ''}`,
-              style: {
-                padding: '3px 8px',
-                fontSize: '10px',
-                fontFamily: 'monospace',
-                fontWeight: isSelected ? 'bold' : 'normal',
-                borderColor: isSelected ? '#00f2fe' : 'rgba(255, 255, 255, 0.15)',
-                background: isSelected ? 'linear-gradient(135deg, #0284c7 0%, #00f2fe 100%)' : 'rgba(255, 255, 255, 0.04)',
-                color: isSelected ? '#070a13' : (isTip ? '#ffd700' : (isTail ? '#38bdf8' : '#e2e8f0'))
-              },
-              title: `Pick Knot ${idx + 1} (${Math.round(v.point[0])}, ${Math.round(v.point[1])})`,
-              onclick: () => {
-                this._activeKnotIdx = idx;
-                this.highlightActiveKnot();
-                this.updateDevDeckUI(true);
-                this.renderKnotTangentRay(v);
-              }
-            }, `● ${role}`);
-
-            this._knotStripContainer.appendChild(chip);
-          });
-        }
-
-        // Synchronize all 3 sliders directly with active knot
-        if (this._curvSlider?._updateVal) this._curvSlider._updateVal();
-        if (this._balSlider?._updateVal) this._balSlider._updateVal();
-        if (this._tanSlider?._updateVal) this._tanSlider._updateVal();
-      } else {
-        this._knotSelectorLabel.textContent = 'None';
-        this._knotStripContainer.innerHTML = '<span style="color:#64748b; font-style:italic; font-size:10px;">No curve selected.</span>';
-      }
-
-      // 2. Synchronize Entity Stack List
-      this._entityListEl.innerHTML = '';
-      const allEntities = [
-        ...this.stageState.placedImages.map(img => ({ type: 'image', ref: img, label: img.name || 'Image Plate' })),
-        ...this.stageState.annotations.map(ann => ({
-          type: ann.type,
-          ref: ann,
-          label: ann.type === 'curve' ? (ann.text ? `Curve: "${ann.text}"` : 'Curve Spline') : `${ann.type.toUpperCase()} Mask`
-        }))
-      ];
-
-      const countEl = document.getElementById('qa-entity-count');
-      if (countEl) countEl.textContent = `${allEntities.length} Entities`;
-
-      allEntities.forEach((item, index) => {
-        const isSelected = (this.stageState.selectedItem === item.ref || this.stageState.activeImage === item.ref);
-
-        const row = makeElement('div', {
-          style: {
-            background: isSelected ? 'rgba(0, 242, 254, 0.12)' : 'rgba(255, 255, 255, 0.03)',
-            border: isSelected ? '1px solid #00f2fe' : '1px solid rgba(255, 255, 255, 0.08)',
-            borderRadius: '5px',
-            padding: '4px 8px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            cursor: 'pointer'
-          },
-          onclick: () => {
-            if (item.type === 'image') {
-              this.stageState.activeImage = item.ref;
-              this.stageState.selectedItem = null;
-            } else {
-              this.stageState.selectedItem = item.ref;
-              if (item.type === 'curve') this.exposeBezierHandles(item.ref);
-            }
-            this.renderStage();
-            this.updateDevDeckUI(true);
-          }
-        });
-
-        const labelSpan = makeElement('span', {
-          style: { color: isSelected ? '#00f2fe' : '#f8fafc', fontWeight: isSelected ? 'bold' : 'normal' }
-        }, `${index + 1}. ${item.label}`);
-
-        const actions = makeElement('div', { style: { display: 'flex', gap: '3px' } }, [
-          makeElement('button', {
-            className: 'dr-nav-btn',
-            style: { padding: '1px 5px', fontSize: '9px' },
-            title: 'Move Layer Up (Higher Z)',
-            onclick: (e) => {
-              e.stopPropagation();
-              this.moveEntityLayer(item, 1);
-            }
-          }, '▲'),
-          makeElement('button', {
-            className: 'dr-nav-btn',
-            style: { padding: '1px 5px', fontSize: '9px' },
-            title: 'Move Layer Down (Lower Z)',
-            onclick: (e) => {
-              e.stopPropagation();
-              this.moveEntityLayer(item, -1);
-            }
-          }, '▼'),
-          makeElement('button', {
-            className: 'dr-nav-btn',
-            style: { padding: '1px 5px', fontSize: '9px', color: '#ff7b72', borderColor: '#ff7b7266' },
-            title: 'Delete this entity',
-            onclick: (e) => {
-              e.stopPropagation();
-              this.deleteEntity(item);
-            }
-          }, '✕')
-        ]);
-
-        row.append(labelSpan, actions);
-        this._entityListEl.appendChild(row);
-      });
-    }
-  moveEntityLayer(item, delta) {
-      if (item.type === 'image') {
-        const idx = this.stageState.placedImages.indexOf(item.ref);
-        if (idx !== -1) {
-          const target = Math.max(0, Math.min(this.stageState.placedImages.length - 1, idx + delta));
-          const [moved] = this.stageState.placedImages.splice(idx, 1);
-          this.stageState.placedImages.splice(target, 0, moved);
-        }
-      } else {
-        const idx = this.stageState.annotations.indexOf(item.ref);
-        if (idx !== -1) {
-          const target = Math.max(0, Math.min(this.stageState.annotations.length - 1, idx + delta));
-          const [moved] = this.stageState.annotations.splice(idx, 1);
-          this.stageState.annotations.splice(target, 0, moved);
-        }
-      }
-      this.renderStage();
-      this.updateDevDeckUI();
-    }
-
-  deleteEntity(item) {
-      if (item.type === 'image') {
-        const idx = this.stageState.placedImages.indexOf(item.ref);
-        if (idx !== -1) this.stageState.placedImages.splice(idx, 1);
-        if (this.stageState.activeImage === item.ref) this.stageState.activeImage = null;
-      } else {
-        const idx = this.stageState.annotations.indexOf(item.ref);
-        if (idx !== -1) this.stageState.annotations.splice(idx, 1);
-        if (item.ref.elements) item.ref.elements.forEach(el => el.remove());
-        if (this.stageState.selectedItem === item.ref) {
-          this.controlsLayer.innerHTML = '';
-          this.stageState.selectedItem = null;
-        }
-      }
-      this.renderStage();
-      this.updateDevDeckUI();
-    }
-
-  copyTelemetryStateToClipboard() {
-      const payload = {
-        timestamp: new Date().toISOString(),
-        viewport: {
-          zoom: this.stageState.zoom,
-          panX: this.stageState.panX,
-          panY: this.stageState.panY,
-          canvasWidth: this.stageState.canvasWidth,
-          canvasHeight: this.stageState.canvasHeight
-        },
-        placedImages: this.stageState.placedImages.map(img => ({
-          id: img.id,
-          name: img.name,
-          x: img.x,
-          y: img.y,
-          width: img.width,
-          height: img.height
-        })),
-        annotations: this.stageState.annotations.map(a => ({
-          id: a.id,
-          type: a.type,
-          color: a.color,
-          hasArrow: a.hasArrow,
-          text: a.text,
-          fontSize: a.fontSize,
-          fontFamily: a.fontFamily,
-          knots: (a.vertices || []).map(v => ({
-            pt: [Math.round(v.point[0]), Math.round(v.point[1])],
-            tangentOffsetDeg: Math.round((v.tangentAngleOffset || 0) * (180 / Math.PI)),
-            curvature: Number(v.curvature || 1.0).toFixed(2),
-            balance: Number(v.balance || 1.0).toFixed(2)
-          }))
-        }))
-      };
-
-      const json = JSON.stringify(payload, null, 2);
-      navigator.clipboard.writeText(json).then(() => {
-        alert('✓ Complete telemetry & curve state copied to clipboard!\nYou can paste it directly into your prompt.');
-      }).catch(() => {
-        prompt('Copy state JSON:', json);
-      });
-    }
-
-  wipeAllConstraintsFromActiveCurve() {
-      const curve = (this.stageState.selectedItem?.type === 'curve')
-        ? this.stageState.selectedItem
-        : this.stageState.annotations.find(a => a.type === 'curve');
-
-      if (!curve || !curve.vertices) return;
-
-      curve.vertices.forEach(v => {
-        v.tangentAngleOffset = 0;
-        v.curvature = 1.0;
-        v.balance = 1.0;
-        v.tangents = [null, null];
-      });
-
-      curve.beziers = this.verticesToBeziers(curve.vertices);
-
-      // Re-render paths
-      let d = 'M ' + curve.beziers[0][0].join(' ');
-      for (let i = 0; i < curve.beziers.length; i++) {
-        const [start, cp1, cp2, end] = curve.beziers[i];
-        d += ` C ${cp1.join(' ')}, ${cp2.join(' ')}, ${end.join(' ')}`;
-      }
-      if (curve.elements[0]) curve.elements[0].setAttribute('d', d);
-      if (curve.elements[1]) curve.elements[1].setAttribute('d', d);
-
-      this.renderStage();
-      this.updateDevDeckUI();
-      this.showKnotToast('✓ Wiped all constraints across active curve');
-    }
-
-  renderKnotTangentRay(knot) {
-      if (!knot) return;
-      const existing = document.getElementById('qa-knot-tangent-ray');
-      if (existing) existing.remove();
-
-      const pt = knot.point;
-      const cp1 = knot.controlPoints ? knot.controlPoints[1] : null;
-      const cp0 = knot.controlPoints ? knot.controlPoints[0] : null;
-
-      if (!cp1 && !cp0) return;
-
-      const g = makeElement('svg:g', { id: 'qa-knot-tangent-ray', style: { pointerEvents: 'none' } });
-
-      if (cp1) {
-        g.appendChild(makeElement('svg:line', {
-          x1: pt[0], y1: pt[1], x2: cp1[0], y2: cp1[1],
-          stroke: '#00f2fe', 'stroke-width': '1.5', 'stroke-dasharray': '3,2'
-        }));
-        g.appendChild(makeElement('svg:circle', {
-          cx: cp1[0], cy: cp1[1], r: '3.5',
-          fill: '#00f2fe', stroke: '#ffffff', 'stroke-width': '1'
-        }));
-      }
-
-      if (cp0) {
-        g.appendChild(makeElement('svg:line', {
-          x1: pt[0], y1: pt[1], x2: cp0[0], y2: cp0[1],
-          stroke: '#ffd700', 'stroke-width': '1.5', 'stroke-dasharray': '3,2'
-        }));
-        g.appendChild(makeElement('svg:circle', {
-          cx: cp0[0], cy: cp0[1], r: '3.5',
-          fill: '#ffd700', stroke: '#ffffff', 'stroke-width': '1'
-        }));
-      }
-
-      this.controlsLayer.appendChild(g);
-      setTimeout(() => { g.remove(); }, 1400);
-    }
+  renderEphemeralKnotHandles(curveRecord) {
+    const g = makeElement('svg:g', { className: 'qa-ephemeral-knots' });
+    (curveRecord.vertices || []).forEach(v => {
+      g.appendChild(makeElement('svg:circle', {
+        cx: v.point[0], cy: v.point[1], r: '3.5', fill: '#00e676', stroke: '#ffffff', 'stroke-width': '1.2',
+        style: { pointerEvents: 'none' }
+      }));
+    });
+    this.controlsLayer.appendChild(g);
+  }
 
   setupKeyInMatrixHud() {
-      let hud = document.getElementById('qa-keyin-matrix-hud');
+    let hud = document.getElementById('qa-keyin-matrix-hud');
+    if (hud) return;
 
-      // Restore position from persistent localStorage if present
-      if (!this._hudPos) {
-        try {
-          const saved = JSON.parse(localStorage.getItem('quoratoys_hud_pos') || 'null');
-          this._hudPos = saved || { left: 24, top: 80 };
-        } catch (e) {
-          this._hudPos = { left: 24, top: 80 };
+    hud = makeElement('div', {
+      id: 'qa-keyin-matrix-hud',
+      style: {
+        position: 'fixed', top: '80px', left: '24px', zIndex: '2147483640',
+        background: 'rgba(9, 13, 22, 0.96)', border: '1.5px solid rgba(0, 242, 254, 0.45)',
+        borderRadius: '10px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '3px',
+        boxShadow: '0 12px 36px rgba(0,0,0,0.9)', fontFamily: 'monospace', fontSize: '11px', color: '#f8fafc'
+      }
+    });
+
+    const header = makeElement('div', {
+      style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '4px', borderBottom: '1px solid rgba(255,255,255,0.1)' }
+    }, [
+      makeElement('strong', { style: { color: '#00f2fe' } }, 'KEY-IN MATRIX'),
+      makeElement('button', {
+        className: 'dr-nav-btn', style: { padding: '1px 5px', fontSize: '10px' },
+        onclick: () => { hud.style.display = 'none'; }
+      }, '✕')
+    ]);
+
+    const delRow = makeElement('div', {
+      className: 'qa-keyin-row', 'data-action': 'delete_curve',
+      style: { display: 'flex', justifyContent: 'space-between', padding: '3px 6px', background: 'rgba(255,255,255,0.02)', borderRadius: '4px' },
+      onclick: () => this.deleteSelectedEntity()
+    }, [
+      makeElement('span', {}, 'Delete (Select Curve)'),
+      makeElement('span', { style: { color: '#00f2fe', fontWeight: 'bold' } }, 'Del')
+    ]);
+
+    hud.append(header, delRow);
+    document.body.appendChild(hud);
+    this.updateDynamicKeyInHUD();
+  }
+
+  ensureFontLoaded(fontFamily) {
+    if (!fontFamily) return;
+    if (fontFamily.includes('Architects Daughter') && !this._loadedFonts.has('Architects Daughter')) {
+      this._loadedFonts.add('Architects Daughter');
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://fonts.googleapis.com/css2?family=Architects+Daughter&display=swap';
+      document.head.appendChild(link);
+    }
+  }
+
+  renderStage() {
+    const tf = this.computeAutoBounds();
+    this.stageBox.style.width = `${tf.totalW}px`;
+    this.stageBox.style.height = `${tf.totalH}px`;
+
+    this.sceneCanvas.width = tf.totalW;
+    this.sceneCanvas.height = tf.totalH;
+    const ctx = this.sceneCanvas.getContext('2d');
+    ctx.clearRect(0, 0, tf.totalW, tf.totalH);
+
+    if (this.stageState.canvasBgMode === 'matte') {
+      ctx.fillStyle = this.stageState.canvasBgColor || '#090d16';
+      ctx.fillRect(0, 0, tf.totalW, tf.totalH);
+    }
+
+    (this.stageState.placedImages || []).forEach(plate => {
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+      ctx.shadowBlur = 12;
+      ctx.drawImage(plate.img, plate.x, plate.y, plate.width, plate.height);
+
+      if (this.stageState.activeImage === plate) {
+        ctx.strokeStyle = '#00f2fe';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(plate.x, plate.y, plate.width, plate.height);
+      }
+      ctx.restore();
+    });
+
+    // Render Text Badges (Direct or Tail-Attached)
+    this.textBadgesLayer.innerHTML = '';
+    (this.stageState.annotations || []).forEach(ann => {
+      if (ann.type === 'text_badge') {
+        this.renderDirectTextBadgeSvg(ann);
+      } else if (ann.type === 'curve' && ann.text && ann.beziers?.length > 0) {
+        this.renderCurveAttachedTextSvg(ann);
+      }
+    });
+
+    this.renderImagePlateControls();
+  }
+
+  renderCurveAttachedTextSvg(ann) {
+      const beziers = ann.beziers;
+      if (!beziers || beziers.length === 0) return;
+
+      // Detect terminal anchor based on active textEnd ('tail' or 'tip')
+      const isAtTail = (ann.textEnd !== 'tip');
+      const termSeg = isAtTail ? beziers[beziers.length - 1] : beziers[0];
+      const anchorPt = isAtTail ? termSeg[3] : termSeg[0];
+
+      // Compute exit direction vector away from curve stem
+      const exitVec = isAtTail
+        ? [termSeg[3][0] - termSeg[2][0], termSeg[3][1] - termSeg[2][1]]
+        : [termSeg[0][0] - termSeg[1][0], termSeg[0][1] - termSeg[1][1]];
+
+      const exitLen = Math.hypot(exitVec[0], exitVec[1]) || 1;
+      const uX = exitVec[0] / exitLen;
+      const isLeft = (ann.justifySide === 'left') || (uX >= 0);
+
+      const fontS = ann.fontSize || 22;
+      const fontF = ann.fontFamily || "'Architects Daughter', cursive, sans-serif";
+      const lines = String(ann.text).split('\n');
+      const lineHeight = fontS * 1.25;
+
+      const charW = fontS * (fontF.includes('mono') ? 0.60 : 0.52);
+      let maxChars = 0;
+      lines.forEach(l => { if (l.length > maxChars) maxChars = l.length; });
+
+      const padX = ann.boxStyle !== 'none' ? 10 : 4;
+      const padY = ann.boxStyle !== 'none' ? 6 : 4;
+      const boxW = Math.round(maxChars * charW) + padX * 2;
+      const boxH = Math.round(lines.length * lineHeight) + padY * 2;
+
+      // Position text offset along exit tangent so it never cuts into the curve
+      const gap = 8;
+      const posX = isLeft ? anchorPt[0] + gap : anchorPt[0] - boxW - gap;
+      const posY = Math.round(anchorPt[1] - boxH / 2);
+
+      const g = makeElement('svg:g', {
+        className: 'qa-curve-attached-label',
+        style: { cursor: 'pointer', userSelect: 'none' },
+        ondblclick: (e) => {
+          e.stopPropagation();
+          this._promptInlineTailText(ann, anchorPt, isLeft ? 'left' : 'right');
         }
+      });
+
+      if (ann.boxStyle === 'box') {
+        g.appendChild(makeElement('svg:rect', {
+          x: posX + 2, y: posY + 2, width: boxW, height: boxH, rx: '6',
+          fill: 'rgba(10, 15, 25, 0.95)', stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': '4.5'
+        }));
+        g.appendChild(makeElement('svg:rect', {
+          x: posX, y: posY, width: boxW, height: boxH, rx: '6',
+          fill: 'rgba(15, 23, 42, 0.96)', stroke: ann.color || '#00e676', 'stroke-width': '2.5'
+        }));
+      } else if (ann.boxStyle === 'bracket') {
+        const bottomY = posY + boxH;
+        const sideX = isLeft ? posX : posX + boxW;
+        const oppX = isLeft ? posX + boxW : posX;
+        const bD = `M ${sideX} ${posY} L ${sideX} ${bottomY} L ${oppX} ${bottomY}`;
+
+        g.appendChild(makeElement('svg:path', {
+          d: bD, transform: 'translate(2, 2)', fill: 'none',
+          stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': '5'
+        }));
+        g.appendChild(makeElement('svg:path', {
+          d: bD, fill: 'none', stroke: ann.color || '#00e676', 'stroke-width': '2.8'
+        }));
       }
 
-      // Clamp coordinates so it never spawns completely off-screen
-      this._hudPos.left = Math.max(8, Math.min(window.innerWidth - 250, this._hudPos.left));
-      this._hudPos.top = Math.max(8, Math.min(window.innerHeight - 80, this._hudPos.top));
+      const txt = makeElement('svg:text', {
+        x: posX + padX, y: posY + padY + fontS * 0.88, fill: ann.color || '#00e676',
+        'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold'
+      });
 
-      if (hud) {
-        hud.style.left = `${this._hudPos.left}px`;
-        hud.style.top = `${this._hudPos.top}px`;
-        hud.style.display = 'flex';
+      lines.forEach((l, i) => {
+        txt.appendChild(makeElement('svg:tspan', {
+          x: posX + padX, dy: i === 0 ? '0' : `${lineHeight}px`
+        }, l));
+      });
+
+      g.appendChild(txt);
+      this.textBadgesLayer.appendChild(g);
+    }
+  renderDirectTextBadgeSvg(ann) {
+    const fontS = ann.fontSize || 22;
+    const fontF = ann.fontFamily || "'Architects Daughter', cursive, sans-serif";
+    const lines = String(ann.text).split('\n');
+    const lineHeight = fontS * 1.25;
+
+    const charW = fontS * 0.52;
+    let maxChars = 0;
+    lines.forEach(l => { if (l.length > maxChars) maxChars = l.length; });
+
+    const padX = ann.boxStyle !== 'none' ? 10 : 4;
+    const padY = ann.boxStyle !== 'none' ? 6 : 4;
+    const boxW = Math.round(maxChars * charW) + padX * 2;
+    const boxH = Math.round(lines.length * lineHeight) + padY * 2;
+
+    const g = makeElement('svg:g', {
+      id: `badge-${ann.id}`,
+      className: 'qa-movable-text-badge',
+      style: { cursor: 'move', userSelect: 'none' },
+      ondblclick: (e) => {
+        e.stopPropagation();
+        this._promptInlineTailText(ann, [ann.x, ann.y], 'left');
+      }
+    });
+
+    if (ann.boxStyle === 'box') {
+      g.appendChild(makeElement('svg:rect', {
+        x: ann.x + 2, y: ann.y + 2, width: boxW, height: boxH, rx: '6',
+        fill: 'rgba(10, 15, 25, 0.95)', stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': '4.5'
+      }));
+      g.appendChild(makeElement('svg:rect', {
+        x: ann.x, y: ann.y, width: boxW, height: boxH, rx: '6',
+        fill: 'rgba(15, 23, 42, 0.96)', stroke: ann.color || '#00e676', 'stroke-width': '2.5'
+      }));
+    } else if (ann.boxStyle === 'bracket') {
+      const bD = `M ${ann.x} ${ann.y} L ${ann.x} ${ann.y + boxH} L ${ann.x + boxW} ${ann.y + boxH}`;
+      g.appendChild(makeElement('svg:path', {
+        d: bD, transform: 'translate(2, 2)', fill: 'none', stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': '5'
+      }));
+      g.appendChild(makeElement('svg:path', {
+        d: bD, fill: 'none', stroke: ann.color || '#00e676', 'stroke-width': '2.8'
+      }));
+    }
+
+    const txt = makeElement('svg:text', {
+      x: ann.x + padX, y: ann.y + padY + fontS * 0.88, fill: ann.color || '#00e676',
+      'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold'
+    });
+
+    lines.forEach((l, i) => {
+      txt.appendChild(makeElement('svg:tspan', {
+        x: ann.x + padX, dy: i === 0 ? '0' : `${lineHeight}px`
+      }, l));
+    });
+
+    g.appendChild(txt);
+
+    let isDrag = false;
+    let sX = 0, sY = 0;
+    g.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      isDrag = true;
+      sX = e.clientX; sY = e.clientY;
+
+      const onM = (ev) => {
+        if (!isDrag) return;
+        const z = this.stageState.zoom;
+        ann.x += (ev.clientX - sX) / z;
+        ann.y += (ev.clientY - sY) / z;
+        sX = ev.clientX; sY = ev.clientY;
+        this.renderStage();
+      };
+      const onU = () => { isDrag = false; window.removeEventListener('mousemove', onM); window.removeEventListener('mouseup', onU); };
+      window.addEventListener('mousemove', onM);
+      window.addEventListener('mouseup', onU);
+    });
+
+    this.textBadgesLayer.appendChild(g);
+  }
+
+  renderImagePlateControls() {
+    this.controlsLayer.querySelectorAll('.qa-image-plate-control').forEach(el => el.remove());
+    const plate = this.stageState.activeImage;
+    if (!plate) return;
+
+    const g = makeElement('svg:g', { className: 'qa-image-plate-control' });
+
+    const border = makeElement('svg:rect', {
+      x: plate.x, y: plate.y, width: plate.width, height: plate.height,
+      fill: 'transparent', stroke: '#00f2fe', 'stroke-width': '1.8',
+      'stroke-dasharray': '5,4', style: { cursor: 'move' }
+    });
+
+    let isMove = false;
+    let sMx = 0, sMy = 0;
+    border.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      isMove = true;
+      sMx = e.clientX; sMy = e.clientY;
+
+      const onM = (ev) => {
+        if (!isMove) return;
+        const z = this.stageState.zoom;
+        plate.x += (ev.clientX - sMx) / z;
+        plate.y += (ev.clientY - sMy) / z;
+        sMx = ev.clientX; sMy = ev.clientY;
+        this.renderStage();
+      };
+      const onU = () => { isMove = false; window.removeEventListener('mousemove', onM); window.removeEventListener('mouseup', onU); };
+      window.addEventListener('mousemove', onM);
+      window.addEventListener('mouseup', onU);
+    });
+    g.appendChild(border);
+
+    const grip = makeElement('svg:rect', {
+      x: plate.x + plate.width - 8, y: plate.y + plate.height - 8, width: '16', height: '16',
+      fill: '#00f2fe', stroke: '#ffffff', 'stroke-width': '2', rx: '3',
+      style: { cursor: 'nwse-resize' }
+    });
+
+    let isResize = false;
+    grip.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      isResize = true;
+      const startW = plate.width;
+      const startX = e.clientX;
+
+      const onR = (ev) => {
+        if (!isResize) return;
+        const z = this.stageState.zoom;
+        const dw = (ev.clientX - startX) / z;
+        const newW = Math.max(80, startW + dw);
+        plate.width = newW;
+        plate.height = Math.round(newW / plate.aspect);
+        this.renderStage();
+      };
+      const onUp = () => { isResize = false; window.removeEventListener('mousemove', onR); window.removeEventListener('mouseup', onUp); };
+      window.addEventListener('mousemove', onR);
+      window.addEventListener('mouseup', onUp);
+    });
+
+    g.appendChild(grip);
+    this.controlsLayer.appendChild(g);
+  }
+
+  loadDefaultDemo() {
+    const c = document.createElement('canvas');
+    c.width = 900; c.height = 480;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 0, 900, 480);
+    ctx.fillStyle = '#f8fafc'; ctx.font = 'bold 20px monospace';
+    ctx.fillText('Universal Graphic Studio: Multi-Plate Ambient Canvas', 30, 50);
+    ctx.font = '13px monospace'; ctx.fillStyle = '#94a3b8';
+    ctx.fillText('• Draw curve & type callout • 🏹 Arrow (A) • 💬 Text (T) • ⇄ Swap Ends (X)', 30, 85);
+    ctx.fillText('• Single Knot Lock: Dragging moves active point; other knots stay strictly fixed', 30, 115);
+    ctx.fillText('• Paste image (Ctrl+V) or click "📋 Paste Image" button in toolbar', 30, 145);
+
+    const img = new Image();
+    img.onload = () => {
+      this.addNewImagePlate(img, 45, 45);
+    };
+    img.src = c.toDataURL('image/png');
+  }
+
+  setupZoomWheel() {
+    this.viewport.addEventListener('wheel', (e) => {
+      const k = this.getActiveKnot();
+      if (k && e.target.closest('.qa-on-curve-knot-handle, .qa-tangent-handle, #qa-composite-stage')) {
+        const delta = e.deltaY > 0 ? -1 : 1;
+        if (e.shiftKey) {
+          k.tangentAngleOffset = (k.tangentAngleOffset || 0) + delta * 0.087;
+          this.showKnotToast(`Tangent Angle: ${Math.round(k.tangentAngleOffset * (180 / Math.PI))}°`);
+        } else if (e.altKey || e.ctrlKey) {
+          k.balance = Math.max(0.1, Math.min(1.9, (k.balance || 1) + delta * 0.08));
+          this.showKnotToast(`Balance: ${k.balance.toFixed(2)}`);
+        } else {
+          k.curvature = Math.max(0.2, Math.min(3.0, (k.curvature || 1) + delta * 0.1));
+          this.showKnotToast(`Curvature: ${k.curvature.toFixed(2)}`);
+        }
+        this.commitCurveGeometryUpdate();
+        e.preventDefault();
         return;
       }
 
-      this._hudCollapsed = false;
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.12 : (1 / 1.12);
+      this.stageState.zoom = Math.max(this.stageState.minZoom, Math.min(this.stageState.maxZoom, this.stageState.zoom * factor));
+      this.zoomScaffold.style.transform = `scale(${this.stageState.zoom})`;
+    }, { passive: false });
+  }
 
-      hud = makeElement('div', {
-        id: 'qa-keyin-matrix-hud',
-        style: {
-          position: 'fixed',
-          top: `${this._hudPos.top}px`,
-          left: `${this._hudPos.left}px`,
-          zIndex: '2147483640',
-          background: 'rgba(9, 13, 22, 0.96)',
-          border: '1.5px solid rgba(0, 242, 254, 0.45)',
-          borderRadius: '10px',
-          padding: '0',
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '0 12px 36px rgba(0, 0, 0, 0.9), 0 0 16px rgba(0, 242, 254, 0.25)',
-          fontFamily: 'monospace',
-          fontSize: '11px',
-          color: '#f8fafc',
-          backdropFilter: 'blur(14px)',
-          userSelect: 'none',
-          pointerEvents: 'auto',
-          minWidth: '220px',
-          maxWidth: '250px',
-          overflow: 'hidden'
-        }
-      });
+  setupEdgePullHandles() {
+    const rightBar = makeElement('div', {
+      className: 'qa-edge-handle qa-edge-right', title: 'Drag to expand canvas width',
+      style: { position: 'absolute', top: '10%', right: '-8px', width: '12px', height: '80%', cursor: 'ew-resize', zIndex: '40' }
+    });
+    const bottomBar = makeElement('div', {
+      className: 'qa-edge-handle qa-edge-bottom', title: 'Drag to expand canvas height',
+      style: { position: 'absolute', bottom: '-8px', left: '10%', width: '80%', height: '12px', cursor: 'ns-resize', zIndex: '40' }
+    });
 
-      const header = makeElement('div', {
-        id: 'qa-keyin-hud-header',
-        style: {
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '6px 10px',
-          background: 'rgba(15, 23, 42, 0.98)',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.12)',
-          cursor: 'grab',
-          touchAction: 'none'
-        }
-      }, [
-        makeElement('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, [
-          makeElement('span', { style: { color: '#64748b', fontSize: '11px' } }, '⋮⋮'),
-          makeElement('strong', { style: { color: '#00f2fe', fontSize: '11px' } }, 'KEY-IN MATRIX'),
-          makeElement('span', { style: { fontSize: '9px', color: '#10b981', fontWeight: 'bold' } }, '● Live')
-        ]),
-        makeElement('div', { style: { display: 'flex', gap: '2px' } }, [
-          (this._hudToggleBtn = makeElement('button', {
-            className: 'dr-nav-btn',
-            style: { padding: '1px 5px', fontSize: '10px', lineHeight: '1' },
-            title: 'Collapse / Expand palette',
-            onclick: (e) => {
-              e.stopPropagation();
-              this._hudCollapsed = !this._hudCollapsed;
-              this._keyInPillsContainer.style.display = this._hudCollapsed ? 'none' : 'flex';
-              this._hudToggleBtn.textContent = this._hudCollapsed ? '+' : '−';
-            }
-          }, '−')),
-          makeElement('button', {
-            className: 'dr-nav-btn',
-            style: { padding: '1px 5px', fontSize: '10px', color: '#ff7b72', lineHeight: '1' },
-            title: 'Close HUD (re-open with "⌨️ HUD" in toolbar)',
-            onclick: (e) => {
-              e.stopPropagation();
-              hud.style.display = 'none';
-            }
-          }, '✕')
-        ])
-      ]);
+    const initDrag = (e, axis) => {
+      e.stopPropagation(); e.preventDefault();
+      this.stageState.manualSizing = true;
+      const startX = e.clientX, startY = e.clientY;
+      const startW = this.stageState.canvasWidth, startH = this.stageState.canvasHeight;
+      const z = this.stageState.zoom || 1.0;
 
-      let isDraggingHud = false;
-      let startX = 0, startY = 0;
-      let initialX = 0, initialY = 0;
-
-      header.addEventListener('mousedown', (e) => {
-        if (e.target.closest('button')) return;
-        isDraggingHud = true;
-        startX = e.clientX;
-        startY = e.clientY;
-        initialX = parseFloat(hud.style.left) || this._hudPos.left;
-        initialY = parseFloat(hud.style.top) || this._hudPos.top;
-        header.style.cursor = 'grabbing';
-        e.preventDefault();
-      });
-
-      window.addEventListener('mousemove', (e) => {
-        if (!isDraggingHud) return;
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-
-        const newLeft = Math.max(8, Math.min(window.innerWidth - 240, initialX + dx));
-        const newTop = Math.max(8, Math.min(window.innerHeight - 60, initialY + dy));
-
-        hud.style.left = `${newLeft}px`;
-        hud.style.top = `${newTop}px`;
-        this._hudPos = { left: newLeft, top: newTop };
-        try {
-          localStorage.setItem('quoratoys_hud_pos', JSON.stringify(this._hudPos));
-        } catch (err) {}
-      });
-
-      window.addEventListener('mouseup', () => {
-        if (isDraggingHud) {
-          isDraggingHud = false;
-          header.style.cursor = 'grab';
-        }
-      });
-
-      this._keyInPillsContainer = makeElement('div', {
-        style: { display: 'flex', flexDirection: 'column', gap: '3px', padding: '6px 8px' }
-      });
-
-      const commands = [
-        { key: 'Space', label: 'Draw ↔ Tweak Mode', action: 'toggle_tool' },
-        { key: 'Tab', label: 'Next Node on Curve', action: 'next_knot' },
-        { key: 'C', label: 'Toggle Cusp (45°)', action: 'toggle_cusp' },
-        { key: 'B', label: 'Cycle Balance (0.5/1.5)', action: 'cycle_balance' },
-        { key: '+ / -', label: 'Tune Curvature (C)', action: 'tune_curvature' },
-        { key: '[ / ]', label: 'Step Tangent Angle', action: 'tune_tangent' },
-        { key: 'S', label: 'Straighten (Direct Line)', action: 'straighten' },
-        { key: 'R', label: 'Reset Node Constraints', action: 'reset_knot' },
-        { key: 'W', label: 'Wipe Curve Constraints', action: 'wipe_curve' },
-        { key: 'Del', label: 'Delete Selected Curve', action: 'delete_curve' }
-      ];
-
-      this._keyInCommandElements = {};
-
-      commands.forEach(cmd => {
-        const row = makeElement('div', {
-          className: 'qa-keyin-row',
-          style: {
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '3px 6px', borderRadius: '4px', cursor: 'pointer',
-            background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.06)',
-            transition: 'all 0.12s ease'
-          },
-          title: `Click or press ${cmd.key} to execute`,
-          onclick: (e) => {
-            e.stopPropagation();
-            this.executeKeyInCommand(cmd.action);
-          }
-        }, [
-          makeElement('span', { style: { color: '#cbd5e1', fontSize: '10.5px' } }, cmd.label),
-          makeElement('span', {
-            style: {
-              background: 'rgba(0, 242, 254, 0.15)', color: '#00f2fe', border: '1px solid rgba(0, 242, 254, 0.35)',
-              borderRadius: '4px', padding: '1px 5px', fontSize: '10px', fontWeight: 'bold', minWidth: '34px', textAlign: 'center'
-            }
-          }, cmd.key)
-        ]);
-
-        row.addEventListener('mouseenter', () => { row.style.background = 'rgba(0, 242, 254, 0.12)'; });
-        row.addEventListener('mouseleave', () => { row.style.background = 'rgba(255, 255, 255, 0.02)'; });
-
-        this._keyInCommandElements[cmd.action] = row;
-        this._keyInPillsContainer.appendChild(row);
-      });
-
-      hud.append(header, this._keyInPillsContainer);
-      document.body.appendChild(hud);
-    }
-  flashKeyInCommand(actionId, toastMsg = '') {
-      const el = this._keyInCommandElements?.[actionId];
-      if (el) {
-        el.style.background = 'rgba(0, 242, 254, 0.35)';
-        el.style.boxShadow = '0 0 12px rgba(0, 242, 254, 0.6)';
-        el.style.transform = 'scale(1.04)';
-        setTimeout(() => {
-          el.style.background = '';
-          el.style.boxShadow = '';
-          el.style.transform = '';
-        }, 350);
-      }
-      if (toastMsg) {
-        this.showKnotToast(toastMsg);
-      }
-    }
-
-  executeKeyInCommand(actionId, event = null) {
-      const curve = this.getActiveCurve();
-      const k = this.getActiveKnot();
-
-      switch (actionId) {
-        case 'toggle_tool': {
-          const next = (this.stageState.activeTool === 'curve') ? 'select' : 'curve';
-          this.toolBtns[next]?.click();
-          this.flashKeyInCommand('toggle_tool', next === 'select' ? '👆 Tweak Mode Active' : '〰️ Spline Draw Active');
-          break;
-        }
-        case 'next_knot': {
-          if (curve && curve.vertices && curve.vertices.length > 0) {
-            const dir = (event && event.shiftKey) ? -1 : 1;
-            this._activeKnotIdx = (this._activeKnotIdx + dir + curve.vertices.length) % curve.vertices.length;
-            this.highlightActiveKnot();
-            this.updateDevDeckUI(true);
-            this.renderKnotTangentRay(this.getActiveKnot());
-            this.flashKeyInCommand('next_knot', `Active Knot: ${this._activeKnotIdx + 1}/${curve.vertices.length}`);
-          }
-          break;
-        }
-        case 'toggle_cusp': {
-          if (k) {
-            k.tangentAngleOffset = (Math.abs(k.tangentAngleOffset || 0) < 0.01) ? (Math.PI / 4) : 0;
-            this.commitCurveGeometryUpdate();
-            this.renderKnotTangentRay(k);
-            this.updateDevDeckUI(false);
-            this.flashKeyInCommand('toggle_cusp', `Cusp set to ${Math.round(k.tangentAngleOffset * (180 / Math.PI))}°`);
-          }
-          break;
-        }
-        case 'cycle_balance': {
-          if (k) {
-            k.balance = (k.balance === 1.0) ? 1.5 : (k.balance === 1.5 ? 0.5 : 1.0);
-            this.commitCurveGeometryUpdate();
-            this.renderKnotTangentRay(k);
-            this.updateDevDeckUI(false);
-            this.flashKeyInCommand('cycle_balance', `Balance set to ${k.balance.toFixed(2)}`);
-          }
-          break;
-        }
-        case 'straighten': {
-          if (curve && curve.vertices && curve.vertices.length > 2) {
-            curve.vertices = [curve.vertices[0], curve.vertices[curve.vertices.length - 1]];
-            this._activeKnotIdx = 0;
-            this.commitCurveGeometryUpdate();
-            this.exposeBezierHandles(curve);
-            this.updateDevDeckUI(true);
-            this.flashKeyInCommand('straighten', 'Straightened curve to direct line');
-          }
-          break;
-        }
-        case 'reset_knot': {
-          if (k) {
-            k.tangentAngleOffset = 0;
-            k.curvature = 1.0;
-            k.balance = 1.0;
-            this.commitCurveGeometryUpdate();
-            this.renderKnotTangentRay(k);
-            this.updateDevDeckUI(false);
-            this.flashKeyInCommand('reset_knot', 'Reset knot constraints');
-          }
-          break;
-        }
-        case 'wipe_curve': {
-          this.wipeAllConstraintsFromActiveCurve();
-          this.updateDevDeckUI(true);
-          this.flashKeyInCommand('wipe_curve', 'Wiped all curve constraints');
-          break;
-        }
-        case 'tune_curvature': {
-          if (k) {
-            const delta = (event && (event.key === '-' || event.key === '_')) ? -0.15 : 0.15;
-            k.curvature = Math.max(0.2, Math.min(3.0, (k.curvature || 1.0) + delta));
-            this.commitCurveGeometryUpdate();
-            this.updateDevDeckUI(false);
-            this.flashKeyInCommand('tune_curvature', `Curvature: ${k.curvature.toFixed(2)}`);
-          }
-          break;
-        }
-        case 'tune_tangent': {
-          if (k) {
-            const stepRad = (10 * Math.PI) / 180;
-            const delta = (event && event.key === '[') ? -stepRad : stepRad;
-            k.tangentAngleOffset = (k.tangentAngleOffset || 0) + delta;
-            this.commitCurveGeometryUpdate();
-            this.renderKnotTangentRay(k);
-            this.updateDevDeckUI(false);
-            this.flashKeyInCommand('tune_tangent', `Tangent Offset: ${Math.round(k.tangentAngleOffset * (180 / Math.PI))}°`);
-          }
-          break;
-        }
-        case 'delete_curve': {
-          if (curve) {
-            const idx = this.stageState.annotations.indexOf(curve);
-            if (idx !== -1) this.stageState.annotations.splice(idx, 1);
-            if (curve.elements) curve.elements.forEach(el => el.remove());
-            this.controlsLayer.innerHTML = '';
-            this.stageState.selectedItem = null;
-            this.renderStage();
-            if (this._devDeckDialog) this.updateDevDeckUI();
-            this.flashKeyInCommand('delete_curve', 'Deleted selected curve');
-          }
-          break;
-        }
-      }
-    }
-
-  openSpotDiffWorkflow() {
-      // Launches Spot-the-Difference in-process workflow that deposits difference lenses directly into this Studio
-      const overlayHost = document.createElement('div');
-      overlayHost.id = 'qa-diff-workflow-modal';
-
-      const leftSafe = (typeof SidePanel !== 'undefined' && SidePanel.getInstances()?.left?.isOpen)
-        ? (SidePanel.getInstances().left.width || 300)
-        : 0;
-
-      overlayHost.style.cssText = [
-        'position: fixed;',
-        'top: 0;',
-        `left: ${leftSafe}px;`,
-        `width: calc(100vw - ${leftSafe}px);`,
-        'height: 100vh;',
-        'z-index: 200000;',
-        'background: rgba(11, 15, 25, 0.98);',
-        'overflow: hidden;',
-        'display: flex;',
-        'flex-direction: column;',
-        'box-shadow: 0 0 35px rgba(0,0,0,0.8);',
-        'backdrop-filter: blur(12px);',
-        'transition: left 0.25s ease, width 0.25s ease;'
-      ].join('\n');
-      document.body.appendChild(overlayHost);
-
-      const closeBtn = document.createElement('button');
-      closeBtn.textContent = '✕ Return to Studio';
-      closeBtn.className = 'dr-nav-btn';
-      closeBtn.style.cssText = [
-        'position: fixed;',
-        'top: 12px;',
-        'right: 18px;',
-        'z-index: 2147483647;',
-        'background: #1e293b;',
-        'color: #f8fafc;',
-        'border: 1.5px solid #00e676;',
-        'padding: 6px 14px;',
-        'font-family: monospace;',
-        'font-size: 11px;',
-        'font-weight: bold;',
-        'border-radius: 6px;',
-        'cursor: pointer;',
-        'box-shadow: 0 4px 14px rgba(0,0,0,0.6);'
-      ].join('\n');
-
-      closeBtn.onclick = () => {
-        overlayHost.remove();
-        closeBtn.remove();
+      const onMove = (ev) => {
+        if (axis === 'x') this.stageState.canvasWidth = Math.max(300, Math.round(startW + (ev.clientX - startX) / z));
+        if (axis === 'y') this.stageState.canvasHeight = Math.max(200, Math.round(startH + (ev.clientY - startY) / z));
+        this.renderStage();
       };
-      document.body.appendChild(closeBtn);
+      const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    };
 
-      const app = new QuoraToys();
-      app.run({ container: overlayHost });
+    rightBar.onmousedown = (e) => initDrag(e, 'x');
+    bottomBar.onmousedown = (e) => initDrag(e, 'y');
+    this.stageBox.append(rightBar, bottomBar);
+  }
 
-      // When the user has marked differences or wants to complete the comparison,
-      // they click "🎨 Studio" inside the overlay, which calls sendToGraphicStudio()
-      // and seamlessly delivers the dataset directly back to this active Studio instance!
-      if (this.stageState.baseImage) {
-        setTimeout(() => {
-          app.loadImageFromUrl(this.stageState.baseImage.src, 'Studio Active Image');
-        }, 80);
-      }
-    }
+  copyCompositeToClipboard(btn) {
+    const tf = this.computeAutoBounds();
+    const c = document.createElement('canvas');
+    c.width = tf.totalW * 2; c.height = tf.totalH * 2;
+    const ctx = c.getContext('2d');
+    ctx.scale(2, 2);
+    ctx.drawImage(this.sceneCanvas, 0, 0);
+
+    const svgXml = new XMLSerializer().serializeToString(this.svgSurface);
+    const blob = new Blob([svgXml], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      c.toBlob(png => {
+        if (png) navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+        if (btn) btn.textContent = '✓ Copied PNG!';
+      });
+    };
+    img.src = url;
+  }
 }
 
 globalThis.QuoraAnnotationComponent = QuoraAnnotationComponent;

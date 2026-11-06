@@ -82,6 +82,20 @@ class QuoraAnnotationContent {
         ]
       },
       {
+        section: 'unified_recon',
+        partLabel: 'Chapter 1 • System Evolution',
+        title: 'The Unified Hybrid Pen & Ambient Canvas Architecture',
+        blocks: [
+          { id: 'p_hybrid_pen_intro', type: 'p' },
+          { id: 'sidebar_hybrid_pen_mechanics', type: 'sidebar', kicker: 'Unified Input', title: 'Seamless Click-to-Point vs. Drag-to-Drawstring' },
+          { id: 'p_pause_clutch_handrest', type: 'p' },
+          { id: 'sidebar_pause_clutch', type: 'sidebar', kicker: 'Control Key Clutch', title: 'Resting Hand & String Radius Tuning' },
+          { id: 'p_self_annotating_help', type: 'p' },
+          { id: 'sidebar_meta_help', type: 'sidebar', kicker: 'Meta-UI', title: 'Interactive Help with Native Vector Annotations' },
+          { id: 'sidebar_recon_decisions', type: 'sidebar', kicker: 'Forward Design', title: 'Ambient Canvas & Forward Roadmap' }
+        ]
+      },
+      {
         section: 'annotation_techniques',
         partLabel: 'Chapter 1 • Mathematical Engine',
         title: 'Kinetic Drag-Lead & On-Curve Knot Relaxation',
@@ -93,21 +107,79 @@ class QuoraAnnotationContent {
     ];
   }
 
+  static p_hybrid_pen_intro() {
+    return [
+      "In the unified ambient canvas, modal tool switching is completely eliminated. When the pen touches the canvas at $P_0$, a subtle circular deadzone radius ($R = 32\\text{px}$) appears with a fat white point indicator.",
+      "If the mouse is released within this circle, it registers a discrete knot insertion, allowing point-by-point curve placement with full dynamic relaxation. If the mouse is dragged beyond $R$, the kinetic string-tether engages smoothly, drawing a solid white lead pulling the curve tip."
+    ];
+  }
+
+  static sidebar_hybrid_pen_mechanics() {
+    return [
+      "Hybrid Gesture Specification:\n" +
+      "• Touch Down at $P_0$: Displays a pale boundary circle ($R=32\\text{px}$) and fat white tip indicator.\n" +
+      "• Click Release Inside $R$: Commits $P_0$ as a discrete vertex. Chain relaxes dynamically as the mouse moves; previous segments stay solid while the active lead is dashed.\n" +
+      "• Right-Click / Enter Commit: Discards swinging cursor drift and commits strictly the clicked nodes $[P_0 \\dots P_k]$.\n" +
+      "• Drag Exceeding $R$: The solid white drawstring pulls the curve tip at $P_{\\text{pen}} = \\text{Cursor} - \\mathbf{u} \\cdot R$."
+    ];
+  }
+
+  static p_pause_clutch_handrest() {
+    return [
+      "Drawing complex technical annotations with a mouse or trackpad causes hand fatigue. Under the **Pause & Tether-Clutch** protocol, holding the `Ctrl` key acts as a mechanical clutch:",
+      "1. **Tether Length Tuning:** Moving the cursor while holding `Ctrl` expands or contracts the virtual string radius $R$, giving variable dampening leverage on the fly.",
+      "2. **Hand-Rest State:** Releasing the mouse button while holding `Ctrl` locks the engine in clutch pause. The author can take their hand completely off the mouse to rest. Clicking down and releasing `Ctrl` resumes the curve uninterrupted."
+    ];
+  }
+
+  static sidebar_pause_clutch() {
+    return [
+      "The Pause-Clutch State Machine:\n" +
+      "• `Ctrl Down` (During Drag): Freezes curve tip; cursor modulates string radius $R$ with amber readout.\n" +
+      "• `Mouse Up` (While `Ctrl` Held): Enters clutch pause with amber 'Hand-Rest Active' badge.\n" +
+      "• `Mouse Down` $\\to$ `Ctrl Up`: Resumes kinetic curve pulling seamlessly from the exact same tip coordinate."
+    ];
+  }
+
+  static p_self_annotating_help() {
+    return [
+      "Why display generic HTML dialogs when explaining an annotation tool? QuoraToys annotates its own interface.",
+      "Holding the `H` key activates live vector guidance. Signature Bézier curves with concave arrowheads and Architect's Daughter callout brackets point directly to the drawstring, deadzone circle, knots, and clutch controls. Releasing `H` dismisses the guidance instantly."
+    ];
+  }
+
+  static sidebar_meta_help() {
+    return [
+      "Meta-Annotation Architecture:\n" +
+      "• Native Vector Ingestion: Help overlays use the identical Bézier spline and drop-shadow pipelines as user graphics.\n" +
+      "• Real-Time Guidance: Live arrows point to the active drawstring, deadzone boundary, and knots.\n" +
+      "• Instant Dismissal: Guidance renders exclusively while `H` is held down."
+    ];
+  }
+
+  static sidebar_recon_decisions() {
+    return [
+      "Forward Roadmap Milestones:\n" +
+      "• Step 1: Dynamic multi-point chain relaxation, colinear tangency, and right-click commit (Active).\n" +
+      "• Step 2: Direct Typography Engine: dropping standalone text badges anywhere on canvas with Architect's Daughter font and 2-sided architectural brackets.\n" +
+      "• Step 3: Chrome Extension Modernization: purging legacy triangle markers in favor of concave arrowheads and in-situ Quora image frame expansion."
+    ];
+  }
+
   static p_annot_intro_1() {
     return [
-      "Traditional digital annotation tools produce shaky, jagged lines that look crude and unprofessional. QuoraToys solves this by coupling two foundational algorithms:",
-      "1. **The Kinetic String-Tether:** The pen point trails the mouse cursor at the end of an elastic 32px lead. High-frequency hand tremors are filtered out mechanically before strokes are recorded.",
-      "2. **Schneider Curve Fitting & On-Curve Knot Relaxation:** Strokes are parsed into least-squares cubic Bézier segments. Knots sit directly on the curve path, with tangent angles and curvatures that can be adjusted interactively with the mouse wheel or key commands."
+      "Traditional digital annotation tools produce shaky, jagged lines that look crude. QuoraToys solves this by coupling two foundational algorithms:",
+      "1. **The Kinetic String-Tether:** An elastic 32px lead mechanically dampens high-frequency physiological tremors at the source.",
+      "2. **On-Curve Knot Relaxation:** Strokes are parsed into least-squares cubic Bézier segments with knots placed directly on the curve path."
     ];
   }
 
   static sidebar_annot_features() {
     return [
       "Annotation Capabilities:\n" +
-      "• Directional Concave Arrowheads: Arrows point where you first touch down and curve smoothly along the spline exit tangent.\n" +
-      "• Attached Text Labels: Double-click any curve tail to add text in Architect's Daughter, with 4-side boxes or 2-side architectural brackets.\n" +
-      "• Blockout Paint: Mask logos, names, or watermarks using solid or feathered paint before feeding images to AI models.\n" +
-      "• Contiguous Erase: Hold Shift and drag back through your stroke to cleanly rewind vertices in real-time."
+      "• Directional Concave Arrowheads: Arrows curve smoothly along exit tangents with unobscured tip markers.\n" +
+      "• Attached Text Labels: Double-click any curve tail to add text in Architect's Daughter font with 2-sided architectural bracket frames.\n" +
+      "• Blockout Paint: Mask logos or watermarks using solid or feathered paint for Gemini AI inpainting."
     ];
   }
 }
@@ -245,8 +317,21 @@ class QuoraArchitectureContent {
         ]
       },
       {
-        section: 'arch_math_engine',
+        section: 'unified_spec',
         partLabel: 'Chapter 6 • Section B',
+        title: 'Next-Gen Specification: Layer Stack, Outbound Tangents & Split Knots',
+        blocks: [
+          { id: 'p_layer_stack_spec', type: 'p' },
+          { id: 'sidebar_layer_hierarchy', type: 'sidebar', kicker: 'Z-Order Hierarchy', title: 'The 8-Layer Composition Pipeline' },
+          { id: 'p_outbound_tangent_snap', type: 'p' },
+          { id: 'sidebar_counterfactual_math', type: 'sidebar', kicker: 'Vector Formulation', title: 'Counterfactual Baseline & Snap Equations' },
+          { id: 'p_de_casteljau_split_delete', type: 'p' },
+          { id: 'sidebar_de_casteljau', type: 'sidebar', kicker: 'Knot Dynamics', title: 'Knot Splitting & Removal Equations' }
+        ]
+      },
+      {
+        section: 'arch_math_engine',
+        partLabel: 'Chapter 6 • Section C',
         title: 'Mathematical Formulations & Algorithmic Foundations',
         blocks: [
           { id: 'p_math_tether_and_knots', type: 'p' },
@@ -255,7 +340,7 @@ class QuoraArchitectureContent {
       },
       {
         section: 'arch_roadmap',
-        partLabel: 'Chapter 6 • Section C',
+        partLabel: 'Chapter 6 • Section D',
         title: 'The Implementation Roadmap',
         blocks: [
           { id: 'p_roadmap_overview', type: 'p' },
@@ -289,6 +374,61 @@ class QuoraArchitectureContent {
     ];
   }
 
+  static p_layer_stack_spec() {
+    return [
+      "A primary flaw of simple SVG rendering is layer pollution: halos, glows, or selection highlights accidentally obscuring adjacent foreground strokes. QuoraToys implements a strict 8-layer decoupled Z-stack.",
+      "Every visual element distributes its graphical primitives into dedicated global SVG `<g>` groups. For instance, a spline's dark ink shadow lives exclusively in `shadowLayer`, while its luminous stroke sits in `strokeLayer`, and its selection halo occupies `glowLayer`. Even if two curves overlap, no glow or shadow can ever sit in front of any foreground line."
+    ];
+  }
+
+  static sidebar_layer_hierarchy() {
+    return [
+      "The 8-Layer Architectural Stack (Bottom to Top):\n" +
+      "1. `backdropLayer`: Canvas matte (#090d16) and base puzzle image plates.\n" +
+      "2. `diffSvgLayer`: Superimposition tangent lines, anchor circles, and twin magnifier lenses.\n" +
+      "3. `paintLayer`: Hard and feathered blockout mask shapes for Gemini AI inpainting.\n" +
+      "4. `glowLayer`: Selection auras and 28px transparent hover pick targets.\n" +
+      "5. `shadowLayer`: Solid-ink dark keyline shadows (offset +2.0px, rgba(10, 15, 25, 0.95)).\n" +
+      "6. `strokeLayer`: Foreground cubic Bézier splines and dual concave arrowhead barbs.\n" +
+      "7. `textBadgesLayer`: Architect's Daughter callout text and 2-sided bracket frames.\n" +
+      "8. `controlsLayer`: On-curve knots, outbound tangent rays, deadzone circles, and kinetic drag-leads."
+    ];
+  }
+
+  static p_outbound_tangent_snap() {
+    return [
+      "Standard vector editors render tangent handles that point backwards into the curve stem, causing confusion about exit velocity. In the new specification, selected endpoints project an **Outbound Tangent Ray** pointing outward *beyond* the curve.",
+      "The handle can be pulled far out to gain angular leverage without altering curve curvature. Furthermore, the engine computes the **Counterfactual Natural Baseline**: the theoretical $C^1$ relaxation angle ($T_{\\text{base}}$) the curve would adopt if no user constraints were applied. When the outbound ray rotates within $\\pm 6^\\circ$ of $T_{\\text{base}}$, it snaps into place with a subtle cyan glow, allowing effortless restoration of natural curvature."
+    ];
+  }
+
+  static sidebar_counterfactual_math() {
+    return [
+      "Outbound Tangent & Snapping Mathematics:\n" +
+      "• Outbound Ray: $\\mathbf{P}_{\\text{ray}} = \\mathbf{P}_{\\text{endpoint}} + \\mathbf{T} \\cdot L_{\\text{handle}}$ (where $L_{\\text{handle}} \\ge 50\\text{px}$ for leverage).\n" +
+      "• Natural Baseline: $\\mathbf{T}_{\\text{base}} = \\text{normalize}(\\mathbf{P}_{\\text{endpoint}} - \\mathbf{P}_{\\text{neighbor}})$.\n" +
+      "• Angular Distance: $\\Delta\\theta = \\text{atan2}(\\mathbf{T}_{\\text{base}} \\times \\mathbf{T}, \\mathbf{T}_{\\text{base}} \\cdot \\mathbf{T})$.\n" +
+      "• Snap Gate: If $|\\Delta\\theta| < 0.10\\text{ rad}$ ($6^\\circ$), $\\mathbf{T} \\leftarrow \\mathbf{T}_{\\text{base}}$ (snapped to zero offset)."
+    ];
+  }
+
+  static p_de_casteljau_split_delete() {
+    return [
+      "A complete spline tool must allow direct knot manipulation on the curve without restarting the drawing gesture.",
+      "Hovering over any curve segment activates a candidate insertion marker at parameter $t$. Clicking executes de Casteljau split subdivision, bisecting the cubic segment into two valid cubic segments while placing a new editable knot on the path. Conversely, selecting any knot and pressing `Del` collapses the adjacent segments and re-relaxes the curve smoothly."
+    ];
+  }
+
+  static sidebar_de_casteljau() {
+    return [
+      "Knot Insertion & Deletion Mechanics:\n" +
+      "• Subsegment 1: $[P_0, P_{01}, P_{012}, P_{0123}]$\n" +
+      "• Subsegment 2: $[P_{0123}, P_{123}, P_{23}, P_3]$\n" +
+      "• Insertion Knot: Created at $P_{0123} = \\text{Curve}(t)$, initialized with relaxed constraints ($C=1, B=1, \\Delta\\theta=0$).\n" +
+      "• Knot Deletion: Deletes vertex $V_i$ and re-runs `UpdateControlPoints` over $[V_{i-1}, V_{i+1}]$."
+    ];
+  }
+
   static p_math_tether_and_knots() {
     return [
       "The drawing experience is governed by two complementary mathematical systems:",
@@ -318,11 +458,10 @@ class QuoraArchitectureContent {
   static sidebar_roadmap_steps() {
     return [
       "Implementation Roadmap:\n" +
-      "• Step 1: Circular and elliptical arc drafting primitives.\n" +
-      "• Step 2: Straight line segments with fillet rounded corners.\n" +
-      "• Step 3: Closed curve loop support with continuous C^1 tangency closure.\n" +
-      "• Step 4: Refactor QuoraAnnotationComponent.js into modular delegates (< 200 lines each): QuoraKnotManager, QuoraStageRenderer, QuoraDevDeck, QuoraLabelManager.\n" +
-      "• Step 5: Deprecate legacy fdr- prefixes in stylesheets in favor of qt- and qa- conventions."
+      "• Step 1: Dynamic multi-point chain relaxation, colinear tangency, and right-click commit (Delivered).\n" +
+      "• Step 2: Direct Typography Engine: dropping standalone text badges anywhere on canvas with Architect's Daughter font and 2-sided architectural brackets.\n" +
+      "• Step 3: Chrome Extension Modernization: purging legacy triangle markers in favor of concave arrowheads and in-situ Quora image frame expansion.\n" +
+      "• Step 4: Closed curve loop support with continuous C^1 tangency closure."
     ];
   }
 }
