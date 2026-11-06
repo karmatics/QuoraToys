@@ -999,8 +999,8 @@ class QuoraAnnotationComponent {
       if (existing) existing.remove();
 
       const isLeft = (justifySide === 'left');
-      const width = 260;
-      const posX = isLeft ? anchorPt[0] + 4 : anchorPt[0] - width - 4;
+      const width = 270;
+      const posX = isLeft ? anchorPt[0] + 6 : anchorPt[0] - width - 6;
       const posY = anchorPt[1] - 22;
 
       let fontF = curveRecord?.fontFamily || this.stageState.fontFamily;
@@ -1012,7 +1012,7 @@ class QuoraAnnotationComponent {
         id: 'qa-inline-tail-editor',
         style: {
           position: 'absolute', top: `${posY}px`, left: `${posX}px`, width: `${width}px`,
-          zIndex: '70', display: 'flex', flexDirection: 'column', gap: '6px'
+          zIndex: '70', display: 'flex', flexDirection: 'column', gap: '8px'
         }
       });
 
@@ -1021,28 +1021,31 @@ class QuoraAnnotationComponent {
         value: curveRecord?.text || '',
         rows: 1,
         style: {
-          width: '100%', minHeight: '36px', maxHeight: '160px', padding: '6px 8px',
+          width: '100%', minHeight: '38px', maxHeight: '160px', padding: '6px 10px',
           fontSize: `${fontS}px`, fontFamily: fontF, fontWeight: 'bold', lineHeight: '1.25',
-          color: color, background: boxStyle === 'box' ? 'rgba(15, 23, 42, 0.96)' : 'rgba(0, 0, 0, 0.75)',
+          color: color, background: boxStyle === 'box' ? 'rgba(15, 23, 42, 0.96)' : 'rgba(0, 0, 0, 0.82)',
           border: boxStyle === 'box' ? `2px solid ${color}` : (boxStyle === 'bracket' ? `none` : '1.5px dashed rgba(255, 255, 255, 0.4)'),
           borderBottom: (boxStyle === 'bracket') ? `2.5px solid ${color}` : undefined,
           borderLeft: (boxStyle === 'bracket' && isLeft) ? `2.5px solid ${color}` : undefined,
           borderRight: (boxStyle === 'bracket' && !isLeft) ? `2.5px solid ${color}` : undefined,
           borderRadius: boxStyle === 'box' ? '6px' : '0', outline: 'none', resize: 'none',
-          boxSizing: 'border-box', textAlign: isLeft ? 'left' : 'right'
+          boxSizing: 'border-box', textAlign: isLeft ? 'left' : 'right',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.85)'
         }
       });
 
       const autoGrow = () => {
         textarea.style.height = 'auto';
-        textarea.style.height = `${Math.max(36, textarea.scrollHeight)}px`;
+        textarea.style.height = `${Math.max(38, textarea.scrollHeight)}px`;
       };
 
+      // Position controls bar comfortably offset below textarea so it never blocks drawing
       const controlsRow = makeElement('div', {
         style: {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px',
           background: 'rgba(15, 23, 42, 0.98)', border: '1px solid rgba(255,255,255,0.18)',
-          borderRadius: '6px', padding: '4px 8px', fontSize: '10px'
+          borderRadius: '8px', padding: '5px 8px', fontSize: '10px',
+          boxShadow: '0 4px 14px rgba(0,0,0,0.7)'
         }
       });
 
@@ -1068,7 +1071,7 @@ class QuoraAnnotationComponent {
       const fontSelect = makeElement('select', {
         style: {
           background: '#0d1117', color: '#00f2fe', border: '1px solid #30363d',
-          borderRadius: '4px', padding: '1px 4px', fontSize: '9.5px', fontFamily: 'monospace', outline: 'none'
+          borderRadius: '4px', padding: '2px 4px', fontSize: '9.5px', fontFamily: 'monospace', outline: 'none'
         },
         onchange: (e) => {
           fontF = e.target.value;
@@ -1131,7 +1134,7 @@ class QuoraAnnotationComponent {
 
       const okBtn = makeElement('button', {
         className: 'dr-nav-btn primary',
-        style: { padding: '2px 7px', fontSize: '10px', background: '#238636', borderColor: '#2ea043' },
+        style: { padding: '2px 8px', fontSize: '10px', background: '#238636', borderColor: '#2ea043' },
         onclick: (e) => { e.stopPropagation(); commit(); }
       }, '✓ OK');
 
@@ -2185,43 +2188,157 @@ class QuoraAnnotationComponent {
   }
 
   setupKeyInMatrixHud() {
-    let hud = document.getElementById('qa-keyin-matrix-hud');
-    if (hud) return;
+      let hud = document.getElementById('qa-keyin-matrix-hud');
 
-    hud = makeElement('div', {
-      id: 'qa-keyin-matrix-hud',
-      style: {
-        position: 'fixed', top: '80px', left: '24px', zIndex: '2147483640',
-        background: 'rgba(9, 13, 22, 0.96)', border: '1.5px solid rgba(0, 242, 254, 0.45)',
-        borderRadius: '10px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '3px',
-        boxShadow: '0 12px 36px rgba(0,0,0,0.9)', fontFamily: 'monospace', fontSize: '11px', color: '#f8fafc'
+      if (!this._hudPos) {
+        try {
+          const saved = JSON.parse(localStorage.getItem('quoratoys_hud_pos') || 'null');
+          this._hudPos = saved || { left: 24, top: 80 };
+        } catch (e) {
+          this._hudPos = { left: 24, top: 80 };
+        }
       }
-    });
 
-    const header = makeElement('div', {
-      style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '4px', borderBottom: '1px solid rgba(255,255,255,0.1)' }
-    }, [
-      makeElement('strong', { style: { color: '#00f2fe' } }, 'KEY-IN MATRIX'),
-      makeElement('button', {
-        className: 'dr-nav-btn', style: { padding: '1px 5px', fontSize: '10px' },
-        onclick: () => { hud.style.display = 'none'; }
-      }, '✕')
-    ]);
+      this._hudPos.left = Math.max(8, Math.min(window.innerWidth - 280, this._hudPos.left));
+      this._hudPos.top = Math.max(8, Math.min(window.innerHeight - 80, this._hudPos.top));
 
-    const delRow = makeElement('div', {
-      className: 'qa-keyin-row', 'data-action': 'delete_curve',
-      style: { display: 'flex', justifyContent: 'space-between', padding: '3px 6px', background: 'rgba(255,255,255,0.02)', borderRadius: '4px' },
-      onclick: () => this.deleteSelectedEntity()
-    }, [
-      makeElement('span', {}, 'Delete (Select Curve)'),
-      makeElement('span', { style: { color: '#00f2fe', fontWeight: 'bold' } }, 'Del')
-    ]);
+      if (hud) {
+        hud.style.left = `${this._hudPos.left}px`;
+        hud.style.top = `${this._hudPos.top}px`;
+        hud.style.display = 'flex';
+        return;
+      }
 
-    hud.append(header, delRow);
-    document.body.appendChild(hud);
-    this.updateDynamicKeyInHUD();
-  }
+      this._hudCollapsed = false;
+      this._hudShowDetails = false;
 
+      hud = makeElement('div', {
+        id: 'qa-keyin-matrix-hud',
+        style: {
+          position: 'fixed', top: `${this._hudPos.top}px`, left: `${this._hudPos.left}px`,
+          zIndex: '2147483640', background: 'rgba(9, 13, 22, 0.96)',
+          border: '1.5px solid rgba(0, 242, 254, 0.45)', borderRadius: '10px', padding: '0',
+          display: 'flex', flexDirection: 'column',
+          boxShadow: '0 12px 36px rgba(0, 0, 0, 0.9), 0 0 16px rgba(0, 242, 254, 0.25)',
+          fontFamily: 'monospace', fontSize: '11px', color: '#f8fafc',
+          backdropFilter: 'blur(14px)', userSelect: 'none', pointerEvents: 'auto',
+          minWidth: '250px', maxWidth: '320px', overflow: 'hidden'
+        }
+      });
+
+      const header = makeElement('div', {
+        id: 'qa-keyin-hud-header',
+        style: {
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          padding: '6px 10px', background: 'rgba(15, 23, 42, 0.98)',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.12)', cursor: 'grab', touchAction: 'none'
+        }
+      }, [
+        makeElement('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, [
+          makeElement('span', { style: { color: '#64748b', fontSize: '11px' } }, '⋮⋮'),
+          makeElement('strong', { style: { color: '#00f2fe', fontSize: '11px' } }, 'KEY-IN MATRIX'),
+          makeElement('span', { style: { fontSize: '9px', color: '#10b981', fontWeight: 'bold' } }, '● Active')
+        ]),
+        makeElement('div', { style: { display: 'flex', gap: '3px', alignItems: 'center' } }, [
+          (this._hudDetailsBtn = makeElement('button', {
+            className: 'dr-nav-btn',
+            style: { padding: '1px 5px', fontSize: '9px' },
+            title: 'Expand detailed shortcut explanations',
+            onclick: (e) => {
+              e.stopPropagation();
+              this._hudShowDetails = !this._hudShowDetails;
+              this._hudDetailsBtn.textContent = this._hudShowDetails ? '▲ Compact' : '▼ Details';
+              this.renderKeyInMatrixRows();
+            }
+          }, '▼ Details')),
+          (this._hudToggleBtn = makeElement('button', {
+            className: 'dr-nav-btn',
+            style: { padding: '1px 5px', fontSize: '10px', lineHeight: '1' },
+            title: 'Minimize / Expand palette',
+            onclick: (e) => {
+              e.stopPropagation();
+              this._hudCollapsed = !this._hudCollapsed;
+              this._hudBodyWrapper.style.display = this._hudCollapsed ? 'none' : 'flex';
+              this._hudToggleBtn.textContent = this._hudCollapsed ? '+' : '−';
+            }
+          }, '−')),
+          makeElement('button', {
+            className: 'dr-nav-btn',
+            style: { padding: '1px 5px', fontSize: '10px', color: '#ff7b72', lineHeight: '1' },
+            title: 'Close HUD',
+            onclick: (e) => {
+              e.stopPropagation();
+              hud.style.display = 'none';
+            }
+          }, '✕')
+        ])
+      ]);
+
+      let isDraggingHud = false;
+      let startX = 0, startY = 0;
+      let initialX = 0, initialY = 0;
+
+      header.addEventListener('mousedown', (e) => {
+        if (e.target.closest('button')) return;
+        isDraggingHud = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        initialX = parseFloat(hud.style.left) || this._hudPos.left;
+        initialY = parseFloat(hud.style.top) || this._hudPos.top;
+        header.style.cursor = 'grabbing';
+        e.preventDefault();
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!isDraggingHud) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+
+        const newLeft = Math.max(8, Math.min(window.innerWidth - 260, initialX + dx));
+        const newTop = Math.max(8, Math.min(window.innerHeight - 60, initialY + dy));
+
+        hud.style.left = `${newLeft}px`;
+        hud.style.top = `${newTop}px`;
+        this._hudPos = { left: newLeft, top: newTop };
+        try {
+          localStorage.setItem('quoratoys_hud_pos', JSON.stringify(this._hudPos));
+        } catch (err) {}
+      });
+
+      window.addEventListener('mouseup', () => {
+        if (isDraggingHud) {
+          isDraggingHud = false;
+          header.style.cursor = 'grab';
+        }
+      });
+
+      this._hudBodyWrapper = makeElement('div', {
+        style: { display: 'flex', flexDirection: 'column' }
+      });
+
+      const topExplainer = makeElement('div', {
+        style: {
+          padding: '6px 10px', background: 'rgba(0, 242, 254, 0.08)',
+          borderBottom: '1px solid rgba(0, 242, 254, 0.2)', fontSize: '10px', color: '#94a3b8', lineHeight: '1.4'
+        }
+      }, [
+        makeElement('strong', { style: { color: '#00f2fe', display: 'block', marginBottom: '2px' } }, '💡 Interactive Shortcuts:'),
+        '• Hold ', makeElement('strong', { style: { color: '#ffd700' } }, '[H]'), ' for live vector arrows.', makeElement('br'),
+        '• Hold ', makeElement('strong', { style: { color: '#f59e0b' } }, '[Ctrl]'), ' to tune string length or rest hand.', makeElement('br'),
+        '• Press ', makeElement('strong', { style: { color: '#00f2fe' } }, '[X]'), ' to swap arrow ↔ text ends.'
+      ]);
+      this._hudBodyWrapper.appendChild(topExplainer);
+
+      this._keyInPillsContainer = makeElement('div', {
+        style: { display: 'flex', flexDirection: 'column', gap: '3px', padding: '6px 8px', maxHeight: '380px', overflowY: 'auto' }
+      });
+      this._hudBodyWrapper.appendChild(this._keyInPillsContainer);
+
+      hud.append(header, this._hudBodyWrapper);
+      document.body.appendChild(hud);
+
+      this.renderKeyInMatrixRows();
+    }
   ensureFontLoaded(fontFamily) {
     if (!fontFamily) return;
     if (fontFamily.includes('Architects Daughter') && !this._loadedFonts.has('Architects Daughter')) {
@@ -2280,19 +2397,22 @@ class QuoraAnnotationComponent {
       const beziers = ann.beziers;
       if (!beziers || beziers.length === 0) return;
 
-      // Detect terminal anchor based on active textEnd ('tail' or 'tip')
       const isAtTail = (ann.textEnd !== 'tip');
       const termSeg = isAtTail ? beziers[beziers.length - 1] : beziers[0];
       const anchorPt = isAtTail ? termSeg[3] : termSeg[0];
 
-      // Compute exit direction vector away from curve stem
+      // Compute curve departure vector entering the text area
       const exitVec = isAtTail
         ? [termSeg[3][0] - termSeg[2][0], termSeg[3][1] - termSeg[2][1]]
         : [termSeg[0][0] - termSeg[1][0], termSeg[0][1] - termSeg[1][1]];
 
       const exitLen = Math.hypot(exitVec[0], exitVec[1]) || 1;
       const uX = exitVec[0] / exitLen;
+      const uY = exitVec[1] / exitLen;
+
+      // 4-Quadrant Positioning Logic
       const isLeft = (ann.justifySide === 'left') || (uX >= 0);
+      const isApproachingDown = (uY >= 0);
 
       const fontS = ann.fontSize || 22;
       const fontF = ann.fontFamily || "'Architects Daughter', cursive, sans-serif";
@@ -2308,7 +2428,6 @@ class QuoraAnnotationComponent {
       const boxW = Math.round(maxChars * charW) + padX * 2;
       const boxH = Math.round(lines.length * lineHeight) + padY * 2;
 
-      // Position text offset along exit tangent so it never cuts into the curve
       const gap = 8;
       const posX = isLeft ? anchorPt[0] + gap : anchorPt[0] - boxW - gap;
       const posY = Math.round(anchorPt[1] - boxH / 2);
@@ -2332,10 +2451,14 @@ class QuoraAnnotationComponent {
           fill: 'rgba(15, 23, 42, 0.96)', stroke: ann.color || '#00e676', 'stroke-width': '2.5'
         }));
       } else if (ann.boxStyle === 'bracket') {
-        const bottomY = posY + boxH;
-        const sideX = isLeft ? posX : posX + boxW;
+        // 4-Quadrant Dynamic Architectural Bracket:
+        // Shelf runs on top or bottom based on vertical entry; wall runs on entrance side
+        const wallX = isLeft ? posX : posX + boxW;
         const oppX = isLeft ? posX + boxW : posX;
-        const bD = `M ${sideX} ${posY} L ${sideX} ${bottomY} L ${oppX} ${bottomY}`;
+        const shelfY = isApproachingDown ? posY : (posY + boxH);
+        const wallEndY = isApproachingDown ? (posY + boxH) : posY;
+
+        const bD = `M ${oppX} ${shelfY} L ${wallX} ${shelfY} L ${wallX} ${wallEndY}`;
 
         g.appendChild(makeElement('svg:path', {
           d: bD, transform: 'translate(2, 2)', fill: 'none',
@@ -2605,6 +2728,85 @@ class QuoraAnnotationComponent {
     };
     img.src = url;
   }
+
+  renderKeyInMatrixRows() {
+      if (!this._keyInPillsContainer) return;
+      this._keyInPillsContainer.innerHTML = '';
+
+      const commands = [
+        { key: 'H (Hold)', label: 'Meta Vector Help', desc: 'Hold H anytime to see on-screen arrowheads and bracket callouts explaining all controls', action: 'meta_help' },
+        { key: 'Ctrl (Hold)', label: 'Clutch / Rest Hand', desc: 'Freeze curve growth to tune drawstring radius R, or release mouse to rest hand without breaking curve', action: 'clutch_rest' },
+        { key: 'Space', label: 'Draw ↔ Tweak Mode', desc: 'Toggle between drawing new curves and selecting/tweaking existing knots or difference lenses', action: 'toggle_tool' },
+        { key: 'Tab', label: 'Next Knot on Curve', desc: 'Advance active knot selection forward along the curve (Shift+Tab moves backward)', action: 'next_knot' },
+        { key: 'A', label: 'Toggle Arrowhead', desc: 'Add or remove the concave arrowhead on the active curve terminal or upcoming strokes', action: 'toggle_arrow' },
+        { key: 'T', label: 'Attach / Edit Text', desc: 'Focus the text editor at the curve terminal to type or update callout text immediately', action: 'edit_text' },
+        { key: 'X', label: 'Swap Terminals', desc: 'Instantly reverse endpoints: move arrowhead to opposite end and flip the text bracket', action: 'swap_ends' },
+        { key: 'Click (Dot)', label: 'Midpoint Knot Split', desc: 'Clicking the stationary midpoint dot on any segment bisects it at t=0.5 with a new knot', action: 'split_point' },
+        { key: '➕ / +', label: 'Add Knot to Segment', desc: 'Insert an on-curve knot on the active segment without altering overall curve shape', action: 'add_point' },
+        { key: 'Right-Click', label: 'Delete Knot', desc: 'Right-clicking any knot handle deletes that point and re-relaxes the curve smoothly', action: 'delete_knot' },
+        { key: 'Del', label: 'Delete Knot / Curve', desc: 'Deletes the active knot first; once 2 endpoints remain, deletes the entire curve assembly', action: 'delete_curve' },
+        { key: 'C', label: 'Toggle Cusp (45°)', desc: 'Breaks continuous tangency into a sharp 45° corner/cusp at the active knot', action: 'toggle_cusp' },
+        { key: 'B', label: 'Cycle Balance (0.5/1.5)', desc: 'Cycles handle length ratio balance between 0.5, 1.5, and 1.0', action: 'cycle_balance' },
+        { key: '[ / ]', label: 'Step Tangent Angle', desc: 'Rotates outbound tangent angle by ±10° with magnetic snapping to natural baseline', action: 'tune_tangent' },
+        { key: '+ / -', label: 'Tune Curvature (C)', desc: 'Increases or decreases curvature tension C in increments of 0.15', action: 'tune_curvature' },
+        { key: 'S', label: 'Straighten to Line', desc: 'Collapses curve by removing all intermediate knots, making a direct straight arrow', action: 'straighten' },
+        { key: 'R', label: 'Reset Knot Constraints', desc: 'Resets active knot constraints back to default relaxed state (0 offset, C=1, B=1)', action: 'reset_knot' },
+        { key: 'W', label: 'Wipe All Constraints', desc: 'Wipes all custom constraints across all knots on the selected curve', action: 'wipe_curve' }
+      ];
+
+      this._keyInCommandElements = {};
+
+      commands.forEach(cmd => {
+        const card = makeElement('div', {
+          className: 'qa-keyin-row',
+          'data-action': cmd.action,
+          style: {
+            display: 'flex', flexDirection: 'column', gap: '2px',
+            padding: '4px 6px', borderRadius: '4px', cursor: 'pointer',
+            background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.06)',
+            transition: 'all 0.12s ease'
+          },
+          title: `Click or press ${cmd.key} to execute`,
+          onclick: (e) => {
+            e.stopPropagation();
+            if (cmd.action === 'toggle_arrow') this.toggleArrowhead();
+            else if (cmd.action === 'edit_text') this.triggerTextOnActiveOrCanvas();
+            else if (cmd.action === 'swap_ends') this.swapActiveCurveTerminals();
+            else if (cmd.action === 'add_point') this.addKnotToActiveCurve();
+            else this.executeKeyInCommand(cmd.action);
+          }
+        });
+
+        const topRow = makeElement('div', {
+          style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' }
+        }, [
+          makeElement('span', { style: { color: '#cbd5e1', fontSize: '10.5px' } }, cmd.label),
+          makeElement('span', {
+            style: {
+              background: 'rgba(0, 242, 254, 0.15)', color: '#00f2fe', border: '1px solid rgba(0, 242, 254, 0.35)',
+              borderRadius: '4px', padding: '1px 5px', fontSize: '10px', fontWeight: 'bold', minWidth: '42px', textAlign: 'center'
+            }
+          }, cmd.key)
+        ]);
+
+        card.appendChild(topRow);
+
+        if (this._hudShowDetails) {
+          const descRow = makeElement('div', {
+            style: { fontSize: '9.5px', color: '#94a3b8', lineHeight: '1.3', marginTop: '2px', paddingLeft: '2px' }
+          }, cmd.desc);
+          card.appendChild(descRow);
+        }
+
+        card.addEventListener('mouseenter', () => { card.style.background = 'rgba(0, 242, 254, 0.12)'; });
+        card.addEventListener('mouseleave', () => { card.style.background = 'rgba(255, 255, 255, 0.02)'; });
+
+        this._keyInCommandElements[cmd.action] = card;
+        this._keyInPillsContainer.appendChild(card);
+      });
+
+      this.updateDynamicKeyInHUD();
+    }
 }
 
 globalThis.QuoraAnnotationComponent = QuoraAnnotationComponent;

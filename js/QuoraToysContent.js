@@ -456,14 +456,15 @@ class QuoraArchitectureContent {
   }
 
   static sidebar_roadmap_steps() {
-    return [
-      "Implementation Roadmap:\n" +
-      "• Step 1: Dynamic multi-point chain relaxation, colinear tangency, and right-click commit (Delivered).\n" +
-      "• Step 2: Direct Typography Engine: dropping standalone text badges anywhere on canvas with Architect's Daughter font and 2-sided architectural brackets.\n" +
-      "• Step 3: Chrome Extension Modernization: purging legacy triangle markers in favor of concave arrowheads and in-situ Quora image frame expansion.\n" +
-      "• Step 4: Closed curve loop support with continuous C^1 tangency closure."
-    ];
-  }
+      return [
+        "Prioritized Implementation & Architecture Roadmap:\n" +
+        "• Step 1: Restored 16-Command Key-In Matrix HUD with dynamic action highlights and detail drawer (Active).\n" +
+        "• Step 2: 4-Quadrant Adaptive Architectural Bracket Formulation (Active: shelf and entrance wall orient based on u_x * u_y arrival tangent without stem overlap).\n" +
+        "• Step 3: Three-Tier Cognitive Visual Prioritization: Tier 1 active knot, Tier 2 selected curve, Tier 3 dormant background curves.\n" +
+        "• Step 4: Multi-Plate In-Situ Frame Padding Expander: dynamic canvas boundary expansion as images or callouts approach edges.\n" +
+        "• Step 5: JSON State Import/Export: serialize complete scene graph (plates, curves, difference lenses, callouts) into portable JSON dossiers."
+      ];
+    }
 }
 
 // Global Exports
