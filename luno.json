@@ -1,6 +1,6 @@
 {
   "name": "QuoraToys",
-  "version": "2.6.0",
+  "version": "2.8.0",
   "description": "QuoraToys: Interactive visual solvers, kinetic vector annotations, living documentation, and in-situ browser tools",
   "type": "luno-web-app",
   "mainClass": "QuoraToysApp",
@@ -17,6 +17,14 @@
     "js/BezierVertex.js",
     "js/UpdateControlPoints.js",
     "js/CurveFitter.js",
+    "js/QuoraStrokeManager.js",
+    "js/QuoraPaintManager.js",
+    "js/QuoraExportManager.js",
+    "js/QuoraGestureMachine.js",
+    "js/QuoraImageManager.js",
+    "js/QuoraTextManager.js",
+    "js/QuoraKnotManager.js",
+    "js/QuoraInSituHUD.js",
     "js/QuoraToys.js",
     "js/QuoraToysContent.js",
     "js/QuoraAnnotationComponent.js",
@@ -36,13 +44,16 @@
   "styles": [
     "css/basicsWithDialogBox.css"
   ],
-  "processedCountSinceCheckpoint": 0,
+  "processedCountSinceCheckpoint": 53,
   "changedMethods": {
-    "js/AppColorUtils.js": "2026-11-06T02:36:56.190Z",
-    "luno.json": "2026-11-06T02:36:56.190Z",
-    "js/QuoraAnnotationComponent.js": "2026-11-06T03:05:43.760Z",
-    "js/QuoraToysContent.js": "2026-11-06T03:05:43.760Z"
+    "js/QuoraStrokeManager.js": "2026-11-07T22:19:07.761Z",
+    "js/QuoraPaintManager.js": "2026-11-07T22:19:07.761Z",
+    "js/QuoraExportManager.js": "2026-11-07T22:19:07.761Z",
+    "js/QuoraGestureMachine.js": "2026-11-07T22:19:07.761Z",
+    "js/QuoraAnnotationComponent.js": "2026-11-07T22:19:07.761Z",
+    "js/QuoraToysContent.js": "2026-11-07T22:19:07.761Z",
+    "luno.json": "2026-11-07T22:19:07.761Z"
   },
-  "lastCheckpointTime": "2026-11-06T03:49:31.287Z",
-  "pendingCheckpointDescription": "Clean working tree"
+  "lastCheckpointTime": "2026-11-06T04:12:00.000Z",
+  "pendingCheckpointDescription": "Decoupled specialized manager delegates and documented behavior"
 }

@@ -403,15 +403,16 @@ class QuoraArchitectureContent {
   }
 
   static sidebar_counterfactual_math() {
-    return [
-      "Outbound Tangent & Snapping Mathematics:\n" +
-      "• Outbound Ray: $\\mathbf{P}_{\\text{ray}} = \\mathbf{P}_{\\text{endpoint}} + \\mathbf{T} \\cdot L_{\\text{handle}}$ (where $L_{\\text{handle}} \\ge 50\\text{px}$ for leverage).\n" +
-      "• Natural Baseline: $\\mathbf{T}_{\\text{base}} = \\text{normalize}(\\mathbf{P}_{\\text{endpoint}} - \\mathbf{P}_{\\text{neighbor}})$.\n" +
-      "• Angular Distance: $\\Delta\\theta = \\text{atan2}(\\mathbf{T}_{\\text{base}} \\times \\mathbf{T}, \\mathbf{T}_{\\text{base}} \\cdot \\mathbf{T})$.\n" +
-      "• Snap Gate: If $|\\Delta\\theta| < 0.10\\text{ rad}$ ($6^\\circ$), $\\mathbf{T} \\leftarrow \\mathbf{T}_{\\text{base}}$ (snapped to zero offset)."
-    ];
+      return [
+        "Counterfactual Natural Baseline & Full Tangency Line Formulation:\n" +
+        "• Natural Tangent: For knot i, T_natural is the direction curve would point if ONLY knot i had zero constraint, calculated via localized relaxation over its adjacent neighborhood: computeCounterfactualTangent(vertices, knotIdx).\n" +
+        "• Collinear Line Representation: For interior knots, the tangent line represents the line along which adjacent control points lie, projecting symmetrically in both directions through P_i (P_i +/- lambda * T).\n" +
+        "• Relative Offset: Stored deviation theta is relative to T_natural, so moving neighbor knots rotates the natural baseline without warping the author's custom deviation.\n" +
+        "• 2-Sided Bracket Rule: Always exactly two perpendicular sides (one vertical wall + one horizontal shelf). When curve enters from left/right, wall is on arrival edge; when curve enters from top/bottom, shelf runs along entry edge and single wall orients along horizontal velocity lean u_x.\n" +
+        "• Auto-Bounds Envelope: computeBounds accounts for all spline envelopes and text bounding boxes with 45px safety margin, guaranteeing that brackets and shelves are never clipped by the canvas perimeter.\n" +
+        "• Drawing Pause In-Situ Dial: Pausing during drawing for >400ms blooms the transient cursor dial for immediate 1-tap tuning, resuming seamlessly on cursor movement."
+      ];
   }
-
   static p_de_casteljau_split_delete() {
     return [
       "A complete spline tool must allow direct knot manipulation on the curve without restarting the drawing gesture.",
@@ -456,15 +457,22 @@ class QuoraArchitectureContent {
   }
 
   static sidebar_roadmap_steps() {
-      return [
-        "Prioritized Implementation & Architecture Roadmap:\n" +
-        "• Step 1: Restored 16-Command Key-In Matrix HUD with dynamic action highlights and detail drawer (Active).\n" +
-        "• Step 2: 4-Quadrant Adaptive Architectural Bracket Formulation (Active: shelf and entrance wall orient based on u_x * u_y arrival tangent without stem overlap).\n" +
-        "• Step 3: Three-Tier Cognitive Visual Prioritization: Tier 1 active knot, Tier 2 selected curve, Tier 3 dormant background curves.\n" +
-        "• Step 4: Multi-Plate In-Situ Frame Padding Expander: dynamic canvas boundary expansion as images or callouts approach edges.\n" +
-        "• Step 5: JSON State Import/Export: serialize complete scene graph (plates, curves, difference lenses, callouts) into portable JSON dossiers."
-      ];
-    }
+    return [
+      "Decoupled Delegate Architecture:\n" +
+      "• QuoraStrokeManager: Pure spline mathematics, Schneider least-squares conversion, C^1 continuity enforcement, and concave arrowhead geometry.\n" +
+      "• QuoraGestureMachine: Touchdown deadzone (32px), drawstring tether dampening, Ctrl clutch hand-rest, and 1-click hover-knot grab.\n" +
+      "• QuoraPaintManager: Blockout masks with dynamically tuned feGaussianBlur SVG filters for clean image inpainting.\n" +
+      "• QuoraExportManager: Decoupled retina composite rendering and platform presets (Native 2x, Quora 16:9, Substack 21:9, Square 1:1).\n" +
+      "• QuoraKnotManager: Tangency ray alignment, symmetric collinear interior tangents, and point-drag constraint loosening.\n" +
+      "• QuoraTextManager: Detached floating callout editor dock and 2-sided architectural bracket placement.\n" +
+      "• QuoraImageManager: Multi-plate image management, proportional scaling, and z-order controls.\n" +
+      "\n" +
+      "Documented Behavior & Future Potential:\n" +
+      "• Point-Driven Editing: Grabbing any knot releases angular constraints on itself and adjacent neighbors, allowing points to steer curves smoothly without kinks.\n" +
+      "• Non-Intrusive Callouts: Floating toolbars sit 24px clear of text boxes, and resize handles only appear on hover.\n" +
+      "• Diagnostic Hooks: Each manager exposes clean, inspectable state structures for future diagnostic overlays and visual quality audits."
+    ];
+  }
 }
 
 // Global Exports

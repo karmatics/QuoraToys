@@ -108,6 +108,7 @@ class QuoraAnnotationComponent {
     };
 
     this._activeKnotIdx = 0;
+    this._selectedKnotIndices = new Set();
     this._clutchActive = false;
     this._handRestActive = false;
     this._metaHelpActive = false;
@@ -115,8 +116,17 @@ class QuoraAnnotationComponent {
     this._isDrawingActive = false;
     this._penNodes = null;
     this._loadedFonts = new Set();
-  }
 
+    // Initialize specialized modular delegates
+    this.imageManager = new QuoraImageManager(this);
+    this.textManager = new QuoraTextManager(this);
+    this.knotManager = new QuoraKnotManager(this);
+    this.inSituHud = new QuoraInSituHUD(this);
+    this.strokeManager = new QuoraStrokeManager(this);
+    this.paintManager = new QuoraPaintManager(this);
+    this.exportManager = new QuoraExportManager(this);
+    this.gestureMachine = new QuoraGestureMachine(this);
+  }
   build(container) {
     this.ensureFontLoaded(this.stageState.fontFamily);
 
@@ -397,17 +407,8 @@ class QuoraAnnotationComponent {
   }
 
   updateSvgBlurFilter() {
-    if (!this.svgDefs) return;
-    let filter = this.svgDefs.querySelector('#qa-brush-blur');
-    if (!filter) {
-      filter = makeElement('svg:filter', {
-        id: 'qa-brush-blur', x: '-30%', y: '-30%', width: '160%', height: '160%'
-      });
-      this.svgDefs.appendChild(filter);
-    }
-    filter.innerHTML = `<feGaussianBlur stdDeviation="${this.stageState.brushSoftness || 0}" />`;
+    this.paintManager.updateSvgBlurFilter(this.svgDefs, this.stageState.brushSoftness);
   }
-
   openSpotDiffWorkflow() {
     const overlayHost = document.createElement('div');
     overlayHost.id = 'qa-diff-workflow-modal';
@@ -452,72 +453,15 @@ class QuoraAnnotationComponent {
     }
   }
 
-  // ── Multi-Image Plates & Dynamic Canvas Auto-Bounds ──
   addNewImagePlate(img, x = 60, y = 60) {
-    let w = img.naturalWidth || img.width;
-    let h = img.naturalHeight || img.height;
-
-    const maxInit = 560;
-    if (w > maxInit || h > maxInit) {
-      const ratio = Math.min(maxInit / w, maxInit / h);
-      w = Math.round(w * ratio);
-      h = Math.round(h * ratio);
-    }
-
-    const plate = {
-      id: 'img_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-      img: img,
-      x: x,
-      y: y,
-      width: w,
-      height: h,
-      aspect: w / h
-    };
-
-    this.stageState.placedImages.push(plate);
-    this.stageState.activeImage = plate;
-
-    if (!this.stageState.baseImage) {
-      this.stageState.baseImage = img;
-      this.stageState.cropRect = { x: 0, y: 0, width: w, height: h };
-    }
-
-    this.renderStage();
-    this.showKnotToast(`Added image plate (${w}×${h}px)`);
+      if (!this.imageManager) this.imageManager = new QuoraImageManager(this);
+      return this.imageManager.addPlate(this.stageState, img, x, y);
   }
 
   computeAutoBounds() {
-    const pad = this.stageState.padding || 45;
-    let minX = 0, minY = 0, maxX = 680, maxY = 380;
-
-    (this.stageState.placedImages || []).forEach(plate => {
-      minX = Math.min(minX, plate.x);
-      minY = Math.min(minY, plate.y);
-      maxX = Math.max(maxX, plate.x + plate.width);
-      maxY = Math.max(maxY, plate.y + plate.height);
-    });
-
-    (this.stageState.diffCallouts || []).forEach(diff => {
-      const r = diff.radius;
-      minX = Math.min(minX, diff.cropX - r - 10);
-      maxX = Math.max(maxX, diff.cropX + r + 10);
-      minY = Math.min(minY, diff.cropY - r - 10);
-      maxY = Math.max(maxY, diff.cropY + r + 10);
-    });
-
-    const totalW = Math.max(1100, Math.round((maxX - minX) + (pad * 2)));
-    const totalH = Math.max(640, Math.round((maxY - minY) + (pad * 2)));
-
-    this.stageState.canvasWidth = totalW;
-    this.stageState.canvasHeight = totalH;
-
-    return {
-      totalW, totalH,
-      offsetX: Math.round(-minX + pad),
-      offsetY: Math.round(-minY + pad)
-    };
+      if (!this.imageManager) this.imageManager = new QuoraImageManager(this);
+      return this.imageManager.computeBounds(this.stageState);
   }
-
   // ── Multi-Point Curve: Dynamic Relaxation of Prior Chain & Dashed Lead ──
   updatePenTentativeSpline(mousePt) {
     if (!this._penNodes || this._penNodes.length === 0) return;
@@ -606,32 +550,10 @@ class QuoraAnnotationComponent {
     }
   }
 
-  // ── Smart Knot & Curve Actions ──
   addKnotToActiveCurve() {
     const curve = this.getActiveCurve();
-    if (!curve || !curve.vertices || curve.vertices.length < 2) {
-      this.showKnotToast('Select a curve to insert an on-curve point');
-      return;
-    }
-
-    const idx = Math.max(0, Math.min(this._activeKnotIdx || 0, curve.vertices.length - 2));
-    const v1 = curve.vertices[idx];
-    const v2 = curve.vertices[idx + 1];
-
-    const midPt = [(v1.point[0] + v2.point[0]) / 2, (v1.point[1] + v2.point[1]) / 2];
-    const newKnot = new BezierVertex(midPt);
-    newKnot.curvature = 1.0;
-    newKnot.balance = 1.0;
-    newKnot.tangentAngleOffset = 0;
-
-    curve.vertices.splice(idx + 1, 0, newKnot);
-    this._activeKnotIdx = idx + 1;
-
-    this.commitCurveGeometryUpdate();
-    this.exposeBezierHandles(curve);
-    this.showKnotToast(`✓ Point inserted at position ${idx + 2}`);
+    if (curve) this.strokeManager.addKnotOnCurve(curve, this._activeKnotIdx);
   }
-
   toggleArrowhead() {
     this.stageState.hasArrow = !this.stageState.hasArrow;
     if (this.arrowBtn) {
@@ -647,17 +569,16 @@ class QuoraAnnotationComponent {
   }
 
   triggerTextOnActiveOrCanvas() {
-    const curve = this.getActiveCurve();
-    if (curve && curve.beziers?.length > 0) {
-      const termSeg = (curve.textEnd !== 'tip') ? curve.beziers[curve.beziers.length - 1] : curve.beziers[0];
-      const anchorPt = (curve.textEnd !== 'tip') ? termSeg[3] : termSeg[0];
-      this._promptInlineTailText(curve, anchorPt, 'left');
-    } else {
-      const tf = this.computeAutoBounds();
-      this.promptDirectTextBadge(tf.totalW / 2 - 40, tf.totalH / 2 - 20);
-    }
+      const curve = this.getActiveCurve();
+      if (curve && curve.beziers?.length > 0) {
+        const termSeg = (curve.textEnd !== 'tip') ? curve.beziers[curve.beziers.length - 1] : curve.beziers[0];
+        const anchorPt = (curve.textEnd !== 'tip') ? termSeg[3] : termSeg[0];
+        this._promptInlineTailText(curve, anchorPt, null);
+      } else {
+        const tf = this.computeAutoBounds();
+        this.promptDirectTextBadge(tf.totalW / 2 - 40, tf.totalH / 2 - 20);
+      }
   }
-
   // ── Synchronous Color Picker Launch ──
   launchColorPicker(targetMode = 'curve', triggerBtn = null) {
     const curColor = this.stageState.currentColor;
@@ -772,462 +693,43 @@ class QuoraAnnotationComponent {
   }
 
   renderOutboundTangentRay(curveRecord, knotIdx, updateGeometryFn) {
-    const existing = document.getElementById('qa-outbound-tangent-ray');
-    if (existing) existing.remove();
-
-    const vertices = curveRecord.vertices;
-    if (!vertices || vertices.length < 2) return;
-    const v = vertices[knotIdx] || vertices[0];
-    const prevV = vertices[knotIdx - 1];
-    const nextV = vertices[knotIdx + 1];
-
-    const pt = v.point;
-    const rayLength = 54;
-    const actualDir = this.computeCurveExitVector(curveRecord, knotIdx);
-    const actualAngle = Math.atan2(actualDir[1], actualDir[0]);
-
-    let naturalDir = [1, 0];
-    if (!prevV && nextV) {
-      const dx = v.point[0] - nextV.point[0];
-      const dy = v.point[1] - nextV.point[1];
-      const l = Math.hypot(dx, dy) || 1;
-      naturalDir = [dx / l, dy / l];
-    } else if (prevV && !nextV) {
-      const dx = v.point[0] - prevV.point[0];
-      const dy = v.point[1] - prevV.point[1];
-      const l = Math.hypot(dx, dy) || 1;
-      naturalDir = [dx / l, dy / l];
-    } else if (prevV && nextV) {
-      const dx = nextV.point[0] - prevV.point[0];
-      const dy = nextV.point[1] - prevV.point[1];
-      const l = Math.hypot(dx, dy) || 1;
-      naturalDir = [dx / l, dy / l];
-    }
-    const naturalAngle = Math.atan2(naturalDir[1], naturalDir[0]);
-
-    const isNonDefault = Math.abs(v.tangentAngleOffset || 0) > 0.001;
-    const g = makeElement('svg:g', { id: 'qa-outbound-tangent-ray' });
-
-    if (isNonDefault) {
-      const naturalEnd = [pt[0] + Math.cos(naturalAngle) * rayLength, pt[1] + Math.sin(naturalAngle) * rayLength];
-      g.appendChild(makeElement('svg:line', {
-        x1: pt[0], y1: pt[1], x2: naturalEnd[0], y2: naturalEnd[1],
-        stroke: 'rgba(0, 242, 254, 0.45)', 'stroke-width': '1.5', 'stroke-dasharray': '2,4',
-        style: { pointerEvents: 'none' }
-      }));
-    }
-
-    const rayEnd = [pt[0] + Math.cos(actualAngle) * rayLength, pt[1] + Math.sin(actualAngle) * rayLength];
-
-    const line = makeElement('svg:line', {
-      x1: pt[0], y1: pt[1], x2: rayEnd[0], y2: rayEnd[1],
-      stroke: isNonDefault ? '#ffd700' : '#00f2fe',
-      'stroke-width': '2.2', 'stroke-linecap': 'round',
-      style: { pointerEvents: 'none', filter: 'drop-shadow(0 0 4px rgba(0,0,0,0.8))' }
-    });
-
-    const handle = makeElement('svg:circle', {
-      className: 'qa-tangent-handle',
-      cx: rayEnd[0], cy: rayEnd[1], r: '6.5',
-      fill: isNonDefault ? '#ffd700' : '#00f2fe',
-      stroke: '#ffffff', 'stroke-width': '2',
-      style: { cursor: 'crosshair', filter: 'drop-shadow(0 0 6px rgba(0,0,0,0.8))' },
-      title: 'Drag to adjust outbound angle • Snaps to natural baseline'
-    });
-
-    let draggingRay = false;
-    handle.addEventListener('mousedown', (e) => {
-      e.stopPropagation();
-      draggingRay = true;
-
-      const onRayMove = (ev) => {
-        if (!draggingRay) return;
-        const rect = this.stageBox.getBoundingClientRect();
-        const z = this.stageState.zoom;
-        const mX = (ev.clientX - rect.left) / z;
-        const mY = (ev.clientY - rect.top) / z;
-
-        const cursorAngle = Math.atan2(mY - pt[1], mX - pt[0]);
-        let offsetRad = cursorAngle - naturalAngle;
-
-        while (offsetRad > Math.PI) offsetRad -= Math.PI * 2;
-        while (offsetRad < -Math.PI) offsetRad += Math.PI * 2;
-
-        if (Math.abs(offsetRad) < 0.10) {
-          offsetRad = 0;
-          this.showKnotToast('⚡ Snapped to Natural Zero-Strain Tangent');
-        } else if (v._savedConstraint && Math.abs(offsetRad - v._savedConstraint.offset) < 0.10) {
-          offsetRad = v._savedConstraint.offset;
-          this.showKnotToast('⚡ Locked to Original Tangency');
-        }
-
-        v.tangentAngleOffset = offsetRad;
-        updateGeometryFn();
-
-        const curAng = naturalAngle + offsetRad;
-        const newEnd = [pt[0] + Math.cos(curAng) * rayLength, pt[1] + Math.sin(curAng) * rayLength];
-        line.setAttribute('x2', newEnd[0]);
-        line.setAttribute('y2', newEnd[1]);
-        line.setAttribute('stroke', offsetRad === 0 ? '#00f2fe' : '#ffd700');
-        handle.setAttribute('cx', newEnd[0]);
-        handle.setAttribute('cy', newEnd[1]);
-        handle.setAttribute('fill', offsetRad === 0 ? '#00f2fe' : '#ffd700');
-        this.updateDynamicKeyInHUD();
-      };
-
-      const onRayUp = () => {
-        draggingRay = false;
-        window.removeEventListener('mousemove', onRayMove);
-        window.removeEventListener('mouseup', onRayUp);
-      };
-
-      window.addEventListener('mousemove', onRayMove);
-      window.addEventListener('mouseup', onRayUp);
-    });
-
-    g.append(line, handle);
-    this.controlsLayer.appendChild(g);
+      if (!this.knotManager) this.knotManager = new QuoraKnotManager(this);
+      this.knotManager.renderOutboundTangentRay(curveRecord, knotIdx, this.controlsLayer, this.stageState);
   }
-
-  // ── Stationary Segment Midpoint Split Points (t = 0.5) ──
   renderSegmentMidpointIndicators(curveRecord) {
-    this.controlsLayer.querySelectorAll('.qa-segment-midpoint-group').forEach(el => el.remove());
-    if (!curveRecord || !curveRecord.beziers) return;
-
-    curveRecord.beziers.forEach((seg, segIdx) => {
-      const midPt = CurveFitter.bezier_q(seg, 0.5);
-
-      const g = makeElement('svg:g', {
-        className: 'qa-segment-midpoint-group',
-        style: { cursor: 'pointer' },
-        title: `Click or drag midpoint to split segment ${segIdx + 1}`
-      });
-
-      const hitArea = makeElement('svg:circle', {
-        cx: midPt[0], cy: midPt[1], r: '14', fill: 'transparent'
-      });
-
-      const dot = makeElement('svg:circle', {
-        cx: midPt[0], cy: midPt[1], r: '3.5',
-        fill: 'rgba(0, 242, 254, 0.8)', stroke: '#ffffff', 'stroke-width': '1.2',
-        style: { transition: 'r 0.15s ease, fill 0.15s ease', pointerEvents: 'none' }
-      });
-
-      g.addEventListener('mouseenter', () => {
-        dot.setAttribute('r', '5.5');
-        dot.setAttribute('fill', '#00f2fe');
-        dot.style.filter = 'drop-shadow(0 0 6px #00f2fe)';
-      });
-
-      g.addEventListener('mouseleave', () => {
-        dot.setAttribute('r', '3.5');
-        dot.setAttribute('fill', 'rgba(0, 242, 254, 0.8)');
-        dot.style.filter = '';
-      });
-
-      let isDraggingMid = false;
-      let newKnot = null;
-
-      g.addEventListener('mousedown', (e) => {
-        e.stopPropagation();
-        isDraggingMid = true;
-
-        if (!curveRecord.vertices || curveRecord.vertices.length === 0) {
-          curveRecord.vertices = this.beziersToVertices(curveRecord.beziers);
-        }
-
-        newKnot = new BezierVertex([midPt[0], midPt[1]]);
-        newKnot.curvature = 1.0;
-        newKnot.balance = 1.0;
-        newKnot.tangentAngleOffset = 0;
-
-        curveRecord.vertices.splice(segIdx + 1, 0, newKnot);
-        this._activeKnotIdx = segIdx + 1;
-
-        this.commitCurveGeometryUpdate();
-        this.exposeBezierHandles(curveRecord);
-
-        const onMidDrag = (ev) => {
-          if (!isDraggingMid) return;
-          const rect = this.stageBox.getBoundingClientRect();
-          const z = this.stageState.zoom;
-          newKnot.point[0] = (ev.clientX - rect.left) / z;
-          newKnot.point[1] = (ev.clientY - rect.top) / z;
-          this.commitCurveGeometryUpdate();
-          this.exposeBezierHandles(curveRecord);
-        };
-
-        const onMidUp = () => {
-          isDraggingMid = false;
-          window.removeEventListener('mousemove', onMidDrag);
-          window.removeEventListener('mouseup', onMidUp);
-          this.showKnotToast(`✓ Inserted knot #${segIdx + 2}`);
-        };
-
-        window.addEventListener('mousemove', onMidDrag);
-        window.addEventListener('mouseup', onMidUp);
-      });
-
-      g.append(hitArea, dot);
-      this.controlsLayer.appendChild(g);
-    });
+      if (!this.knotManager) this.knotManager = new QuoraKnotManager(this);
+      this.knotManager.renderSegmentMidpointIndicators(curveRecord, this.controlsLayer, this.stageState);
   }
 
-  // ── Unified Smart Curve Terminals ──
   swapActiveCurveTerminals() {
     const curve = this.getActiveCurve();
-    if (!curve || !curve.beziers || curve.beziers.length === 0) {
-      this.showKnotToast('No active curve to swap');
-      return;
-    }
-
-    curve.arrowEnd = (curve.arrowEnd === 'tail') ? 'tip' : 'tail';
-    curve.textEnd = (curve.arrowEnd === 'tail') ? 'tip' : 'tail';
-
-    this.commitCurveGeometryUpdate();
-    this.renderStage();
-    this.showKnotToast(`⇄ Swapped: Arrow is now at ${curve.arrowEnd.toUpperCase()}`);
+    if (curve) this.strokeManager.swapCurveTerminals(curve);
   }
-
   // ── Direct Typography Tool ──
   promptDirectTextBadge(x, y) {
     this._promptInlineTailText(null, [x, y], 'left');
   }
 
-  _promptInlineTailText(curveRecord, anchorPt, justifySide = 'left') {
-      const existing = document.getElementById('qa-inline-tail-editor');
-      if (existing) existing.remove();
+  _promptInlineTailText(curveRecord, anchorPt, forcedEdge = null) {
+      if (!this.textManager) this.textManager = new QuoraTextManager(this);
+      return this.textManager.promptInlineTailText(curveRecord, anchorPt, forcedEdge);
+  }
 
-      const isLeft = (justifySide === 'left');
-      const width = 270;
-      const posX = isLeft ? anchorPt[0] + 6 : anchorPt[0] - width - 6;
-      const posY = anchorPt[1] - 22;
-
-      let fontF = curveRecord?.fontFamily || this.stageState.fontFamily;
-      let fontS = curveRecord?.fontSize || this.stageState.fontSize;
-      let boxStyle = curveRecord?.boxStyle || 'bracket';
-      const color = curveRecord?.color || this.stageState.currentColor;
-
-      const editorWrap = makeElement('div', {
-        id: 'qa-inline-tail-editor',
-        style: {
-          position: 'absolute', top: `${posY}px`, left: `${posX}px`, width: `${width}px`,
-          zIndex: '70', display: 'flex', flexDirection: 'column', gap: '8px'
-        }
-      });
-
-      const textarea = makeElement('textarea', {
-        placeholder: 'Type callout text...',
-        value: curveRecord?.text || '',
-        rows: 1,
-        style: {
-          width: '100%', minHeight: '38px', maxHeight: '160px', padding: '6px 10px',
-          fontSize: `${fontS}px`, fontFamily: fontF, fontWeight: 'bold', lineHeight: '1.25',
-          color: color, background: boxStyle === 'box' ? 'rgba(15, 23, 42, 0.96)' : 'rgba(0, 0, 0, 0.82)',
-          border: boxStyle === 'box' ? `2px solid ${color}` : (boxStyle === 'bracket' ? `none` : '1.5px dashed rgba(255, 255, 255, 0.4)'),
-          borderBottom: (boxStyle === 'bracket') ? `2.5px solid ${color}` : undefined,
-          borderLeft: (boxStyle === 'bracket' && isLeft) ? `2.5px solid ${color}` : undefined,
-          borderRight: (boxStyle === 'bracket' && !isLeft) ? `2.5px solid ${color}` : undefined,
-          borderRadius: boxStyle === 'box' ? '6px' : '0', outline: 'none', resize: 'none',
-          boxSizing: 'border-box', textAlign: isLeft ? 'left' : 'right',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.85)'
-        }
-      });
-
-      const autoGrow = () => {
-        textarea.style.height = 'auto';
-        textarea.style.height = `${Math.max(38, textarea.scrollHeight)}px`;
-      };
-
-      // Position controls bar comfortably offset below textarea so it never blocks drawing
-      const controlsRow = makeElement('div', {
-        style: {
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px',
-          background: 'rgba(15, 23, 42, 0.98)', border: '1px solid rgba(255,255,255,0.18)',
-          borderRadius: '8px', padding: '5px 8px', fontSize: '10px',
-          boxShadow: '0 4px 14px rgba(0,0,0,0.7)'
-        }
-      });
-
-      const styleBtn = makeElement('button', {
-        className: 'dr-nav-btn primary',
-        style: { padding: '2px 6px', fontSize: '10px' },
-        title: 'Cycle Frame: 2-Side Bracket ➔ 4-Side Box ➔ Plain',
-        onclick: (e) => {
-          e.stopPropagation();
-          const styles = ['bracket', 'box', 'none'];
-          boxStyle = styles[(styles.indexOf(boxStyle) + 1) % styles.length];
-          if (curveRecord) curveRecord.boxStyle = boxStyle;
-          styleBtn.textContent = boxStyle === 'bracket' ? '◺ Bracket' : (boxStyle === 'box' ? '◻ Box' : 'Plain');
-          textarea.style.border = boxStyle === 'box' ? `2px solid ${color}` : (boxStyle === 'bracket' ? `none` : '1.5px dashed rgba(255, 255, 255, 0.4)');
-          textarea.style.borderBottom = (boxStyle === 'bracket') ? `2.5px solid ${color}` : '';
-          textarea.style.borderLeft = (boxStyle === 'bracket' && isLeft) ? `2.5px solid ${color}` : '';
-          textarea.style.borderRight = (boxStyle === 'bracket' && !isLeft) ? `2.5px solid ${color}` : '';
-          textarea.style.borderRadius = boxStyle === 'box' ? '6px' : '0';
-          if (curveRecord) this.renderStage();
-        }
-      }, boxStyle === 'bracket' ? '◺ Bracket' : (boxStyle === 'box' ? '◻ Box' : 'Plain'));
-
-      const fontSelect = makeElement('select', {
-        style: {
-          background: '#0d1117', color: '#00f2fe', border: '1px solid #30363d',
-          borderRadius: '4px', padding: '2px 4px', fontSize: '9.5px', fontFamily: 'monospace', outline: 'none'
-        },
-        onchange: (e) => {
-          fontF = e.target.value;
-          this.ensureFontLoaded(fontF);
-          if (curveRecord) curveRecord.fontFamily = fontF;
-          textarea.style.fontFamily = fontF;
-          autoGrow();
-          if (curveRecord) this.renderStage();
-        }
-      }, [
-        makeElement('option', { value: "'Architects Daughter', cursive, sans-serif", selected: fontF.includes('Architects') }, "Architect"),
-        makeElement('option', { value: "monospace", selected: fontF === 'monospace' }, "Mono"),
-        makeElement('option', { value: "'Plus Jakarta Sans', system-ui, sans-serif", selected: fontF.includes('Jakarta') }, "Sans")
-      ]);
-
-      const sizeSlider = makeElement('input', {
-        type: 'range', min: '14', max: '48', value: String(fontS),
-        style: { width: '55px', accentColor: '#00f2fe', cursor: 'pointer' },
-        oninput: (e) => {
-          fontS = parseInt(e.target.value, 10);
-          if (curveRecord) curveRecord.fontSize = fontS;
-          textarea.style.fontSize = `${fontS}px`;
-          autoGrow();
-          if (curveRecord) this.renderStage();
-        }
-      });
-
-      let committed = false;
-      let onOutClick = null;
-
-      const commit = () => {
-        if (committed) return;
-        committed = true;
-        if (onOutClick) window.removeEventListener('mousedown', onOutClick);
-
-        const textVal = textarea.value.trim();
-        if (curveRecord) {
-          curveRecord.text = textVal;
-          curveRecord.justifySide = isLeft ? 'left' : 'right';
-          curveRecord.fontSize = fontS;
-          curveRecord.fontFamily = fontF;
-          curveRecord.boxStyle = boxStyle;
-        } else if (textVal) {
-          this.stageState.annotations.push({
-            id: 'text_' + Date.now(),
-            type: 'text_badge',
-            x: anchorPt[0],
-            y: anchorPt[1],
-            text: textVal,
-            fontSize: fontS,
-            fontFamily: fontF,
-            boxStyle: boxStyle,
-            color: color
-          });
-        }
-
-        editorWrap.remove();
-        this.renderStage();
-      };
-
-      const okBtn = makeElement('button', {
-        className: 'dr-nav-btn primary',
-        style: { padding: '2px 8px', fontSize: '10px', background: '#238636', borderColor: '#2ea043' },
-        onclick: (e) => { e.stopPropagation(); commit(); }
-      }, '✓ OK');
-
-      controlsRow.append(styleBtn, fontSelect, sizeSlider, okBtn);
-      editorWrap.append(textarea, controlsRow);
-      this.stageBox.appendChild(editorWrap);
-
-      textarea.addEventListener('input', autoGrow);
-      textarea.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey) {
-          e.preventDefault(); commit();
-        } else if (e.key === 'Escape') {
-          e.preventDefault(); textarea.value = ''; commit();
-        }
-      });
-
-      onOutClick = (ev) => {
-        if (!editorWrap.contains(ev.target)) commit();
-      };
-
-      setTimeout(() => {
-        textarea.focus();
-        autoGrow();
-        window.addEventListener('mousedown', onOutClick);
-      }, 40);
-    }
-  // ── Blockout Painting Methods ──
   previewBlockoutRect(p1, p2) {
-    const x = Math.min(p1[0], p2[0]), y = Math.min(p1[1], p2[1]);
-    const w = Math.abs(p2[0] - p1[0]), h = Math.abs(p2[1] - p1[1]);
-    if (!this.svgSurface._rectPreview) {
-      this.svgSurface._rectPreview = makeElement('svg:rect', {
-        fill: this.stageState.brushColor, opacity: '0.9',
-        ...(this.stageState.brushSoftness > 0 ? { filter: 'url(#qa-brush-blur)' } : {})
-      });
-      this.paintLayer.appendChild(this.svgSurface._rectPreview);
-    }
-    this.svgSurface._rectPreview.setAttribute('x', x);
-    this.svgSurface._rectPreview.setAttribute('y', y);
-    this.svgSurface._rectPreview.setAttribute('width', w);
-    this.svgSurface._rectPreview.setAttribute('height', h);
+    this.paintManager.previewRect(this.paintLayer, p1, p2, this.stageState.brushColor, this.stageState.brushSoftness);
   }
 
   commitBlockoutRect(p1, p2) {
-    if (this.svgSurface._rectPreview) {
-      this.svgSurface._rectPreview.remove();
-      this.svgSurface._rectPreview = null;
-    }
-    const x = Math.min(p1[0], p2[0]), y = Math.min(p1[1], p2[1]);
-    const w = Math.abs(p2[0] - p1[0]), h = Math.abs(p2[1] - p1[1]);
-    if (w < 4 || h < 4) return;
-    const rectEl = makeElement('svg:rect', {
-      x, y, width: w, height: h, fill: this.stageState.brushColor,
-      ...(this.stageState.brushSoftness > 0 ? { filter: 'url(#qa-brush-blur)' } : {})
-    });
-    this.paintLayer.appendChild(rectEl);
-    this.stageState.annotations.push({ type: 'paint', shape: 'rect', element: rectEl, bounds: { x, y, w, h } });
-    this.renderStage();
+    this.paintManager.commitRect(this.paintLayer, this.stageState, p1, p2, this.stageState.brushColor, this.stageState.brushSoftness);
   }
 
   previewBlockoutOval(p1, p2) {
-    const cx = (p1[0] + p2[0]) / 2, cy = (p1[1] + p2[1]) / 2;
-    const rx = Math.abs(p2[0] - p1[0]) / 2, ry = Math.abs(p2[1] - p1[1]) / 2;
-    if (!this.svgSurface._ovalPreview) {
-      this.svgSurface._ovalPreview = makeElement('svg:ellipse', {
-        fill: this.stageState.brushColor, opacity: '0.9',
-        ...(this.stageState.brushSoftness > 0 ? { filter: 'url(#qa-brush-blur)' } : {})
-      });
-      this.paintLayer.appendChild(this.svgSurface._ovalPreview);
-    }
-    this.svgSurface._ovalPreview.setAttribute('cx', cx);
-    this.svgSurface._ovalPreview.setAttribute('cy', cy);
-    this.svgSurface._ovalPreview.setAttribute('rx', rx);
-    this.svgSurface._ovalPreview.setAttribute('ry', ry);
+    this.paintManager.previewOval(this.paintLayer, p1, p2, this.stageState.brushColor, this.stageState.brushSoftness);
   }
 
   commitBlockoutOval(p1, p2) {
-    if (this.svgSurface._ovalPreview) {
-      this.svgSurface._ovalPreview.remove();
-      this.svgSurface._ovalPreview = null;
-    }
-    const cx = (p1[0] + p2[0]) / 2, cy = (p1[1] + p2[1]) / 2;
-    const rx = Math.abs(p2[0] - p1[0]) / 2, ry = Math.abs(p2[1] - p1[1]) / 2;
-    if (rx < 4 || ry < 4) return;
-    const ovalEl = makeElement('svg:ellipse', {
-      cx, cy, rx, ry, fill: this.stageState.brushColor,
-      ...(this.stageState.brushSoftness > 0 ? { filter: 'url(#qa-brush-blur)' } : {})
-    });
-    this.paintLayer.appendChild(ovalEl);
-    this.stageState.annotations.push({ type: 'paint', shape: 'oval', element: ovalEl, bounds: { cx, cy, rx, ry } });
-    this.renderStage();
+    this.paintManager.commitOval(this.paintLayer, this.stageState, p1, p2, this.stageState.brushColor, this.stageState.brushSoftness);
   }
-
   // ── Spatial Proximity & Unobscured Knot Handles ──
   findNearestCurveAtPoint(mousePt, maxDist = 28) {
     let nearest = null;
@@ -1251,88 +753,67 @@ class QuoraAnnotationComponent {
   }
 
   updateSpatialHover(mousePt) {
-    if (this._isDrawingActive) {
-      this.clearHoverHighlight();
-      return;
-    }
-
-    const hit = this.findNearestCurveAtPoint(mousePt, this._hoveredCurve ? 36 : 24);
-
-    if (hit) {
-      if (this._hoveredCurve !== hit.ann) {
-        this.clearHoverHighlight();
-        this._hoveredCurve = hit.ann;
-        this.applyCurveGlow(hit.ann);
-        this.renderEphemeralKnotHandles(hit.ann);
-        this.renderSegmentMidpointIndicators(hit.ann);
-      }
-    } else {
-      this.clearHoverHighlight();
-    }
+    this.gestureMachine.updateSpatialHover(mousePt);
   }
-
   applyCurveGlow(ann) {
-    if (!ann || !ann.elements?.[1]) return;
-    const d = ann.elements[1].getAttribute('d');
-    if (!d) return;
+      if (!ann || !ann.elements?.[1]) return;
+      const d = ann.elements[1].getAttribute('d');
+      if (!d) return;
 
-    let glow = document.getElementById('qa-active-hover-glow');
-    if (!glow) {
-      glow = makeElement('svg:path', {
-        id: 'qa-active-hover-glow', fill: 'none', stroke: 'rgba(0, 242, 254, 0.3)',
-        'stroke-width': '20', 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-        style: { pointerEvents: 'none', filter: 'drop-shadow(0 0 10px rgba(0, 242, 254, 0.6))' }
-      });
-      this.glowLayer.appendChild(glow);
-    }
-    glow.setAttribute('d', d);
+      let glow = document.getElementById('qa-active-hover-glow');
+      if (!glow) {
+        glow = makeElement('svg:path', {
+          id: 'qa-active-hover-glow', fill: 'none', stroke: 'rgba(0, 242, 254, 0.18)',
+          'stroke-width': '14', 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+          style: { pointerEvents: 'none', filter: 'drop-shadow(0 0 8px rgba(0, 242, 254, 0.35))' }
+        });
+        this.glowLayer.appendChild(glow);
+      }
+      glow.setAttribute('d', d);
   }
 
   clearHoverHighlight() {
-    this._hoveredCurve = null;
-    const glow = document.getElementById('qa-active-hover-glow');
-    if (glow) glow.remove();
-    this.controlsLayer.querySelectorAll('.qa-segment-midpoint-group').forEach(el => el.remove());
-    this.controlsLayer.querySelectorAll('.qa-ephemeral-knots').forEach(el => el.remove());
+    this.gestureMachine.clearHoverHighlight();
   }
-
   deleteSelectedEntity() {
-    const curve = this.getActiveCurve();
-    if (!curve) {
-      this.showKnotToast('No curve selected to delete');
-      return;
-    }
+      // 1. Delete Selected Image Plate if active
+      if (this.stageState.activeImage) {
+        const idx = this.stageState.placedImages.indexOf(this.stageState.activeImage);
+        if (idx !== -1) {
+          this.stageState.placedImages.splice(idx, 1);
+          this.stageState.activeImage = null;
+          this.renderStage();
+          this.showKnotToast('🗑️ Deleted image plate');
+          return;
+        }
+      }
 
-    const vertices = curve.vertices;
+      // 2. Delegate to KnotManager to delete the knot closest to the cursor
+      const curve = this.getActiveCurve();
+      if (curve && this._lastStageMousePt && this.knotManager) {
+        this.knotManager.deleteClosestKnot(curve, this._lastStageMousePt);
+        return;
+      }
 
-    if (vertices && vertices.length > 2 && this._activeKnotIdx !== null) {
-      const knotNum = this._activeKnotIdx + 1;
-      vertices.splice(this._activeKnotIdx, 1);
-      this._activeKnotIdx = Math.max(0, Math.min(this._activeKnotIdx, vertices.length - 1));
-      this.commitCurveGeometryUpdate();
-      this.exposeBezierHandles(curve);
-      this.showKnotToast(`🗑️ Deleted knot #${knotNum} (${vertices.length} remaining)`);
-      this.updateDynamicKeyInHUD();
-      return;
-    }
-
-    const idx = this.stageState.annotations.indexOf(curve);
-    if (idx !== -1) {
-      this.stageState.annotations.splice(idx, 1);
-    }
-    if (curve.elements) {
-      curve.elements.forEach(el => el.remove());
-    }
-    if (curve._arrowFg) curve._arrowFg.remove();
-    if (curve._arrowSh) curve._arrowSh.remove();
-    this.controlsLayer.innerHTML = '';
-    this.stageState.selectedItem = null;
-    this._activeKnotIdx = null;
-    this.renderStage();
-    this.showKnotToast('🗑️ Deleted curve');
-    this.updateDynamicKeyInHUD();
+      // 3. Fallback: Delete entire curve entity
+      if (curve) {
+        const cIdx = this.stageState.annotations.indexOf(curve);
+        if (cIdx !== -1) {
+          this.stageState.annotations.splice(cIdx, 1);
+        }
+        if (curve.elements) {
+          curve.elements.forEach(el => el.remove());
+        }
+        if (curve._arrowFg) curve._arrowFg.remove();
+        if (curve._arrowSh) curve._arrowSh.remove();
+        this.controlsLayer.innerHTML = '';
+        this.stageState.selectedItem = null;
+        this._activeKnotIdx = null;
+        this.renderStage();
+        this.showKnotToast('🗑️ Deleted curve');
+        this.updateDynamicKeyInHUD();
+      }
   }
-
   updateDynamicKeyInHUD() {
     const delPill = document.querySelector('.qa-keyin-row[data-action="delete_curve"]');
     if (!delPill) return;
@@ -1353,39 +834,14 @@ class QuoraAnnotationComponent {
   }
 
   renderConcaveArrowhead(p0, exitTangent, color, shadowOffset = 2.0) {
-    const ux = exitTangent[0];
-    const uy = exitTangent[1];
-    const nx = -uy;
-    const ny = ux;
-
-    const barbLen = 18;
-    const barbSpread = 11;
-    const b1 = [p0[0] + ux * barbLen + nx * barbSpread, p0[1] + uy * barbLen + ny * barbSpread];
-    const b2 = [p0[0] + ux * barbLen - nx * barbSpread, p0[1] + uy * barbLen - ny * barbSpread];
-    const c1 = [p0[0] + ux * 8 + nx * 2.5, p0[1] + uy * 8 + ny * 2.5];
-    const c2 = [p0[0] + ux * 8 - nx * 2.5, p0[1] + uy * 8 - ny * 2.5];
-
-    const arrowD = `M ${b1[0]} ${b1[1]} Q ${c1[0]} ${c1[1]} ${p0[0]} ${p0[1]} M ${p0[0]} ${p0[1]} Q ${c2[0]} ${c2[1]} ${b2[0]} ${b2[1]}`;
-
-    const arrowShadow = makeElement('svg:path', {
-      d: arrowD, transform: `translate(${shadowOffset}, ${shadowOffset})`,
-      stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': '5.5', fill: 'none',
-      'stroke-linecap': 'round', 'stroke-linejoin': 'round'
-    });
-
-    const arrowForeground = makeElement('svg:path', {
-      d: arrowD, stroke: color, 'stroke-width': '3.2', fill: 'none',
-      'stroke-linecap': 'round', 'stroke-linejoin': 'round'
-    });
-
-    return { shadow: arrowShadow, foreground: arrowForeground };
+    return this.strokeManager.renderConcaveArrowhead(p0, exitTangent, color, shadowOffset);
   }
-
-  // ── Blended Interaction Loop (Draw & Tweak Coexisting) ──
   setupInteractions() {
     this.setupKeyInMatrixHud();
 
     let isDrawing = false;
+    let isMarquee = false;
+    let marqueeStart = null;
     let strokePoints = [];
     let startPt = null;
     let hasExceededDeadzone = false;
@@ -1393,18 +849,24 @@ class QuoraAnnotationComponent {
     let deadzoneCircle = null;
     let tipPointIndicator = null;
     let activeTetherLine = null;
+    let pauseTimer = null;
 
     const getStagePt = (e) => {
       const rect = this.stageBox.getBoundingClientRect();
-      const z = this.stageState.zoom;
+      const z = this.stageState.zoom || 1.0;
       return [(e.clientX - rect.left) / z, (e.clientY - rect.top) / z];
     };
 
     const cleanupGestureIndicators = () => {
+      if (pauseTimer) clearTimeout(pauseTimer);
       if (deadzoneCircle) { deadzoneCircle.remove(); deadzoneCircle = null; }
       if (tipPointIndicator) { tipPointIndicator.remove(); tipPointIndicator = null; }
       if (activeTetherLine) { activeTetherLine.remove(); activeTetherLine = null; }
       if (this.svgSurface._preview) { this.svgSurface._preview.remove(); this.svgSurface._preview = null; }
+      if (this.inSituHud) {
+        this.inSituHud.hideCursorReticle();
+        this.inSituHud.hideTransientCursorDial();
+      }
     };
 
     if (!this._hasBoundGlobalKeys) {
@@ -1413,21 +875,86 @@ class QuoraAnnotationComponent {
       window.addEventListener('keydown', (e) => {
         if (e.target.closest('input, textarea, [contenteditable="true"]')) return;
 
+        // Sub-Pixel Arrow Key Nudging for Active Knot
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+          const step = e.shiftKey ? 10 : 1;
+          let dx = 0, dy = 0;
+          if (e.key === 'ArrowUp') dy = -step;
+          if (e.key === 'ArrowDown') dy = step;
+          if (e.key === 'ArrowLeft') dx = -step;
+          if (e.key === 'ArrowRight') dx = step;
+
+          if (this.nudgeActiveKnot(dx, dy)) {
+            e.preventDefault();
+            if (this.inSituHud) this.inSituHud.flashKeyCommand('nudge_knot');
+            return;
+          }
+        }
+
+        // Toggle Closed Curve Loop Mode with 'L'
+        if (e.key === 'l' || e.key === 'L') {
+          const curve = this.getActiveCurve();
+          if (curve) {
+            e.preventDefault();
+            curve.isClosed = !curve.isClosed;
+            this.commitCurveGeometryUpdate();
+            this.exposeBezierHandles(curve);
+            this.showKnotToast(curve.isClosed ? '🔄 Loop Mode: Closed Curve (Z)' : '↔ Spline Mode: Open Path');
+            return;
+          }
+        }
+
+        // Duplicate Active Image Plate with 'D' key
+        if ((e.key === 'd' || e.key === 'D') && this.stageState.activeImage) {
+          e.preventDefault();
+          if (this.imageManager) {
+            this.imageManager.duplicateActivePlate(this.stageState);
+          }
+          return;
+        }
+
+        // Step Tangent Angle with '[' and ']' in clean 5-degree increments
+        if (e.key === '[' || e.key === ']') {
+          const knot = this.getActiveKnot();
+          const curve = this.getActiveCurve();
+          if (knot && curve) {
+            e.preventDefault();
+            const delta = (e.key === ']') ? 0.0872 : -0.0872;
+            knot.tangentAngleOffset = (knot.tangentAngleOffset || 0) + delta;
+            while (knot.tangentAngleOffset > Math.PI) knot.tangentAngleOffset -= Math.PI * 2;
+            while (knot.tangentAngleOffset < -Math.PI) knot.tangentAngleOffset += Math.PI * 2;
+            if (Math.abs(knot.tangentAngleOffset) < 0.0436) knot.tangentAngleOffset = 0;
+
+            const localScope = (this.stageState.dragLockMode === 'single')
+              ? { start: Math.max(0, this._activeKnotIdx - 1), end: Math.min(curve.vertices.length - 1, this._activeKnotIdx + 1) }
+              : null;
+
+            this.commitCurveGeometryUpdate(localScope);
+            this.renderOutboundTangentRay(curve, this._activeKnotIdx);
+            const deg = Math.round(knot.tangentAngleOffset * (180 / Math.PI));
+            this.showKnotToast(`Tangent Angle: ${deg > 0 ? '+' : ''}${deg}° [Knot #${this._activeKnotIdx + 1}]`);
+            return;
+          }
+        }
+
         if ((e.key === 'h' || e.key === 'H') && !this._metaHelpActive) {
           this._metaHelpActive = true;
           this.showMetaHelpOverlay();
+          if (this.inSituHud) this.inSituHud.flashKeyCommand('meta_help');
           return;
         }
 
         if (e.code === 'Space') {
           e.preventDefault();
           this.executeKeyInCommand('toggle_tool', e);
+          if (this.inSituHud) this.inSituHud.flashKeyCommand('toggle_tool');
           return;
         }
         if (e.key === 'a' || e.key === 'A') {
           if (!e.ctrlKey && !e.metaKey && !e.altKey) {
             e.preventDefault();
             this.toggleArrowhead();
+            if (this.inSituHud) this.inSituHud.flashKeyCommand('toggle_arrow');
             return;
           }
         }
@@ -1435,6 +962,7 @@ class QuoraAnnotationComponent {
           if (!e.ctrlKey && !e.metaKey && !e.altKey) {
             e.preventDefault();
             this.triggerTextOnActiveOrCanvas();
+            if (this.inSituHud) this.inSituHud.flashKeyCommand('edit_text');
             return;
           }
         }
@@ -1442,18 +970,21 @@ class QuoraAnnotationComponent {
           if (!e.ctrlKey && !e.metaKey && !e.altKey) {
             e.preventDefault();
             this.swapActiveCurveTerminals();
+            if (this.inSituHud) this.inSituHud.flashKeyCommand('swap_ends');
             return;
           }
         }
         if (e.key === 'Tab') {
           e.preventDefault();
           this.executeKeyInCommand('next_knot', e);
+          if (this.inSituHud) this.inSituHud.flashKeyCommand('next_knot');
           return;
         }
         if (e.key === 'c' || e.key === 'C') {
           if (!e.ctrlKey && !e.metaKey && !e.altKey) {
             e.preventDefault();
             this.executeKeyInCommand('toggle_cusp', e);
+            if (this.inSituHud) this.inSituHud.flashKeyCommand('toggle_cusp');
             return;
           }
         }
@@ -1461,6 +992,7 @@ class QuoraAnnotationComponent {
           if (!e.ctrlKey && !e.metaKey && !e.altKey) {
             e.preventDefault();
             this.executeKeyInCommand('straighten', e);
+            if (this.inSituHud) this.inSituHud.flashKeyCommand('straighten');
             return;
           }
         }
@@ -1468,6 +1000,7 @@ class QuoraAnnotationComponent {
           if (!e.ctrlKey && !e.metaKey && !e.altKey) {
             e.preventDefault();
             this.executeKeyInCommand('reset_knot', e);
+            if (this.inSituHud) this.inSituHud.flashKeyCommand('reset_knot');
             return;
           }
         }
@@ -1475,12 +1008,14 @@ class QuoraAnnotationComponent {
           if (!e.ctrlKey && !e.metaKey && !e.altKey) {
             e.preventDefault();
             this.addKnotToActiveCurve();
+            if (this.inSituHud) this.inSituHud.flashKeyCommand('add_point');
             return;
           }
         }
         if (e.key === 'Delete' || e.key === 'Backspace') {
           e.preventDefault();
           this.deleteSelectedEntity();
+          if (this.inSituHud) this.inSituHud.flashKeyCommand('delete_curve');
           return;
         }
         if (e.key === 'Enter') {
@@ -1494,6 +1029,11 @@ class QuoraAnnotationComponent {
           if (this._penNodes && this._penNodes.length > 0) {
             e.preventDefault();
             this.cancelPenNodes();
+            return;
+          }
+          if (this.stageState.activeImage) {
+            this.stageState.activeImage = null;
+            this.renderStage();
             return;
           }
         }
@@ -1511,8 +1051,38 @@ class QuoraAnnotationComponent {
       if (e.target.closest('.qa-on-curve-knot-handle, .qa-tangent-handle, .qa-segment-midpoint-group, .qa-movable-label-group, .qa-image-plate-control, #qa-keyin-matrix-hud')) return;
 
       const pt = getStagePt(e);
+      this._lastStageMousePt = pt;
 
-      // Direct Text Tool Placement
+      // Shift + Canvas Drag: Area Marquee Multi-Knot Selection
+      if (e.shiftKey && this.getActiveCurve()) {
+        isMarquee = true;
+        marqueeStart = pt;
+        let marqueeEl = document.getElementById('qa-marquee-box');
+        if (!marqueeEl) {
+          marqueeEl = makeElement('svg:rect', {
+            id: 'qa-marquee-box',
+            x: pt[0], y: pt[1], width: 0, height: 0,
+            fill: 'rgba(0, 242, 254, 0.08)', stroke: '#00f2fe',
+            'stroke-width': '1.5', 'stroke-dasharray': '4,3',
+            style: { pointerEvents: 'none', filter: 'drop-shadow(0 0 4px rgba(0,242,254,0.5))' }
+          });
+          this.controlsLayer.appendChild(marqueeEl);
+        }
+        return;
+      }
+
+      const hitPlate = this.hitTestImagePlate(pt);
+      if (hitPlate && !e.shiftKey) {
+        this.stageState.activeImage = hitPlate;
+        this.controlsLayer.innerHTML = '';
+        this.stageState.selectedItem = null;
+        this.renderStage();
+        return;
+      } else if (this.stageState.activeImage && !hitPlate) {
+        this.stageState.activeImage = null;
+        this.renderStage();
+      }
+
       if (this.stageState.activeTool === 'text') {
         this.promptDirectTextBadge(pt[0], pt[1]);
         return;
@@ -1562,8 +1132,8 @@ class QuoraAnnotationComponent {
       this.controlsLayer.appendChild(deadzoneCircle);
 
       tipPointIndicator = makeElement('svg:circle', {
-        id: 'qa-tip-point', cx: pt[0], cy: pt[1], r: '5', fill: '#ffffff',
-        stroke: '#00e676', 'stroke-width': '2', style: { pointerEvents: 'none' }
+        id: 'qa-tip-point', cx: pt[0], cy: pt[1], r: '4', fill: '#ffffff',
+        stroke: '#00e676', 'stroke-width': '1.8', style: { pointerEvents: 'none' }
       });
       this.controlsLayer.appendChild(tipPointIndicator);
     });
@@ -1576,9 +1146,29 @@ class QuoraAnnotationComponent {
 
     window.addEventListener('mousemove', (e) => {
       const pt = getStagePt(e);
+      this._lastStageMousePt = pt;
+
+      // Handle Active Marquee Box Drag
+      if (isMarquee && marqueeStart) {
+        const marqueeEl = document.getElementById('qa-marquee-box');
+        if (marqueeEl) {
+          const x = Math.min(marqueeStart[0], pt[0]);
+          const y = Math.min(marqueeStart[1], pt[1]);
+          const w = Math.abs(pt[0] - marqueeStart[0]);
+          const h = Math.abs(pt[1] - marqueeStart[1]);
+          marqueeEl.setAttribute('x', x);
+          marqueeEl.setAttribute('y', y);
+          marqueeEl.setAttribute('width', w);
+          marqueeEl.setAttribute('height', h);
+        }
+        return;
+      }
 
       if (!isDrawing && !this._penNodes) {
         this.updateSpatialHover(pt);
+        if (this.knotManager) {
+          this.knotManager.updateHoveredDeleteTarget(pt);
+        }
       }
 
       if (this._penNodes && this._penNodes.length > 0) {
@@ -1635,7 +1225,7 @@ class QuoraAnnotationComponent {
 
         if (!activeTetherLine) {
           activeTetherLine = makeElement('svg:line', {
-            id: 'qa-drawstring-line', stroke: '#ffd700', 'stroke-width': '2.2', 'stroke-dasharray': '4,3'
+            id: 'qa-drawstring-line', stroke: '#ffd700', 'stroke-width': '1.8', 'stroke-dasharray': '3,3'
           });
           this.controlsLayer.appendChild(activeTetherLine);
         }
@@ -1651,7 +1241,7 @@ class QuoraAnnotationComponent {
 
       if (!activeTetherLine) {
         activeTetherLine = makeElement('svg:line', {
-          id: 'qa-drawstring-line', stroke: '#ffffff', 'stroke-width': '2.0'
+          id: 'qa-drawstring-line', stroke: 'rgba(255, 255, 255, 0.85)', 'stroke-width': '1.8'
         });
         this.controlsLayer.appendChild(activeTetherLine);
       }
@@ -1677,6 +1267,26 @@ class QuoraAnnotationComponent {
       activeTetherLine.setAttribute('x2', pt[0]);
       activeTetherLine.setAttribute('y2', pt[1]);
 
+      // Directional cursor reticle
+      if (this.inSituHud) {
+        const dirAngle = Math.atan2(pt[1] - curTip[1], pt[0] - curTip[0]);
+        this.inSituHud.renderCursorReticle(this.controlsLayer, curTip, dirAngle, Math.min(1.5, dist / this.stageState.tetherLength));
+
+        if (pauseTimer) clearTimeout(pauseTimer);
+        this.inSituHud.hideTransientCursorDial();
+
+        pauseTimer = setTimeout(() => {
+          if (isDrawing && this.inSituHud) {
+            this.inSituHud.renderTransientCursorDial(this.controlsLayer, curTip, this.getActiveCurve(), {
+              onToggleArrow: () => this.toggleArrowhead(),
+              onAttachText: () => this.triggerTextOnActiveOrCanvas(),
+              onSwapEnds: () => this.swapActiveCurveTerminals(),
+              onResetSnap: () => this.executeKeyInCommand('reset_knot')
+            });
+          }
+        }, 450);
+      }
+
       const pathData = strokePoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p[0]} ${p[1]}`).join(' ');
       if (!this.svgSurface._preview) {
         this.svgSurface._preview = makeElement('svg:path', {
@@ -1688,6 +1298,37 @@ class QuoraAnnotationComponent {
     });
 
     window.addEventListener('mouseup', (e) => {
+      // Complete Marquee Multi-Knot Selection
+      if (isMarquee && marqueeStart) {
+        isMarquee = false;
+        const pt = getStagePt(e);
+        const minX = Math.min(marqueeStart[0], pt[0]);
+        const maxX = Math.max(marqueeStart[0], pt[0]);
+        const minY = Math.min(marqueeStart[1], pt[1]);
+        const maxY = Math.max(marqueeStart[1], pt[1]);
+
+        const marqueeEl = document.getElementById('qa-marquee-box');
+        if (marqueeEl) marqueeEl.remove();
+
+        const curve = this.getActiveCurve();
+        if (curve && curve.vertices) {
+          if (!this._selectedKnotIndices) this._selectedKnotIndices = new Set();
+          let selectedCount = 0;
+          curve.vertices.forEach((v, idx) => {
+            if (v.point[0] >= minX && v.point[0] <= maxX && v.point[1] >= minY && v.point[1] <= maxY) {
+              this._selectedKnotIndices.add(idx);
+              selectedCount++;
+            }
+          });
+          if (selectedCount > 0) {
+            this.exposeBezierHandles(curve);
+            this.showKnotToast(`Selected ${selectedCount} knot${selectedCount === 1 ? '' : 's'}`);
+          }
+        }
+        marqueeStart = null;
+        return;
+      }
+
       if (!isDrawing) return;
 
       if (e.ctrlKey || e.metaKey || this._clutchActive) {
@@ -1733,7 +1374,10 @@ class QuoraAnnotationComponent {
       }
 
       if (strokePoints.length >= 2) {
-        const beziers = (typeof CurveFitter !== 'undefined') ? CurveFitter.fit(strokePoints, 4) : [];
+        const strokeLength = strokePoints.reduce((acc, p, idx) => idx ? acc + Math.hypot(p[0] - strokePoints[idx - 1][0], p[1] - strokePoints[idx - 1][1]) : 0, 0);
+        const dynamicError = Math.max(3.5, Math.min(8.0, strokeLength * 0.025));
+        const beziers = (typeof CurveFitter !== 'undefined') ? CurveFitter.fit(strokePoints, dynamicError) : [];
+
         if (beziers && beziers.length > 0) {
           this.commitSpline(beziers, this.stageState.currentColor, this.stageState.hasArrow);
         }
@@ -1764,7 +1408,6 @@ class QuoraAnnotationComponent {
       }
     });
   }
-
   setupPasteAndDropListener() {
     window.addEventListener('paste', (e) => {
       if (e.target.closest('input, textarea, [contenteditable="true"]')) return;
@@ -1845,239 +1488,52 @@ class QuoraAnnotationComponent {
   }
 
   showClutchHandRestBadge(tipPt) {
-    let badge = document.getElementById('qa-clutch-rest-badge');
-    if (!badge) {
-      badge = makeElement('div', {
-        id: 'qa-clutch-rest-badge',
-        style: {
-          position: 'absolute', background: 'rgba(245, 158, 11, 0.95)', color: '#070a13',
-          padding: '6px 14px', borderRadius: '20px', fontFamily: 'monospace', fontSize: '11px',
-          fontWeight: 'bold', zIndex: '90', pointerEvents: 'none'
-        }
-      }, '⏸️ Hand-Rest Active — Click down & release Ctrl to resume');
-      this.stageBox.appendChild(badge);
-    }
-    if (tipPt) {
-      badge.style.left = `${tipPt[0] + 16}px`;
-      badge.style.top = `${tipPt[1] - 28}px`;
-    }
-    badge.style.display = 'block';
+      if (!this.inSituHud) this.inSituHud = new QuoraInSituHUD(this);
+      const curve = this.getActiveCurve();
+
+      this.inSituHud.renderTransientCursorDial(this.controlsLayer, tipPt || [100, 100], curve, {
+        onToggleArrow: () => this.toggleArrowhead(),
+        onAttachText: () => this.triggerTextOnActiveOrCanvas(),
+        onSwapEnds: () => this.swapActiveCurveTerminals(),
+        onResetSnap: () => this.executeKeyInCommand('reset_knot')
+      });
+
+      let badge = document.getElementById('qa-clutch-rest-badge');
+      if (!badge) {
+        badge = makeElement('div', {
+          id: 'qa-clutch-rest-badge',
+          style: {
+            position: 'absolute', background: 'rgba(245, 158, 11, 0.95)', color: '#070a13',
+            padding: '4px 12px', borderRadius: '16px', fontFamily: 'monospace', fontSize: '10.5px',
+            fontWeight: 'bold', zIndex: '90', pointerEvents: 'none', boxShadow: '0 4px 14px rgba(0,0,0,0.6)'
+          }
+        }, '⏸️ Hand-Rest Active • Click to resume');
+        this.stageBox.appendChild(badge);
+      }
+      if (tipPt) {
+        badge.style.left = `${tipPt[0] + 16}px`;
+        badge.style.top = `${tipPt[1] - 46}px`;
+      }
+      badge.style.display = 'block';
   }
 
   hideClutchHandRestBadge() {
-    const b = document.getElementById('qa-clutch-rest-badge');
-    if (b) b.remove();
+      if (this.inSituHud) this.inSituHud.hideTransientCursorDial();
+      const b = document.getElementById('qa-clutch-rest-badge');
+      if (b) b.remove();
   }
 
-  commitSpline(beziers, color, hasArrow) {
-    if (!beziers || beziers.length === 0) return;
-
-    let d = 'M ' + beziers[0][0].join(' ');
-    for (let i = 0; i < beziers.length; i++) {
-      const [start, cp1, cp2, end] = beziers[i];
-      d += ` C ${cp1.join(' ')}, ${cp2.join(' ')}, ${end.join(' ')}`;
-    }
-
-    const shadowOffset = 2.0;
-    const shadowColor = 'rgba(10, 15, 25, 0.95)';
-
-    const shadowPath = makeElement('svg:path', {
-      d, transform: `translate(${shadowOffset}, ${shadowOffset})`,
-      stroke: shadowColor, 'stroke-width': '5.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none'
-    });
-
-    const splinePath = makeElement('svg:path', {
-      d, stroke: color, 'stroke-width': '3.2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none'
-    });
-
-    const vertices = this.beziersToVertices(beziers);
-
-    const curveRecord = {
-      id: 'curve_' + Date.now(),
-      type: 'curve',
-      beziers,
-      vertices,
-      color,
-      arrowEnd: hasArrow ? 'tip' : 'none',
-      textEnd: 'tail',
-      text: '',
-      hasTextBox: this.stageState.hasBorder,
-      fontFamily: this.stageState.fontFamily,
-      fontSize: this.stageState.fontSize || 22,
-      elements: [shadowPath, splinePath]
-    };
-
-    this.shadowLayer.appendChild(shadowPath);
-    this.strokeLayer.appendChild(splinePath);
-
-    this.stageState.annotations.push(curveRecord);
-    this.commitCurveGeometryUpdate();
-    this.exposeBezierHandles(curveRecord);
-    this.renderSegmentMidpointIndicators(curveRecord);
-    this.renderStage();
-    this.updateDynamicKeyInHUD();
-
-    // Auto-prompt inline text immediately at the tail so you can just type right away!
-    const termSeg = beziers[beziers.length - 1];
-    setTimeout(() => {
-      this._promptInlineTailText(curveRecord, termSeg[3], 'left');
-    }, 40);
+  commitSpline(beziers, color, hasArrow, existingVertices = null) {
+    return this.strokeManager.commitSpline(beziers, color, hasArrow, existingVertices);
   }
-
-  // ── Stable Knot Dragging (Single-Knot Lock vs Ripple) ──
   exposeBezierHandles(curveRecord) {
-    this.controlsLayer.innerHTML = '';
-    if (!curveRecord || !curveRecord.vertices) return;
-
-    this.stageState.selectedItem = curveRecord;
-    const vertices = curveRecord.vertices;
-
-    vertices.forEach((v, idx) => {
-      const isTip = (idx === 0 && curveRecord.arrowEnd === 'tip');
-      const isTail = (idx === vertices.length - 1 && curveRecord.arrowEnd === 'tail');
-      const isSelected = (idx === this._activeKnotIdx);
-
-      const fatTarget = makeElement('svg:circle', {
-        cx: v.point[0], cy: v.point[1], r: '14', fill: 'transparent',
-        style: { cursor: 'move', pointerEvents: 'all' }
-      });
-
-      let nodeCircle;
-      if (isTip || isTail) {
-        nodeCircle = makeElement('svg:circle', {
-          cx: v.point[0], cy: v.point[1], r: '3.5',
-          fill: 'none', stroke: isSelected ? '#00f2fe' : '#ffd700',
-          'stroke-width': isSelected ? '2.5' : '1.5',
-          className: 'qa-on-curve-knot-handle',
-          style: { pointerEvents: 'none', filter: isSelected ? 'drop-shadow(0 0 6px #00f2fe)' : 'none' }
-        });
-      } else {
-        nodeCircle = makeElement('svg:circle', {
-          cx: v.point[0], cy: v.point[1],
-          r: isSelected ? '6.5' : '3.5',
-          fill: isSelected ? '#00f2fe' : '#00e676',
-          stroke: '#ffffff',
-          'stroke-width': isSelected ? '2' : '1.2',
-          className: 'qa-on-curve-knot-handle',
-          style: { pointerEvents: 'none', filter: isSelected ? 'drop-shadow(0 0 8px #00f2fe)' : 'none' }
-        });
-      }
-
-      fatTarget.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (vertices.length <= 2) {
-          this.showKnotToast('⚠️ Curve must have at least 2 points');
-          return;
-        }
-        vertices.splice(idx, 1);
-        this._activeKnotIdx = Math.max(0, idx - 1);
-        this.commitCurveGeometryUpdate();
-        this.exposeBezierHandles(curveRecord);
-        this.renderSegmentMidpointIndicators(curveRecord);
-        this.showKnotToast(`🗑️ Deleted knot #${idx + 1}`);
-      });
-
-      let dragging = false;
-      fatTarget.addEventListener('mousedown', (e) => {
-        if (e.button === 2) return;
-        e.stopPropagation();
-        this._activeKnotIdx = idx;
-        dragging = true;
-
-        if (!v._savedConstraint) {
-          v._savedConstraint = {
-            offset: v.tangentAngleOffset || 0,
-            curvature: v.curvature || 1.0,
-            balance: v.balance || 1.0
-          };
-        }
-
-        v.tangentAngleOffset = 0;
-
-        const onDrag = (ev) => {
-          if (!dragging) return;
-          const rect = this.stageBox.getBoundingClientRect();
-          const z = this.stageState.zoom;
-
-          // ONLY update dragged point coordinate; other knots remain strictly fixed
-          v.point[0] = (ev.clientX - rect.left) / z;
-          v.point[1] = (ev.clientY - rect.top) / z;
-
-          nodeCircle.setAttribute('cx', v.point[0]);
-          nodeCircle.setAttribute('cy', v.point[1]);
-          fatTarget.setAttribute('cx', v.point[0]);
-          fatTarget.setAttribute('cy', v.point[1]);
-
-          const localScope = (this.stageState.dragLockMode === 'single')
-            ? { start: Math.max(0, idx - 1), end: Math.min(vertices.length - 1, idx + 1) }
-            : null;
-
-          this.commitCurveGeometryUpdate(localScope);
-          this.renderOutboundTangentRay(curveRecord, idx, () => this.commitCurveGeometryUpdate());
-        };
-
-        const onUp = () => {
-          dragging = false;
-          window.removeEventListener('mousemove', onDrag);
-          window.removeEventListener('mouseup', onUp);
-        };
-
-        window.addEventListener('mousemove', onDrag);
-        window.addEventListener('mouseup', onUp);
-      });
-
-      this.controlsLayer.appendChild(fatTarget);
-      this.controlsLayer.appendChild(nodeCircle);
-    });
-
-    this.renderOutboundTangentRay(curveRecord, this._activeKnotIdx, () => this.commitCurveGeometryUpdate());
-    this.renderSegmentMidpointIndicators(curveRecord);
-    this.updateDynamicKeyInHUD();
+      if (!this.knotManager) this.knotManager = new QuoraKnotManager(this);
+      this.knotManager.exposeHandles(curveRecord, this.controlsLayer, this.stageState);
   }
 
-  commitCurveGeometryUpdate(affectedRange = null) {
-      const curve = this.getActiveCurve();
-      if (!curve || !curve.vertices || curve.vertices.length < 2) return;
-
-      // Respect affectedRange: only adjacent control points recalculate in Single Knot mode
-      curve.beziers = this.verticesToBeziers(curve.vertices, affectedRange);
-      const [shadowEl, splineEl] = curve.elements;
-
-      let d = 'M ' + curve.beziers[0][0].join(' ');
-      for (let i = 0; i < curve.beziers.length; i++) {
-        const [start, cp1, cp2, end] = curve.beziers[i];
-        d += ` C ${cp1.join(' ')}, ${cp2.join(' ')}, ${end.join(' ')}`;
-      }
-      if (splineEl) splineEl.setAttribute('d', d);
-      if (shadowEl) shadowEl.setAttribute('d', d);
-
-      if (curve._arrowFg) { curve._arrowFg.remove(); curve._arrowFg = null; }
-      if (curve._arrowSh) { curve._arrowSh.remove(); curve._arrowSh = null; }
-
-      if (curve.arrowEnd === 'tip') {
-        const p0 = curve.beziers[0][0];
-        const p1 = curve.beziers[0][1];
-        const dist = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) || 1;
-        const arrow = this.renderConcaveArrowhead(p0, [(p1[0] - p0[0]) / dist, (p1[1] - p0[1]) / dist], curve.color, 2.0);
-        curve._arrowSh = arrow.shadow;
-        curve._arrowFg = arrow.foreground;
-        this.shadowLayer.appendChild(arrow.shadow);
-        this.strokeLayer.appendChild(arrow.foreground);
-      } else if (curve.arrowEnd === 'tail') {
-        const lastSeg = curve.beziers[curve.beziers.length - 1];
-        const p2 = lastSeg[2];
-        const p3 = lastSeg[3];
-        const dist = Math.hypot(p3[0] - p2[0], p3[1] - p2[1]) || 1;
-        const arrow = this.renderConcaveArrowhead(p3, [(p2[0] - p3[0]) / dist, (p2[1] - p3[1]) / dist], curve.color, 2.0);
-        curve._arrowSh = arrow.shadow;
-        curve._arrowFg = arrow.foreground;
-        this.shadowLayer.appendChild(arrow.shadow);
-        this.strokeLayer.appendChild(arrow.foreground);
-      }
-
-      this.renderStage();
-    }
+  commitCurveGeometryUpdate() {
+    return this.strokeManager.updateCurveGeometry();
+  }
   getActiveCurve() {
     if (this.stageState.selectedItem?.type === 'curve') return this.stageState.selectedItem;
     const curves = this.stageState.annotations.filter(a => a.type === 'curve');
@@ -2139,206 +1595,20 @@ class QuoraAnnotationComponent {
   }
 
   beziersToVertices(beziers) {
-    if (!beziers || beziers.length === 0) return [];
-    const n = beziers.length;
-    const vertices = [];
-
-    for (let i = 0; i <= n; i++) {
-      const pt = (i < n) ? beziers[i][0].slice(0, 2) : beziers[n - 1][3].slice(0, 2);
-      const v = new BezierVertex(pt);
-      v.tangentAngleOffset = 0;
-      v.curvature = 1.0;
-      v.balance = 1.0;
-      vertices.push(v);
-    }
-
-    if (typeof UpdateControlPoints !== 'undefined') {
-      UpdateControlPoints.run(vertices, 6);
-    }
-    return vertices;
+    return this.strokeManager.beziersToVertices(beziers);
   }
 
-  verticesToBeziers(vertices, affectedRange = null) {
-    if (!vertices || vertices.length < 2) return [];
-    if (typeof UpdateControlPoints !== 'undefined') {
-      UpdateControlPoints.run(vertices, 6, affectedRange);
-    }
-
-    const beziers = [];
-    for (let i = 0; i < vertices.length - 1; i++) {
-      beziers.push([
-        [vertices[i].point[0], vertices[i].point[1]],
-        [vertices[i].controlPoints[1][0], vertices[i].controlPoints[1][1]],
-        [vertices[i + 1].controlPoints[0][0], vertices[i + 1].controlPoints[0][1]],
-        [vertices[i + 1].point[0], vertices[i + 1].point[1]]
-      ]);
-    }
-    return beziers;
+  verticesToBeziers(vertices) {
+    return this.strokeManager.verticesToBeziers(vertices);
   }
 
   renderEphemeralKnotHandles(curveRecord) {
-    const g = makeElement('svg:g', { className: 'qa-ephemeral-knots' });
-    (curveRecord.vertices || []).forEach(v => {
-      g.appendChild(makeElement('svg:circle', {
-        cx: v.point[0], cy: v.point[1], r: '3.5', fill: '#00e676', stroke: '#ffffff', 'stroke-width': '1.2',
-        style: { pointerEvents: 'none' }
-      }));
-    });
-    this.controlsLayer.appendChild(g);
+    this.gestureMachine.renderEphemeralKnotHandles(curveRecord);
   }
-
   setupKeyInMatrixHud() {
-      let hud = document.getElementById('qa-keyin-matrix-hud');
-
-      if (!this._hudPos) {
-        try {
-          const saved = JSON.parse(localStorage.getItem('quoratoys_hud_pos') || 'null');
-          this._hudPos = saved || { left: 24, top: 80 };
-        } catch (e) {
-          this._hudPos = { left: 24, top: 80 };
-        }
-      }
-
-      this._hudPos.left = Math.max(8, Math.min(window.innerWidth - 280, this._hudPos.left));
-      this._hudPos.top = Math.max(8, Math.min(window.innerHeight - 80, this._hudPos.top));
-
-      if (hud) {
-        hud.style.left = `${this._hudPos.left}px`;
-        hud.style.top = `${this._hudPos.top}px`;
-        hud.style.display = 'flex';
-        return;
-      }
-
-      this._hudCollapsed = false;
-      this._hudShowDetails = false;
-
-      hud = makeElement('div', {
-        id: 'qa-keyin-matrix-hud',
-        style: {
-          position: 'fixed', top: `${this._hudPos.top}px`, left: `${this._hudPos.left}px`,
-          zIndex: '2147483640', background: 'rgba(9, 13, 22, 0.96)',
-          border: '1.5px solid rgba(0, 242, 254, 0.45)', borderRadius: '10px', padding: '0',
-          display: 'flex', flexDirection: 'column',
-          boxShadow: '0 12px 36px rgba(0, 0, 0, 0.9), 0 0 16px rgba(0, 242, 254, 0.25)',
-          fontFamily: 'monospace', fontSize: '11px', color: '#f8fafc',
-          backdropFilter: 'blur(14px)', userSelect: 'none', pointerEvents: 'auto',
-          minWidth: '250px', maxWidth: '320px', overflow: 'hidden'
-        }
-      });
-
-      const header = makeElement('div', {
-        id: 'qa-keyin-hud-header',
-        style: {
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          padding: '6px 10px', background: 'rgba(15, 23, 42, 0.98)',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.12)', cursor: 'grab', touchAction: 'none'
-        }
-      }, [
-        makeElement('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, [
-          makeElement('span', { style: { color: '#64748b', fontSize: '11px' } }, '⋮⋮'),
-          makeElement('strong', { style: { color: '#00f2fe', fontSize: '11px' } }, 'KEY-IN MATRIX'),
-          makeElement('span', { style: { fontSize: '9px', color: '#10b981', fontWeight: 'bold' } }, '● Active')
-        ]),
-        makeElement('div', { style: { display: 'flex', gap: '3px', alignItems: 'center' } }, [
-          (this._hudDetailsBtn = makeElement('button', {
-            className: 'dr-nav-btn',
-            style: { padding: '1px 5px', fontSize: '9px' },
-            title: 'Expand detailed shortcut explanations',
-            onclick: (e) => {
-              e.stopPropagation();
-              this._hudShowDetails = !this._hudShowDetails;
-              this._hudDetailsBtn.textContent = this._hudShowDetails ? '▲ Compact' : '▼ Details';
-              this.renderKeyInMatrixRows();
-            }
-          }, '▼ Details')),
-          (this._hudToggleBtn = makeElement('button', {
-            className: 'dr-nav-btn',
-            style: { padding: '1px 5px', fontSize: '10px', lineHeight: '1' },
-            title: 'Minimize / Expand palette',
-            onclick: (e) => {
-              e.stopPropagation();
-              this._hudCollapsed = !this._hudCollapsed;
-              this._hudBodyWrapper.style.display = this._hudCollapsed ? 'none' : 'flex';
-              this._hudToggleBtn.textContent = this._hudCollapsed ? '+' : '−';
-            }
-          }, '−')),
-          makeElement('button', {
-            className: 'dr-nav-btn',
-            style: { padding: '1px 5px', fontSize: '10px', color: '#ff7b72', lineHeight: '1' },
-            title: 'Close HUD',
-            onclick: (e) => {
-              e.stopPropagation();
-              hud.style.display = 'none';
-            }
-          }, '✕')
-        ])
-      ]);
-
-      let isDraggingHud = false;
-      let startX = 0, startY = 0;
-      let initialX = 0, initialY = 0;
-
-      header.addEventListener('mousedown', (e) => {
-        if (e.target.closest('button')) return;
-        isDraggingHud = true;
-        startX = e.clientX;
-        startY = e.clientY;
-        initialX = parseFloat(hud.style.left) || this._hudPos.left;
-        initialY = parseFloat(hud.style.top) || this._hudPos.top;
-        header.style.cursor = 'grabbing';
-        e.preventDefault();
-      });
-
-      window.addEventListener('mousemove', (e) => {
-        if (!isDraggingHud) return;
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-
-        const newLeft = Math.max(8, Math.min(window.innerWidth - 260, initialX + dx));
-        const newTop = Math.max(8, Math.min(window.innerHeight - 60, initialY + dy));
-
-        hud.style.left = `${newLeft}px`;
-        hud.style.top = `${newTop}px`;
-        this._hudPos = { left: newLeft, top: newTop };
-        try {
-          localStorage.setItem('quoratoys_hud_pos', JSON.stringify(this._hudPos));
-        } catch (err) {}
-      });
-
-      window.addEventListener('mouseup', () => {
-        if (isDraggingHud) {
-          isDraggingHud = false;
-          header.style.cursor = 'grab';
-        }
-      });
-
-      this._hudBodyWrapper = makeElement('div', {
-        style: { display: 'flex', flexDirection: 'column' }
-      });
-
-      const topExplainer = makeElement('div', {
-        style: {
-          padding: '6px 10px', background: 'rgba(0, 242, 254, 0.08)',
-          borderBottom: '1px solid rgba(0, 242, 254, 0.2)', fontSize: '10px', color: '#94a3b8', lineHeight: '1.4'
-        }
-      }, [
-        makeElement('strong', { style: { color: '#00f2fe', display: 'block', marginBottom: '2px' } }, '💡 Interactive Shortcuts:'),
-        '• Hold ', makeElement('strong', { style: { color: '#ffd700' } }, '[H]'), ' for live vector arrows.', makeElement('br'),
-        '• Hold ', makeElement('strong', { style: { color: '#f59e0b' } }, '[Ctrl]'), ' to tune string length or rest hand.', makeElement('br'),
-        '• Press ', makeElement('strong', { style: { color: '#00f2fe' } }, '[X]'), ' to swap arrow ↔ text ends.'
-      ]);
-      this._hudBodyWrapper.appendChild(topExplainer);
-
-      this._keyInPillsContainer = makeElement('div', {
-        style: { display: 'flex', flexDirection: 'column', gap: '3px', padding: '6px 8px', maxHeight: '380px', overflowY: 'auto' }
-      });
-      this._hudBodyWrapper.appendChild(this._keyInPillsContainer);
-
-      hud.append(header, this._hudBodyWrapper);
-      document.body.appendChild(hud);
-
-      this.renderKeyInMatrixRows();
-    }
+      if (!this.inSituHud) this.inSituHud = new QuoraInSituHUD(this);
+      this.inSituHud.setupKeyInMatrixHud();
+  }
   ensureFontLoaded(fontFamily) {
     if (!fontFamily) return;
     if (fontFamily.includes('Architects Daughter') && !this._loadedFonts.has('Architects Daughter')) {
@@ -2351,283 +1621,182 @@ class QuoraAnnotationComponent {
   }
 
   renderStage() {
-    const tf = this.computeAutoBounds();
-    this.stageBox.style.width = `${tf.totalW}px`;
-    this.stageBox.style.height = `${tf.totalH}px`;
+      if (!this.imageManager) this.imageManager = new QuoraImageManager(this);
+      if (!this.textManager) this.textManager = new QuoraTextManager(this);
 
-    this.sceneCanvas.width = tf.totalW;
-    this.sceneCanvas.height = tf.totalH;
-    const ctx = this.sceneCanvas.getContext('2d');
-    ctx.clearRect(0, 0, tf.totalW, tf.totalH);
+      const tf = this.computeAutoBounds();
+      this.stageBox.style.width = `${tf.totalW}px`;
+      this.stageBox.style.height = `${tf.totalH}px`;
 
-    if (this.stageState.canvasBgMode === 'matte') {
-      ctx.fillStyle = this.stageState.canvasBgColor || '#090d16';
-      ctx.fillRect(0, 0, tf.totalW, tf.totalH);
-    }
+      this.sceneCanvas.width = tf.totalW;
+      this.sceneCanvas.height = tf.totalH;
+      const ctx = this.sceneCanvas.getContext('2d');
+      ctx.clearRect(0, 0, tf.totalW, tf.totalH);
 
-    (this.stageState.placedImages || []).forEach(plate => {
-      ctx.save();
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
-      ctx.shadowBlur = 12;
-      ctx.drawImage(plate.img, plate.x, plate.y, plate.width, plate.height);
-
-      if (this.stageState.activeImage === plate) {
-        ctx.strokeStyle = '#00f2fe';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([6, 4]);
-        ctx.strokeRect(plate.x, plate.y, plate.width, plate.height);
+      if (this.stageState.canvasBgMode === 'matte') {
+        ctx.fillStyle = this.stageState.canvasBgColor || '#090d16';
+        ctx.fillRect(0, 0, tf.totalW, tf.totalH);
       }
-      ctx.restore();
-    });
 
-    // Render Text Badges (Direct or Tail-Attached)
-    this.textBadgesLayer.innerHTML = '';
-    (this.stageState.annotations || []).forEach(ann => {
-      if (ann.type === 'text_badge') {
-        this.renderDirectTextBadgeSvg(ann);
-      } else if (ann.type === 'curve' && ann.text && ann.beziers?.length > 0) {
-        this.renderCurveAttachedTextSvg(ann);
-      }
-    });
+      // Render placed image plates with opacity support and clean pixel fidelity
+      (this.stageState.placedImages || []).forEach(plate => {
+        ctx.save();
+        ctx.globalAlpha = (plate.opacity !== undefined) ? plate.opacity : 1.0;
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+        ctx.shadowBlur = 12;
+        ctx.drawImage(plate.img, plate.x, plate.y, plate.width, plate.height);
+        ctx.restore();
+      });
 
-    this.renderImagePlateControls();
-  }
+      // Render imported Spot-The-Difference lenses
+      this.renderDiffCallouts();
 
-  renderCurveAttachedTextSvg(ann) {
-      const beziers = ann.beziers;
-      if (!beziers || beziers.length === 0) return;
-
-      const isAtTail = (ann.textEnd !== 'tip');
-      const termSeg = isAtTail ? beziers[beziers.length - 1] : beziers[0];
-      const anchorPt = isAtTail ? termSeg[3] : termSeg[0];
-
-      // Compute curve departure vector entering the text area
-      const exitVec = isAtTail
-        ? [termSeg[3][0] - termSeg[2][0], termSeg[3][1] - termSeg[2][1]]
-        : [termSeg[0][0] - termSeg[1][0], termSeg[0][1] - termSeg[1][1]];
-
-      const exitLen = Math.hypot(exitVec[0], exitVec[1]) || 1;
-      const uX = exitVec[0] / exitLen;
-      const uY = exitVec[1] / exitLen;
-
-      // 4-Quadrant Positioning Logic
-      const isLeft = (ann.justifySide === 'left') || (uX >= 0);
-      const isApproachingDown = (uY >= 0);
-
-      const fontS = ann.fontSize || 22;
-      const fontF = ann.fontFamily || "'Architects Daughter', cursive, sans-serif";
-      const lines = String(ann.text).split('\n');
-      const lineHeight = fontS * 1.25;
-
-      const charW = fontS * (fontF.includes('mono') ? 0.60 : 0.52);
-      let maxChars = 0;
-      lines.forEach(l => { if (l.length > maxChars) maxChars = l.length; });
-
-      const padX = ann.boxStyle !== 'none' ? 10 : 4;
-      const padY = ann.boxStyle !== 'none' ? 6 : 4;
-      const boxW = Math.round(maxChars * charW) + padX * 2;
-      const boxH = Math.round(lines.length * lineHeight) + padY * 2;
-
-      const gap = 8;
-      const posX = isLeft ? anchorPt[0] + gap : anchorPt[0] - boxW - gap;
-      const posY = Math.round(anchorPt[1] - boxH / 2);
-
-      const g = makeElement('svg:g', {
-        className: 'qa-curve-attached-label',
-        style: { cursor: 'pointer', userSelect: 'none' },
-        ondblclick: (e) => {
-          e.stopPropagation();
-          this._promptInlineTailText(ann, anchorPt, isLeft ? 'left' : 'right');
+      // Render text badges through QuoraTextManager delegate
+      this.textBadgesLayer.innerHTML = '';
+      (this.stageState.annotations || []).forEach(ann => {
+        if (ann.type === 'text_badge') {
+          this.renderDirectTextBadgeSvg(ann);
+        } else if (ann.type === 'curve' && ann.text && ann.beziers?.length > 0) {
+          this.textManager.renderCurveAttachedTextSvg(ann, this.textBadgesLayer, this.stageState);
         }
       });
 
-      if (ann.boxStyle === 'box') {
-        g.appendChild(makeElement('svg:rect', {
-          x: posX + 2, y: posY + 2, width: boxW, height: boxH, rx: '6',
-          fill: 'rgba(10, 15, 25, 0.95)', stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': '4.5'
-        }));
-        g.appendChild(makeElement('svg:rect', {
-          x: posX, y: posY, width: boxW, height: boxH, rx: '6',
-          fill: 'rgba(15, 23, 42, 0.96)', stroke: ann.color || '#00e676', 'stroke-width': '2.5'
-        }));
-      } else if (ann.boxStyle === 'bracket') {
-        // 4-Quadrant Dynamic Architectural Bracket:
-        // Shelf runs on top or bottom based on vertical entry; wall runs on entrance side
-        const wallX = isLeft ? posX : posX + boxW;
-        const oppX = isLeft ? posX + boxW : posX;
-        const shelfY = isApproachingDown ? posY : (posY + boxH);
-        const wallEndY = isApproachingDown ? (posY + boxH) : posY;
-
-        const bD = `M ${oppX} ${shelfY} L ${wallX} ${shelfY} L ${wallX} ${wallEndY}`;
-
-        g.appendChild(makeElement('svg:path', {
-          d: bD, transform: 'translate(2, 2)', fill: 'none',
-          stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': '5'
-        }));
-        g.appendChild(makeElement('svg:path', {
-          d: bD, fill: 'none', stroke: ann.color || '#00e676', 'stroke-width': '2.8'
-        }));
-      }
-
-      const txt = makeElement('svg:text', {
-        x: posX + padX, y: posY + padY + fontS * 0.88, fill: ann.color || '#00e676',
-        'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold'
-      });
-
-      lines.forEach((l, i) => {
-        txt.appendChild(makeElement('svg:tspan', {
-          x: posX + padX, dy: i === 0 ? '0' : `${lineHeight}px`
-        }, l));
-      });
-
-      g.appendChild(txt);
-      this.textBadgesLayer.appendChild(g);
-    }
+      // Render image plate manipulation controls onto the SVG controls layer
+      this.imageManager.renderControls(this.controlsLayer, this.stageState);
+  }
+  renderCurveAttachedTextSvg(ann) {
+      if (!this.textManager) this.textManager = new QuoraTextManager(this);
+      return this.textManager.renderCurveAttachedTextSvg(ann, this.textBadgesLayer, this.stageState);
+  }
   renderDirectTextBadgeSvg(ann) {
-    const fontS = ann.fontSize || 22;
-    const fontF = ann.fontFamily || "'Architects Daughter', cursive, sans-serif";
-    const lines = String(ann.text).split('\n');
-    const lineHeight = fontS * 1.25;
-
-    const charW = fontS * 0.52;
-    let maxChars = 0;
-    lines.forEach(l => { if (l.length > maxChars) maxChars = l.length; });
-
-    const padX = ann.boxStyle !== 'none' ? 10 : 4;
-    const padY = ann.boxStyle !== 'none' ? 6 : 4;
-    const boxW = Math.round(maxChars * charW) + padX * 2;
-    const boxH = Math.round(lines.length * lineHeight) + padY * 2;
-
-    const g = makeElement('svg:g', {
-      id: `badge-${ann.id}`,
-      className: 'qa-movable-text-badge',
-      style: { cursor: 'move', userSelect: 'none' },
-      ondblclick: (e) => {
-        e.stopPropagation();
-        this._promptInlineTailText(ann, [ann.x, ann.y], 'left');
-      }
-    });
-
-    if (ann.boxStyle === 'box') {
-      g.appendChild(makeElement('svg:rect', {
-        x: ann.x + 2, y: ann.y + 2, width: boxW, height: boxH, rx: '6',
-        fill: 'rgba(10, 15, 25, 0.95)', stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': '4.5'
-      }));
-      g.appendChild(makeElement('svg:rect', {
-        x: ann.x, y: ann.y, width: boxW, height: boxH, rx: '6',
-        fill: 'rgba(15, 23, 42, 0.96)', stroke: ann.color || '#00e676', 'stroke-width': '2.5'
-      }));
-    } else if (ann.boxStyle === 'bracket') {
-      const bD = `M ${ann.x} ${ann.y} L ${ann.x} ${ann.y + boxH} L ${ann.x + boxW} ${ann.y + boxH}`;
-      g.appendChild(makeElement('svg:path', {
-        d: bD, transform: 'translate(2, 2)', fill: 'none', stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': '5'
-      }));
-      g.appendChild(makeElement('svg:path', {
-        d: bD, fill: 'none', stroke: ann.color || '#00e676', 'stroke-width': '2.8'
-      }));
-    }
-
-    const txt = makeElement('svg:text', {
-      x: ann.x + padX, y: ann.y + padY + fontS * 0.88, fill: ann.color || '#00e676',
-      'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold'
-    });
-
-    lines.forEach((l, i) => {
-      txt.appendChild(makeElement('svg:tspan', {
-        x: ann.x + padX, dy: i === 0 ? '0' : `${lineHeight}px`
-      }, l));
-    });
-
-    g.appendChild(txt);
-
-    let isDrag = false;
-    let sX = 0, sY = 0;
-    g.addEventListener('mousedown', (e) => {
-      e.stopPropagation();
-      isDrag = true;
-      sX = e.clientX; sY = e.clientY;
-
-      const onM = (ev) => {
-        if (!isDrag) return;
-        const z = this.stageState.zoom;
-        ann.x += (ev.clientX - sX) / z;
-        ann.y += (ev.clientY - sY) / z;
-        sX = ev.clientX; sY = ev.clientY;
-        this.renderStage();
-      };
-      const onU = () => { isDrag = false; window.removeEventListener('mousemove', onM); window.removeEventListener('mouseup', onU); };
-      window.addEventListener('mousemove', onM);
-      window.addEventListener('mouseup', onU);
-    });
-
-    this.textBadgesLayer.appendChild(g);
+      if (!this.textManager) this.textManager = new QuoraTextManager(this);
+      this.textManager.renderDirectTextBadgeSvg(ann, this.textBadgesLayer, this.stageState);
   }
-
   renderImagePlateControls() {
-    this.controlsLayer.querySelectorAll('.qa-image-plate-control').forEach(el => el.remove());
-    const plate = this.stageState.activeImage;
-    if (!plate) return;
+      this.controlsLayer.querySelectorAll('.qa-image-plate-control').forEach(el => el.remove());
+      const plate = this.stageState.activeImage;
+      if (!plate) return;
 
-    const g = makeElement('svg:g', { className: 'qa-image-plate-control' });
+      const g = makeElement('svg:g', { className: 'qa-image-plate-control' });
 
-    const border = makeElement('svg:rect', {
-      x: plate.x, y: plate.y, width: plate.width, height: plate.height,
-      fill: 'transparent', stroke: '#00f2fe', 'stroke-width': '1.8',
-      'stroke-dasharray': '5,4', style: { cursor: 'move' }
-    });
+      // 1. Transparent Hit/Drag Surface covering the entire image plate
+      const dragSurface = makeElement('svg:rect', {
+        x: plate.x, y: plate.y, width: plate.width, height: plate.height,
+        fill: 'rgba(0, 242, 254, 0.02)', stroke: '#00f2fe', 'stroke-width': '1.8',
+        'stroke-dasharray': '6,4',
+        style: { cursor: 'move', pointerEvents: 'all' },
+        title: 'Drag to move image plate • Press Delete to remove'
+      });
 
-    let isMove = false;
-    let sMx = 0, sMy = 0;
-    border.addEventListener('mousedown', (e) => {
-      e.stopPropagation();
-      isMove = true;
-      sMx = e.clientX; sMy = e.clientY;
+      let isMoving = false;
+      let startMouseX = 0, startMouseY = 0;
+      let initialPlateX = plate.x, initialPlateY = plate.y;
 
-      const onM = (ev) => {
-        if (!isMove) return;
-        const z = this.stageState.zoom;
-        plate.x += (ev.clientX - sMx) / z;
-        plate.y += (ev.clientY - sMy) / z;
-        sMx = ev.clientX; sMy = ev.clientY;
-        this.renderStage();
-      };
-      const onU = () => { isMove = false; window.removeEventListener('mousemove', onM); window.removeEventListener('mouseup', onU); };
-      window.addEventListener('mousemove', onM);
-      window.addEventListener('mouseup', onU);
-    });
-    g.appendChild(border);
+      dragSurface.addEventListener('mousedown', (e) => {
+        if (e.button === 2) return;
+        e.stopPropagation();
+        isMoving = true;
+        startMouseX = e.clientX;
+        startMouseY = e.clientY;
+        initialPlateX = plate.x;
+        initialPlateY = plate.y;
 
-    const grip = makeElement('svg:rect', {
-      x: plate.x + plate.width - 8, y: plate.y + plate.height - 8, width: '16', height: '16',
-      fill: '#00f2fe', stroke: '#ffffff', 'stroke-width': '2', rx: '3',
-      style: { cursor: 'nwse-resize' }
-    });
+        const onPlateMove = (ev) => {
+          if (!isMoving) return;
+          const z = this.stageState.zoom || 1.0;
+          plate.x = Math.round(initialPlateX + (ev.clientX - startMouseX) / z);
+          plate.y = Math.round(initialPlateY + (ev.clientY - startMouseY) / z);
+          this.renderStage();
+        };
 
-    let isResize = false;
-    grip.addEventListener('mousedown', (e) => {
-      e.stopPropagation();
-      isResize = true;
-      const startW = plate.width;
-      const startX = e.clientX;
+        const onPlateUp = () => {
+          isMoving = false;
+          window.removeEventListener('mousemove', onPlateMove);
+          window.removeEventListener('mouseup', onPlateUp);
+        };
 
-      const onR = (ev) => {
-        if (!isResize) return;
-        const z = this.stageState.zoom;
-        const dw = (ev.clientX - startX) / z;
-        const newW = Math.max(80, startW + dw);
-        plate.width = newW;
-        plate.height = Math.round(newW / plate.aspect);
-        this.renderStage();
-      };
-      const onUp = () => { isResize = false; window.removeEventListener('mousemove', onR); window.removeEventListener('mouseup', onUp); };
-      window.addEventListener('mousemove', onR);
-      window.addEventListener('mouseup', onUp);
-    });
+        window.addEventListener('mousemove', onPlateMove);
+        window.addEventListener('mouseup', onPlateUp);
+      });
 
-    g.appendChild(grip);
-    this.controlsLayer.appendChild(g);
+      g.appendChild(dragSurface);
+
+      // 2. Proportional 4-Corner Resize Handles (nw, ne, se, sw)
+      const corners = [
+        { id: 'nw', x: plate.x, y: plate.y, cursor: 'nwse-resize' },
+        { id: 'ne', x: plate.x + plate.width, y: plate.y, cursor: 'nesw-resize' },
+        { id: 'se', x: plate.x + plate.width, y: plate.y + plate.height, cursor: 'nwse-resize' },
+        { id: 'sw', x: plate.x, y: plate.y + plate.height, cursor: 'nesw-resize' }
+      ];
+
+      corners.forEach(corner => {
+        const grip = makeElement('svg:rect', {
+          x: corner.x - 5, y: corner.y - 5, width: '10', height: '10',
+          fill: '#00f2fe', stroke: '#ffffff', 'stroke-width': '1.5', rx: '2',
+          style: { cursor: corner.cursor, pointerEvents: 'all', filter: 'drop-shadow(0 0 4px rgba(0,0,0,0.8))' },
+          title: 'Drag to scale image proportionally'
+        });
+
+        let isResizing = false;
+        let startX = 0, startW = plate.width, startH = plate.height;
+        let startPlateX = plate.x, startPlateY = plate.y;
+
+        grip.addEventListener('mousedown', (e) => {
+          e.stopPropagation();
+          isResizing = true;
+          startX = e.clientX;
+          startW = plate.width;
+          startH = plate.height;
+          startPlateX = plate.x;
+          startPlateY = plate.y;
+
+          const onResizeMove = (ev) => {
+            if (!isResizing) return;
+            const z = this.stageState.zoom || 1.0;
+            const deltaX = (ev.clientX - startX) / z;
+
+            if (corner.id === 'se') {
+              const newW = Math.max(60, startW + deltaX);
+              plate.width = newW;
+              plate.height = Math.round(newW / plate.aspect);
+            } else if (corner.id === 'sw') {
+              const newW = Math.max(60, startW - deltaX);
+              plate.x = startPlateX + (startW - newW);
+              plate.width = newW;
+              plate.height = Math.round(newW / plate.aspect);
+            } else if (corner.id === 'ne') {
+              const newW = Math.max(60, startW + deltaX);
+              const newH = Math.round(newW / plate.aspect);
+              plate.y = startPlateY + (startH - newH);
+              plate.width = newW;
+              plate.height = newH;
+            } else if (corner.id === 'nw') {
+              const newW = Math.max(60, startW - deltaX);
+              const newH = Math.round(newW / plate.aspect);
+              plate.x = startPlateX + (startW - newW);
+              plate.y = startPlateY + (startH - newH);
+              plate.width = newW;
+              plate.height = newH;
+            }
+
+            this.renderStage();
+          };
+
+          const onResizeUp = () => {
+            isResizing = false;
+            window.removeEventListener('mousemove', onResizeMove);
+            window.removeEventListener('mouseup', onResizeUp);
+          };
+
+          window.addEventListener('mousemove', onResizeMove);
+          window.addEventListener('mouseup', onResizeUp);
+        });
+
+        g.appendChild(grip);
+      });
+
+      this.controlsLayer.appendChild(g);
   }
-
   loadDefaultDemo() {
     const c = document.createElement('canvas');
     c.width = 900; c.height = 480;
@@ -2706,29 +1875,9 @@ class QuoraAnnotationComponent {
     this.stageBox.append(rightBar, bottomBar);
   }
 
-  copyCompositeToClipboard(btn) {
-    const tf = this.computeAutoBounds();
-    const c = document.createElement('canvas');
-    c.width = tf.totalW * 2; c.height = tf.totalH * 2;
-    const ctx = c.getContext('2d');
-    ctx.scale(2, 2);
-    ctx.drawImage(this.sceneCanvas, 0, 0);
-
-    const svgXml = new XMLSerializer().serializeToString(this.svgSurface);
-    const blob = new Blob([svgXml], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const img = new Image();
-    img.onload = () => {
-      ctx.drawImage(img, 0, 0);
-      URL.revokeObjectURL(url);
-      c.toBlob(png => {
-        if (png) navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
-        if (btn) btn.textContent = '✓ Copied PNG!';
-      });
-    };
-    img.src = url;
+  copyCompositeToClipboard(btn, preset = 'native') {
+    this.exportManager.copyCompositeToClipboard(btn, preset);
   }
-
   renderKeyInMatrixRows() {
       if (!this._keyInPillsContainer) return;
       this._keyInPillsContainer.innerHTML = '';
@@ -2807,6 +1956,223 @@ class QuoraAnnotationComponent {
 
       this.updateDynamicKeyInHUD();
     }
+
+  renderInSituCursorReticle(screenPt, dirAngle, tension = 1.0) {
+      let reticle = document.getElementById('qa-cursor-reticle-overlay');
+      if (!reticle) {
+        reticle = makeElement('svg:g', {
+          id: 'qa-cursor-reticle-overlay',
+          style: { pointerEvents: 'none', transition: 'opacity 0.1s ease' }
+        });
+        this.controlsLayer.appendChild(reticle);
+      }
+
+      const radius = 20 * tension;
+      const endX = screenPt[0] + Math.cos(dirAngle) * (radius + 12);
+      const endY = screenPt[1] + Math.sin(dirAngle) * (radius + 12);
+
+      reticle.innerHTML = `
+        <circle cx="${screenPt[0]}" cy="${screenPt[1]}" r="${radius}" fill="none" stroke="rgba(0, 242, 254, 0.4)" stroke-width="1.2" stroke-dasharray="2,3" />
+        <line x1="${screenPt[0]}" y1="${screenPt[1]}" x2="${endX}" y2="${endY}" stroke="#00f2fe" stroke-width="2" stroke-linecap="round" />
+        <circle cx="${endX}" cy="${endY}" r="3" fill="#00f2fe" />
+      `;
+      reticle.style.display = 'block';
+  }
+
+  hideInSituCursorReticle() {
+      const reticle = document.getElementById('qa-cursor-reticle-overlay');
+      if (reticle) reticle.style.display = 'none';
+  }
+
+  hitTestImagePlate(pt) {
+      if (!this.stageState.placedImages || this.stageState.placedImages.length === 0) return null;
+      // Iterate in reverse z-order so top-most plates hit first
+      for (let i = this.stageState.placedImages.length - 1; i >= 0; i--) {
+        const p = this.stageState.placedImages[i];
+        if (pt[0] >= p.x && pt[0] <= p.x + p.width && pt[1] >= p.y && pt[1] <= p.y + p.height) {
+          return p;
+        }
+      }
+      return null;
+  }
+
+  executeKeyInCommand(action, ev = null) {
+      const curve = this.getActiveCurve();
+      const knot = this.getActiveKnot();
+
+      switch (action) {
+        case 'toggle_tool':
+          this.stageState.activeTool = (this.stageState.activeTool === 'curve') ? 'paint' : 'curve';
+          if (this.toolBtns.curve && this.toolBtns.paint) {
+            this.toolBtns.curve.classList.toggle('primary', this.stageState.activeTool === 'curve');
+            this.toolBtns.paint.classList.toggle('primary', this.stageState.activeTool === 'paint');
+          }
+          this.showKnotToast(`Active Tool: ${this.stageState.activeTool.toUpperCase()}`);
+          break;
+
+        case 'next_knot':
+          if (curve && curve.vertices && curve.vertices.length > 0) {
+            const step = (ev && ev.shiftKey) ? -1 : 1;
+            this._activeKnotIdx = (this._activeKnotIdx + step + curve.vertices.length) % curve.vertices.length;
+            this.exposeBezierHandles(curve);
+            this.showKnotToast(`Selected Knot #${this._activeKnotIdx + 1} / ${curve.vertices.length}`);
+          }
+          break;
+
+        case 'toggle_cusp':
+          if (knot) {
+            knot.tangentAngleOffset = (Math.abs(knot.tangentAngleOffset || 0) < 0.05) ? 0.785 : 0;
+            this.commitCurveGeometryUpdate();
+            this.exposeBezierHandles(curve);
+            this.showKnotToast(knot.tangentAngleOffset ? '⚡ Cusp: 45° Corner' : '⚡ Smooth C1 Tangency');
+          }
+          break;
+
+        case 'cycle_balance':
+          if (knot) {
+            const vals = [1.0, 0.5, 1.5];
+            const cur = knot.balance || 1.0;
+            const nxt = vals[(vals.findIndex(v => Math.abs(v - cur) < 0.1) + 1) % vals.length];
+            knot.balance = nxt;
+            this.commitCurveGeometryUpdate();
+            this.showKnotToast(`Balance: ${nxt.toFixed(2)}`);
+          }
+          break;
+
+        case 'tune_curvature':
+          if (knot) {
+            knot.curvature = Math.max(0.2, Math.min(3.0, (knot.curvature || 1.0) + 0.2));
+            this.commitCurveGeometryUpdate();
+            this.showKnotToast(`Curvature Tension: ${knot.curvature.toFixed(2)}`);
+          }
+          break;
+
+        case 'straighten':
+          if (curve && curve.vertices && curve.vertices.length > 2) {
+            curve.vertices = [curve.vertices[0], curve.vertices[curve.vertices.length - 1]];
+            this._activeKnotIdx = 0;
+            this.commitCurveGeometryUpdate();
+            this.exposeBezierHandles(curve);
+            this.showKnotToast('Straightened: Intermediate knots removed');
+          }
+          break;
+
+        case 'reset_knot':
+          if (knot) {
+            knot.tangentAngleOffset = 0;
+            knot.curvature = 1.0;
+            knot.balance = 1.0;
+            delete knot._savedConstraint;
+            this.commitCurveGeometryUpdate();
+            this.exposeBezierHandles(curve);
+            this.showKnotToast(`Knot #${this._activeKnotIdx + 1} constraints reset to natural baseline`);
+          }
+          break;
+
+        case 'wipe_curve':
+          if (curve && curve.vertices) {
+            curve.vertices.forEach(v => {
+              v.tangentAngleOffset = 0;
+              v.curvature = 1.0;
+              v.balance = 1.0;
+              delete v._savedConstraint;
+            });
+            this.commitCurveGeometryUpdate();
+            this.exposeBezierHandles(curve);
+            this.showKnotToast('Wiped all constraints on curve: 100% natural relaxation');
+          }
+          break;
+      }
+  }
+
+  nudgeActiveKnot(dx, dy) {
+      const knot = this.getActiveKnot();
+      const curve = this.getActiveCurve();
+      if (!knot || !curve) return false;
+
+      knot.point[0] += dx;
+      knot.point[1] += dy;
+
+      const localScope = (this.stageState.dragLockMode === 'single')
+        ? { start: Math.max(0, this._activeKnotIdx - 1), end: Math.min(curve.vertices.length - 1, this._activeKnotIdx + 1) }
+        : null;
+
+      this.commitCurveGeometryUpdate(localScope);
+      this.exposeBezierHandles(curve);
+      return true;
+  }
+
+  importDataset(data) {
+      if (!data) return;
+
+      this.stageState.annotations = [];
+      this.stageState.placedImages = [];
+      this.stageState.activeImage = null;
+      this.controlsLayer.innerHTML = '';
+
+      if (data.sourceImage) {
+        this.addNewImagePlate(data.sourceImage, 45, 45);
+        this.stageState.baseImage = data.sourceImage;
+      }
+
+      if (data.activeCrop) {
+        this.stageState.cropRect = data.activeCrop;
+      }
+
+      if (data.baseOrigin) {
+        this.stageState.baseOrigin = data.baseOrigin;
+      }
+
+      if (data.diffCircles && Array.isArray(data.diffCircles)) {
+        this.stageState.diffCallouts = data.diffCircles.map(d => ({
+          ...d,
+          dragX: d.dragX !== undefined ? d.dragX : d.cropX,
+          dragY: d.dragY !== undefined ? d.dragY : d.cropY
+        }));
+      }
+
+      this.renderStage();
+      const count = this.stageState.diffCallouts.length;
+      this.showKnotToast(`🧩 Imported Comparator: ${count} spotted difference${count === 1 ? '' : 's'}`);
+  }
+
+  renderDiffCallouts() {
+      this.diffSvgLayer.innerHTML = '';
+      if (!this.stageState.diffCallouts || this.stageState.diffCallouts.length === 0) return;
+
+      const basePlate = this.stageState.placedImages[0];
+      const originX = basePlate ? basePlate.x : 45;
+      const originY = basePlate ? basePlate.y : 45;
+
+      this.stageState.diffCallouts.forEach((diff, idx) => {
+        const c1x = originX + diff.cropX;
+        const c1y = originY + diff.cropY;
+        const r = Math.max(10, diff.radius);
+        const col = diff.color || '#00e676';
+
+        const g = makeElement('svg:g', { className: 'qa-imported-diff-lens' });
+
+        // Anchor circle on puzzle feature
+        g.appendChild(makeElement('svg:circle', {
+          cx: c1x, cy: c1y, r: r, fill: 'none', stroke: col,
+          'stroke-width': '2.2', 'stroke-dasharray': '4,3',
+          style: { filter: 'drop-shadow(0 0 6px rgba(0,0,0,0.8))' }
+        }));
+
+        // Index label
+        g.appendChild(makeElement('svg:circle', {
+          cx: c1x, cy: c1y, r: '3.5', fill: col
+        }));
+
+        g.appendChild(makeElement('svg:text', {
+          x: c1x + r + 5, y: c1y + 4, fill: col, 'font-size': '11px',
+          'font-family': 'monospace', 'font-weight': 'bold',
+          style: { filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.9))' }
+        }, `#${idx + 1}`));
+
+        this.diffSvgLayer.appendChild(g);
+      });
+  }
 }
 
 globalThis.QuoraAnnotationComponent = QuoraAnnotationComponent;
