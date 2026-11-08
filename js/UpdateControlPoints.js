@@ -13,7 +13,6 @@ class UpdateControlPoints {
 
     const gu = GeometryUtils;
 
-    // Initialize control point arrays if not present
     for (let i = 0; i < vertices.length; i++) {
       const v = vertices[i];
       if (!v.controlPoints || !Array.isArray(v.controlPoints) || v.controlPoints.length < 2) {
@@ -21,18 +20,42 @@ class UpdateControlPoints {
       }
     }
 
-    // Smooth relaxation loop: both handles at every interior knot ALWAYS remain colinear
     for (let iter = 0; iter < iterations; iter++) {
       for (let i = 0; i < vertices.length; i++) {
         const vertex = vertices[i];
         const prevVertex = vertices[i - 1];
         const nextVertex = vertices[i + 1];
 
-        // Compute natural baseline forward tangent
+        // DECOUPLED CUSP KNOT HANDLING:
+        // If a knot is a cusp, it decouples tangencies completely.
+        // Incoming side treats it as an end-point; outgoing side treats it as a start-point.
+        if (vertex.isCusp) {
+          if (nextVertex) {
+            const nextCp = nextVertex.controlPoints ? nextVertex.controlPoints[0] : nextVertex.point;
+            const outTangent = gu.makeUnitVector(nextCp, vertex.point);
+            const distNext = gu.getDistance(vertex.point, nextVertex.point);
+            const scaleNext = (distNext / 3) * (vertex.curvature || 1.0) * (2 - (vertex.balance || 1.0));
+            vertex.controlPoints[1] = gu.projectPoint(vertex.point, outTangent, scaleNext);
+          } else {
+            vertex.controlPoints[1] = vertex.point.slice();
+          }
+
+          if (prevVertex) {
+            const prevCp = prevVertex.controlPoints ? prevVertex.controlPoints[1] : prevVertex.point;
+            const inTangent = gu.makeUnitVector(vertex.point, prevCp);
+            const distPrev = gu.getDistance(vertex.point, prevVertex.point);
+            const scalePrev = (distPrev / 3) * (vertex.curvature || 1.0) * (vertex.balance || 1.0);
+            vertex.controlPoints[0] = gu.projectPoint(vertex.point, inTangent, scalePrev);
+          } else {
+            vertex.controlPoints[0] = vertex.point.slice();
+          }
+          continue;
+        }
+
+        // SMOOTH C1 CONTINUOUS KNOT HANDLING:
         const naturalTangent = UpdateControlPoints.computeCounterfactualTangent(vertices, i);
         vertex._naturalTangent = naturalTangent.slice();
 
-        // Apply author's angular deviation offset
         let tangent = naturalTangent;
         if (vertex.tangentAngleOffset) {
           tangent = gu.rotateVector(naturalTangent, vertex.tangentAngleOffset);
@@ -42,7 +65,6 @@ class UpdateControlPoints {
         const curvature = vertex.curvature || 1;
         const reversedTangent = [-tangent[0], -tangent[1], -tangent[2] || 0];
 
-        // Outgoing control point towards next vertex
         if (nextVertex) {
           const dist = gu.getDistance(vertex.point, nextVertex.point);
           const scale = (dist / 3) * curvature * (2 - balance);
@@ -55,7 +77,6 @@ class UpdateControlPoints {
           vertex.controlPoints[1] = vertex.point.slice();
         }
 
-        // Incoming control point from previous vertex (strictly opposite direction)
         if (prevVertex) {
           const dist = gu.getDistance(vertex.point, prevVertex.point);
           const scale = (dist / 3) * curvature * balance;

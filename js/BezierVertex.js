@@ -1,13 +1,15 @@
 class BezierVertex {
+
   constructor(point, pointType = 'click') {
     this.point = point.slice();
-    // Initialize control points as copies of the vertex point.
     this.controlPoints = [point.slice(), point.slice()];
     this.tangents = [null, null];
     this.curvature = 1;
     this.balance = 1;
     this.pointType = pointType;
     this.isTentative = false;
+    this.isCusp = false; // True when decoupled into an independent sharp corner point
+    this.isExplicitTangent = false;
   }
 
   toJSON() {
@@ -19,6 +21,8 @@ class BezierVertex {
       balance: this.balance,
       pointType: this.pointType,
       isTentative: this.isTentative,
+      isCusp: this.isCusp,
+      isExplicitTangent: this.isExplicitTangent,
     };
   }
 
@@ -28,11 +32,10 @@ class BezierVertex {
     v.tangents = obj.tangents;
     v.curvature = obj.curvature;
     v.balance = obj.balance;
-    if (typeof obj.isTentative === 'boolean') {
-      v.isTentative = obj.isTentative;
-    }
+    v.isTentative = !!obj.isTentative;
+    v.isCusp = !!obj.isCusp;
+    v.isExplicitTangent = !!obj.isExplicitTangent;
     return v;
   }
-
 }
 

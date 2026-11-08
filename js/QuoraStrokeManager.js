@@ -29,6 +29,8 @@ class QuoraStrokeManager {
         v.controlPoints[1] = pt.slice(0, 2);
       }
 
+      // All tether-drawn curve knots start as IMPLICIT tangencies
+      v.isExplicitTangent = false;
       vertices.push(v);
     }
 
@@ -79,11 +81,13 @@ class QuoraStrokeManager {
       } else {
         v.tangentAngleOffset = 0;
       }
+
+      // Tether-fit angles are implicit until explicitly dragged by user
+      v.isExplicitTangent = false;
     }
 
     return vertices;
   }
-
   verticesToBeziers(vertices) {
     if (!vertices || vertices.length < 2) return [];
     if (typeof UpdateControlPoints !== 'undefined') {
@@ -113,15 +117,47 @@ class QuoraStrokeManager {
 
     const shadowOffset = 2.0;
     const shadowColor = 'rgba(10, 15, 25, 0.95)';
+    const lineStyle = this.component.stageState.lineStyle || 'classic'; // 'classic' | 'lightsaber' | 'neon'
 
+    // Shadow Layer: Suppressed in lightsaber/neon mode to allow glowing bloom
     const shadowPath = makeElement('svg:path', {
       d, transform: `translate(${shadowOffset}, ${shadowOffset})`,
-      stroke: shadowColor, 'stroke-width': '5.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none'
+      stroke: shadowColor, 'stroke-width': '5.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none',
+      style: { display: lineStyle === 'classic' ? 'block' : 'none' }
     });
 
-    const splinePath = makeElement('svg:path', {
-      d, stroke: color, 'stroke-width': '3.2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none'
+    // Glow Layer: Wide bloom for lightsaber/neon line styles
+    const glowPath = makeElement('svg:path', {
+      d, stroke: color, 'stroke-width': lineStyle === 'lightsaber' ? '14' : '8',
+      'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none',
+      style: {
+        display: lineStyle !== 'classic' ? 'block' : 'none',
+        filter: 'drop-shadow(0 0 8px ' + color + ')',
+        opacity: '0.85'
+      }
     });
+
+    // Foreground Stroke Layer
+    const splineGroup = makeElement('svg:g', { className: 'qa-spline-group' });
+
+    if (lineStyle === 'lightsaber') {
+      // Outer colored core
+      const outerCore = makeElement('svg:path', {
+        d, stroke: color, 'stroke-width': '4.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none'
+      });
+      // Luminous overexposed white center core
+      const innerCore = makeElement('svg:path', {
+        d, stroke: '#ffffff', 'stroke-width': '2.2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none',
+        style: { filter: 'drop-shadow(0 0 2px #ffffff)' }
+      });
+      splineGroup.append(outerCore, innerCore);
+    } else {
+      // Classic crisp stroke
+      const mainSpline = makeElement('svg:path', {
+        d, stroke: color, 'stroke-width': '3.2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none'
+      });
+      splineGroup.appendChild(mainSpline);
+    }
 
     const vertices = existingVertices || this.beziersToVertices(beziers);
 
@@ -131,18 +167,21 @@ class QuoraStrokeManager {
       beziers,
       vertices,
       color,
+      lineStyle: lineStyle,
       arrowEnd: hasArrow ? 'tip' : 'none',
       textEnd: 'tail',
       text: '',
       hasTextBox: this.component.stageState.hasBorder,
+      boxStyle: 'bracket',
       fontFamily: this.component.stageState.fontFamily,
       fontSize: this.component.stageState.fontSize || 22,
       connectEdge: null,
-      elements: [shadowPath, splinePath]
+      elements: [shadowPath, splineGroup, glowPath]
     };
 
     this.component.shadowLayer.appendChild(shadowPath);
-    this.component.strokeLayer.appendChild(splinePath);
+    this.component.glowLayer.appendChild(glowPath);
+    this.component.strokeLayer.appendChild(splineGroup);
 
     if (hasArrow) {
       const p0 = beziers[0][0];
@@ -162,54 +201,86 @@ class QuoraStrokeManager {
   }
 
   updateCurveGeometry() {
-    const curve = this.component.getActiveCurve();
-    if (!curve || !curve.vertices || curve.vertices.length < 2) return;
+      const curve = this.component.getActiveCurve();
+      if (!curve || !curve.vertices || curve.vertices.length < 2) return;
 
-    curve.beziers = this.verticesToBeziers(curve.vertices);
+      curve.beziers = this.verticesToBeziers(curve.vertices);
 
-    const [shadowEl, splineEl] = curve.elements;
-    let d = 'M ' + curve.beziers[0][0].join(' ');
-    for (let i = 0; i < curve.beziers.length; i++) {
-      const [start, cp1, cp2, end] = curve.beziers[i];
-      d += ` C ${cp1.join(' ')}, ${cp2.join(' ')}, ${end.join(' ')}`;
-    }
-
-    if (curve.isClosed) {
-      d += ' Z';
-    }
-
-    if (splineEl) splineEl.setAttribute('d', d);
-    if (shadowEl) shadowEl.setAttribute('d', d);
-
-    if (curve._arrowFg) { curve._arrowFg.remove(); curve._arrowFg = null; }
-    if (curve._arrowSh) { curve._arrowSh.remove(); curve._arrowSh = null; }
-
-    if (!curve.isClosed) {
-      if (curve.arrowEnd === 'tip') {
-        const p0 = curve.beziers[0][0];
-        const p1 = curve.beziers[0][1];
-        const dist = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) || 1;
-        const arrow = this.renderConcaveArrowhead(p0, [(p1[0] - p0[0]) / dist, (p1[1] - p0[1]) / dist], curve.color, 2.0);
-        curve._arrowSh = arrow.shadow;
-        curve._arrowFg = arrow.foreground;
-        this.component.shadowLayer.appendChild(arrow.shadow);
-        this.component.strokeLayer.appendChild(arrow.foreground);
-      } else if (curve.arrowEnd === 'tail') {
-        const lastSeg = curve.beziers[curve.beziers.length - 1];
-        const p2 = lastSeg[2];
-        const p3 = lastSeg[3];
-        const dist = Math.hypot(p3[0] - p2[0], p3[1] - p2[1]) || 1;
-        const arrow = this.renderConcaveArrowhead(p3, [(p2[0] - p3[0]) / dist, (p2[1] - p3[1]) / dist], curve.color, 2.0);
-        curve._arrowSh = arrow.shadow;
-        curve._arrowFg = arrow.foreground;
-        this.component.shadowLayer.appendChild(arrow.shadow);
-        this.component.strokeLayer.appendChild(arrow.foreground);
+      const [shadowEl, splineGroup, glowPath] = curve.elements || [];
+      let d = 'M ' + curve.beziers[0][0].join(' ');
+      for (let i = 0; i < curve.beziers.length; i++) {
+        const [start, cp1, cp2, end] = curve.beziers[i];
+        d += ` C ${cp1.join(' ')}, ${cp2.join(' ')}, ${end.join(' ')}`;
       }
+
+      if (curve.isClosed) {
+        d += ' Z';
+      }
+
+      const lineStyle = curve.lineStyle || 'classic';
+
+      // Update shadow path
+      if (shadowEl) {
+        shadowEl.setAttribute('d', d);
+        shadowEl.style.display = lineStyle === 'classic' ? 'block' : 'none';
+      }
+
+      // Update glow bloom path
+      if (glowPath) {
+        glowPath.setAttribute('d', d);
+        glowPath.setAttribute('stroke', curve.color);
+        glowPath.style.display = lineStyle !== 'classic' ? 'block' : 'none';
+        glowPath.style.filter = 'drop-shadow(0 0 8px ' + curve.color + ')';
+      }
+
+      // Update foreground splines
+      if (splineGroup) {
+        const paths = splineGroup.querySelectorAll('path');
+        if (lineStyle === 'lightsaber' && paths.length >= 2) {
+          paths[0].setAttribute('d', d);
+          paths[0].setAttribute('stroke', curve.color);
+          paths[1].setAttribute('d', d);
+        } else if (paths.length > 0) {
+          paths[0].setAttribute('d', d);
+          paths[0].setAttribute('stroke', curve.color);
+        }
+      }
+
+      // Remove existing arrowheads before re-attaching
+      if (curve._arrowFg) { curve._arrowFg.remove(); curve._arrowFg = null; }
+      if (curve._arrowSh) { curve._arrowSh.remove(); curve._arrowSh = null; }
+      if (curve._arrowFgTail) { curve._arrowFgTail.remove(); curve._arrowFgTail = null; }
+      if (curve._arrowShTail) { curve._arrowShTail.remove(); curve._arrowShTail = null; }
+
+      if (!curve.isClosed && curve.beziers.length > 0) {
+        // 1. Tip Arrowhead
+        if (curve.arrowEnd === 'tip' || curve.arrowEnd === 'both') {
+          const p0 = curve.beziers[0][0];
+          const p1 = curve.beziers[0][1];
+          const dist = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) || 1;
+          const arrow = this.renderConcaveArrowhead(p0, [(p1[0] - p0[0]) / dist, (p1[1] - p0[1]) / dist], curve.color, 2.0);
+          curve._arrowSh = arrow.shadow;
+          curve._arrowFg = arrow.foreground;
+          this.component.shadowLayer.appendChild(arrow.shadow);
+          this.component.strokeLayer.appendChild(arrow.foreground);
+        }
+
+        // 2. Tail Arrowhead
+        if (curve.arrowEnd === 'tail' || curve.arrowEnd === 'both') {
+          const lastSeg = curve.beziers[curve.beziers.length - 1];
+          const p2 = lastSeg[2];
+          const p3 = lastSeg[3];
+          const dist = Math.hypot(p3[0] - p2[0], p3[1] - p2[1]) || 1;
+          const arrow = this.renderConcaveArrowhead(p3, [(p2[0] - p3[0]) / dist, (p2[1] - p3[1]) / dist], curve.color, 2.0);
+          curve._arrowShTail = arrow.shadow;
+          curve._arrowFgTail = arrow.foreground;
+          this.component.shadowLayer.appendChild(arrow.shadow);
+          this.component.strokeLayer.appendChild(arrow.foreground);
+        }
+      }
+
+      this.component.renderStage();
     }
-
-    this.component.renderStage();
-  }
-
   renderConcaveArrowhead(p0, exitTangent, color, shadowOffset = 2.0) {
     const ux = exitTangent[0];
     const uy = exitTangent[1];

@@ -158,255 +158,281 @@ class QuoraTextManager {
     textBadgesLayer.appendChild(g);
   }
 
-  promptInlineTailText(curveRecord, anchorPt, forcedEdge = null) {
-    const existing = document.getElementById('qa-inline-tail-editor');
-    if (existing) existing.remove();
-    const existingDock = document.getElementById('qa-callout-editor-dock');
-    if (existingDock) existingDock.remove();
+  promptInlineTailText(curveRecord, anchorPt, forcedEdge = null, initialText = '') {
+      const existing = document.getElementById('qa-inline-tail-editor');
+      if (existing) existing.remove();
+      const existingDock = document.getElementById('qa-callout-editor-dock');
+      if (existingDock) existingDock.remove();
 
-    let exitVec = [1, 0];
-    if (curveRecord && curveRecord.beziers?.length > 0) {
-      const isAtTail = (curveRecord.textEnd !== 'tip');
-      const termSeg = isAtTail ? curveRecord.beziers[curveRecord.beziers.length - 1] : curveRecord.beziers[0];
-      exitVec = isAtTail
-        ? [termSeg[3][0] - termSeg[2][0], termSeg[3][1] - termSeg[2][1]]
-        : [termSeg[0][0] - termSeg[1][0], termSeg[0][1] - termSeg[1][1]];
-    }
-
-    const width = curveRecord?.boxWidth || 270;
-    const estHeight = 44;
-
-    const effectiveEdge = curveRecord?.manualEdge ? curveRecord.connectEdge : (forcedEdge || null);
-    let placement = this.computeTextPlacement(anchorPt, exitVec, width, estHeight, effectiveEdge);
-    let connectEdge = placement.connectEdge;
-
-    let fontF = curveRecord?.fontFamily || this.component.stageState.fontFamily;
-    let fontS = curveRecord?.fontSize || this.component.stageState.fontSize;
-    let boxStyle = curveRecord?.boxStyle || 'bracket';
-    const color = curveRecord?.color || this.component.stageState.currentColor;
-
-    // Textarea input container: positioned directly at the callout location
-    const editorWrap = makeElement('div', {
-      id: 'qa-inline-tail-editor',
-      style: {
-        position: 'absolute',
-        top: `${placement.posY}px`,
-        left: `${placement.posX}px`,
-        width: `${width}px`,
-        zIndex: '70',
-        overflow: 'visible'
+      let exitVec = [1, 0];
+      if (curveRecord && curveRecord.beziers?.length > 0) {
+        const isAtTail = (curveRecord.textEnd !== 'tip');
+        const termSeg = isAtTail ? curveRecord.beziers[curveRecord.beziers.length - 1] : curveRecord.beziers[0];
+        exitVec = isAtTail
+          ? [termSeg[3][0] - termSeg[2][0], termSeg[3][1] - termSeg[2][1]]
+          : [termSeg[0][0] - termSeg[1][0], termSeg[0][1] - termSeg[1][1]];
       }
-    });
 
-    const textarea = makeElement('textarea', {
-      placeholder: 'Type callout text...',
-      value: curveRecord?.text || '',
-      rows: 1,
-      style: {
-        width: '100%', minHeight: '36px', maxHeight: '180px', padding: '8px 12px',
-        fontSize: `${fontS}px`, fontFamily: fontF, fontWeight: 'bold', lineHeight: '1.25',
-        color: color, background: boxStyle === 'box' ? 'rgba(15, 23, 42, 0.98)' : 'rgba(0, 0, 0, 0.88)',
-        border: boxStyle === 'box' ? `2px solid ${color}` : 'none',
-        borderRadius: boxStyle === 'box' ? '6px' : '0', outline: 'none', resize: 'none',
-        overflow: 'hidden', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-        boxSizing: 'border-box', textAlign: placement.textAlign,
-        boxShadow: '0 8px 24px rgba(0,0,0,0.85)',
-        scrollbarWidth: 'none', msOverflowStyle: 'none'
-      }
-    });
+      const width = curveRecord?.boxWidth || 270;
+      const estHeight = 44;
 
-    const applyBracketStyles = () => {
-      textarea.style.border = boxStyle === 'box' ? `2px solid ${color}` : 'none';
-      textarea.style.borderTop = '';
-      textarea.style.borderBottom = '';
-      textarea.style.borderLeft = '';
-      textarea.style.borderRight = '';
+      const effectiveEdge = curveRecord?.manualEdge ? curveRecord.connectEdge : (forcedEdge || null);
+      let placement = this.computeTextPlacement(anchorPt, exitVec, width, estHeight, effectiveEdge);
+      let connectEdge = placement.connectEdge;
 
-      if (boxStyle === 'bracket') {
-        if (connectEdge === 'left') {
-          textarea.style.borderLeft = `2.5px solid ${color}`;
-          textarea.style.borderBottom = `2.5px solid ${color}`;
-        } else if (connectEdge === 'right') {
-          textarea.style.borderRight = `2.5px solid ${color}`;
-          textarea.style.borderBottom = `2.5px solid ${color}`;
-        } else if (connectEdge === 'bottom') {
-          textarea.style.borderBottom = `2.5px solid ${color}`;
-          textarea.style.borderLeft = `2.5px solid ${color}`;
-        } else if (connectEdge === 'top') {
-          textarea.style.borderTop = `2.5px solid ${color}`;
-          textarea.style.borderLeft = `2.5px solid ${color}`;
+      let fontF = curveRecord?.fontFamily || this.component.stageState.fontFamily;
+      let fontS = curveRecord?.fontSize || this.component.stageState.fontSize;
+      let boxStyle = curveRecord?.boxStyle || 'bracket';
+      let boxOpacity = curveRecord?.boxOpacity || 0.75;
+      const color = curveRecord?.color || this.component.stageState.currentColor;
+
+      // Editor container placed directly at the callout location
+      const editorWrap = makeElement('div', {
+        id: 'qa-inline-tail-editor',
+        style: {
+          position: 'absolute',
+          top: `${placement.posY}px`,
+          left: `${placement.posX}px`,
+          width: `${width}px`,
+          zIndex: '70',
+          overflow: 'visible'
         }
-      }
-    };
-    applyBracketStyles();
+      });
 
-    // Detached Floating Controls Deck: floating cleanly 24px away from the callout bracket
-    const controlsDock = makeElement('div', {
-      id: 'qa-callout-editor-dock',
-      style: {
-        position: 'absolute',
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '8px',
-        background: 'rgba(11, 17, 32, 0.97)',
-        border: '1.5px solid rgba(0, 242, 254, 0.5)',
-        borderRadius: '24px',
-        padding: '5px 12px',
-        fontSize: '10.5px',
-        boxShadow: '0 14px 36px rgba(0, 0, 0, 0.9), 0 0 16px rgba(0, 242, 254, 0.25)',
-        zIndex: '85',
-        backdropFilter: 'blur(14px)',
-        userSelect: 'none'
-      }
-    });
+      const initialVal = (initialText !== undefined && initialText !== null && initialText !== '')
+        ? initialText
+        : (curveRecord?.text || '');
 
-    const updateDockPosition = () => {
-      const curH = textarea.offsetHeight || estHeight;
-      placement = this.computeTextPlacement(anchorPt, exitVec, width, curH, connectEdge);
-      editorWrap.style.left = `${placement.posX}px`;
-      editorWrap.style.top = `${placement.posY}px`;
+      const textarea = makeElement('textarea', {
+        placeholder: 'Type callout text...',
+        value: initialVal,
+        rows: 1,
+        style: {
+          width: '100%', minHeight: '36px', maxHeight: '180px', padding: '8px 12px',
+          fontSize: `${fontS}px`, fontFamily: fontF, fontWeight: 'bold', lineHeight: '1.25',
+          color: color, background: `rgba(9, 13, 22, ${boxOpacity})`,
+          border: boxStyle === 'box' ? `2px solid ${color}` : (boxStyle === 'pill' ? `2px solid ${color}` : 'none'),
+          borderRadius: boxStyle === 'pill' ? '24px' : (boxStyle === 'box' ? '8px' : '0'),
+          outline: 'none', resize: 'none',
+          overflow: 'hidden', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          boxSizing: 'border-box', textAlign: placement.textAlign,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.85)',
+          scrollbarWidth: 'none', msOverflowStyle: 'none'
+        }
+      });
 
-      // Position detached dock 24px ABOVE the callout box (or below if near top of canvas)
-      const floatAbove = (placement.posY > 64);
-      const dockTop = floatAbove ? (placement.posY - 44) : (placement.posY + curH + 24);
-      controlsDock.style.top = `${dockTop}px`;
-      controlsDock.style.left = `${placement.posX}px`;
-    };
+      const applyFrameStyles = () => {
+        textarea.style.border = 'none';
+        textarea.style.borderRadius = boxStyle === 'pill' ? '24px' : (boxStyle === 'box' ? '8px' : '0');
+        textarea.style.background = `rgba(9, 13, 22, ${boxOpacity})`;
 
-    const autoGrow = () => {
-      textarea.style.height = 'auto';
-      const curH = Math.max(36, textarea.scrollHeight);
-      textarea.style.height = `${curH}px`;
-      updateDockPosition();
-    };
+        if (boxStyle === 'box' || boxStyle === 'pill') {
+          textarea.style.border = `2px solid ${color}`;
+        } else if (boxStyle === 'bracket') {
+          if (connectEdge === 'left') {
+            textarea.style.borderLeft = `2.5px solid ${color}`;
+            textarea.style.borderBottom = `2.5px solid ${color}`;
+          } else if (connectEdge === 'right') {
+            textarea.style.borderRight = `2.5px solid ${color}`;
+            textarea.style.borderBottom = `2.5px solid ${color}`;
+          } else if (connectEdge === 'bottom') {
+            textarea.style.borderBottom = `2.5px solid ${color}`;
+            textarea.style.borderLeft = `2.5px solid ${color}`;
+          } else if (connectEdge === 'top') {
+            textarea.style.borderTop = `2.5px solid ${color}`;
+            textarea.style.borderLeft = `2.5px solid ${color}`;
+          }
+        }
+      };
+      applyFrameStyles();
 
-    const edgeCycleBtn = makeElement('button', {
-      className: 'dr-nav-btn',
-      style: { padding: '2px 8px', fontSize: '10px', color: '#00f2fe', borderColor: 'rgba(0, 242, 254, 0.4)' },
-      title: 'Cycle Connection Edge: Left -> Right -> Bottom -> Top -> Auto',
-      onclick: (e) => {
-        e.stopPropagation();
-        const cycle = ['left', 'right', 'bottom', 'top', 'auto'];
-        const nextEdge = cycle[(cycle.indexOf(connectEdge) + 1) % cycle.length];
-        connectEdge = nextEdge;
-        const isManual = (nextEdge !== 'auto');
+      // Floating Controls Deck positioned comfortably 28px away
+      const controlsDock = makeElement('div', {
+        id: 'qa-callout-editor-dock',
+        style: {
+          position: 'absolute',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '8px',
+          background: 'rgba(11, 17, 32, 0.98)',
+          border: '1.5px solid rgba(0, 242, 254, 0.5)',
+          borderRadius: '24px',
+          padding: '5px 14px',
+          fontSize: '10.5px',
+          boxShadow: '0 14px 36px rgba(0, 0, 0, 0.9), 0 0 16px rgba(0, 242, 254, 0.25)',
+          zIndex: '85',
+          backdropFilter: 'blur(14px)',
+          userSelect: 'none'
+        }
+      });
+
+      const updateDockPosition = () => {
+        const curH = textarea.offsetHeight || estHeight;
+        placement = this.computeTextPlacement(anchorPt, exitVec, width, curH, connectEdge);
+        editorWrap.style.left = `${placement.posX}px`;
+        editorWrap.style.top = `${placement.posY}px`;
+
+        const floatAbove = (placement.posY > 64);
+        const dockTop = floatAbove ? (placement.posY - 44) : (placement.posY + curH + 28);
+        controlsDock.style.top = `${dockTop}px`;
+        controlsDock.style.left = `${placement.posX}px`;
+      };
+
+      const autoGrow = () => {
+        textarea.style.height = 'auto';
+        const curH = Math.max(36, textarea.scrollHeight);
+        textarea.style.height = `${curH}px`;
+        updateDockPosition();
+      };
+
+      const edgeCycleBtn = makeElement('button', {
+        className: 'dr-nav-btn',
+        style: { padding: '2px 8px', fontSize: '10px', color: '#00f2fe', borderColor: 'rgba(0, 242, 254, 0.4)' },
+        title: 'Cycle Connection Edge: Left -> Right -> Bottom -> Top -> Auto',
+        onclick: (e) => {
+          e.stopPropagation();
+          const cycle = ['left', 'right', 'bottom', 'top', 'auto'];
+          const nextEdge = cycle[(cycle.indexOf(connectEdge) + 1) % cycle.length];
+          connectEdge = nextEdge;
+          const isManual = (nextEdge !== 'auto');
+          if (curveRecord) {
+            curveRecord.connectEdge = nextEdge;
+            curveRecord.manualEdge = isManual;
+          }
+          placement = this.computeTextPlacement(anchorPt, exitVec, width, textarea.offsetHeight || estHeight, nextEdge === 'auto' ? null : nextEdge);
+          connectEdge = placement.connectEdge;
+          textarea.style.textAlign = placement.textAlign;
+          applyFrameStyles();
+          autoGrow();
+          edgeCycleBtn.textContent = `Dock: ${connectEdge.toUpperCase()}${isManual ? ' 🔒' : ''}`;
+          if (curveRecord) this.component.renderStage();
+        }
+      }, `Dock: ${connectEdge.toUpperCase()}${curveRecord?.manualEdge ? ' 🔒' : ''}`);
+
+      const styleBtn = makeElement('button', {
+        className: 'dr-nav-btn primary',
+        style: { padding: '2px 6px', fontSize: '10px' },
+        title: 'Cycle Frame: 2-Side Bracket ➔ Rounded Box ➔ Pill ➔ Plain',
+        onclick: (e) => {
+          e.stopPropagation();
+          const styles = ['bracket', 'box', 'pill', 'none'];
+          boxStyle = styles[(styles.indexOf(boxStyle) + 1) % styles.length];
+          if (curveRecord) curveRecord.boxStyle = boxStyle;
+          styleBtn.textContent = boxStyle === 'bracket' ? '◺ 2-Side' : (boxStyle === 'box' ? '◻ Box' : (boxStyle === 'pill' ? '💊 Pill' : 'Plain'));
+          applyFrameStyles();
+          if (curveRecord) this.component.renderStage();
+        }
+      }, boxStyle === 'bracket' ? '◺ 2-Side' : (boxStyle === 'box' ? '◻ Box' : (boxStyle === 'pill' ? '💊 Pill' : 'Plain')));
+
+      const lineStyleBtn = makeElement('button', {
+        className: 'dr-nav-btn',
+        style: { padding: '2px 6px', fontSize: '10px', color: '#ffd700', borderColor: 'rgba(255, 215, 0, 0.45)' },
+        title: 'Toggle Line Style: Classic Shadow ➔ Lightsaber Glow ➔ Neon Halo',
+        onclick: (e) => {
+          e.stopPropagation();
+          const styles = ['classic', 'lightsaber', 'neon'];
+          const curStyle = curveRecord?.lineStyle || this.component.stageState.lineStyle || 'classic';
+          const nextStyle = styles[(styles.indexOf(curStyle) + 1) % styles.length];
+          if (curveRecord) curveRecord.lineStyle = nextStyle;
+          this.component.stageState.lineStyle = nextStyle;
+          lineStyleBtn.textContent = nextStyle === 'lightsaber' ? '⚔️ Lightsaber' : (nextStyle === 'neon' ? '💡 Neon' : '🖋️ Classic');
+          this.component.commitCurveGeometryUpdate();
+        }
+      }, (curveRecord?.lineStyle === 'lightsaber') ? '⚔️ Lightsaber' : ((curveRecord?.lineStyle === 'neon') ? '💡 Neon' : '🖋️ Classic'));
+
+      const fontSelect = makeElement('select', {
+        style: {
+          background: '#0d1117', color: '#00f2fe', border: '1px solid #30363d',
+          borderRadius: '4px', padding: '2px 4px', fontSize: '9.5px', fontFamily: 'monospace', outline: 'none'
+        },
+        onchange: (e) => {
+          fontF = e.target.value;
+          this.component.ensureFontLoaded(fontF);
+          if (curveRecord) curveRecord.fontFamily = fontF;
+          textarea.style.fontFamily = fontF;
+          autoGrow();
+          if (curveRecord) this.component.renderStage();
+        }
+      }, [
+        makeElement('option', { value: "'Architects Daughter', cursive, sans-serif", selected: fontF.includes('Architects') }, "Architect"),
+        makeElement('option', { value: "monospace", selected: fontF === 'monospace' }, "Mono"),
+        makeElement('option', { value: "'Plus Jakarta Sans', system-ui, sans-serif", selected: fontF.includes('Jakarta') }, "Sans")
+      ]);
+
+      let committed = false;
+      let onOutClick = null;
+
+      const commit = () => {
+        if (committed) return;
+        committed = true;
+        if (onOutClick) window.removeEventListener('mousedown', onOutClick);
+
+        const textVal = textarea.value.trim();
         if (curveRecord) {
-          curveRecord.connectEdge = nextEdge;
-          curveRecord.manualEdge = isManual;
+          curveRecord.text = textVal;
+          curveRecord.connectEdge = connectEdge;
+          curveRecord.fontSize = fontS;
+          curveRecord.fontFamily = fontF;
+          curveRecord.boxStyle = boxStyle;
+          curveRecord.boxOpacity = boxOpacity;
+        } else if (textVal) {
+          this.component.stageState.annotations.push({
+            id: 'text_' + Date.now(),
+            type: 'text_badge',
+            x: anchorPt[0],
+            y: anchorPt[1],
+            text: textVal,
+            fontSize: fontS,
+            fontFamily: fontF,
+            boxStyle: boxStyle,
+            boxOpacity: boxOpacity,
+            connectEdge: connectEdge,
+            color: color
+          });
         }
-        placement = this.computeTextPlacement(anchorPt, exitVec, width, textarea.offsetHeight || estHeight, nextEdge === 'auto' ? null : nextEdge);
-        connectEdge = placement.connectEdge;
-        textarea.style.textAlign = placement.textAlign;
-        applyBracketStyles();
+
+        editorWrap.remove();
+        controlsDock.remove();
+        this.component.renderStage();
+      };
+
+      const okBtn = makeElement('button', {
+        className: 'dr-nav-btn primary',
+        style: { padding: '2px 10px', fontSize: '10px', background: '#238636', borderColor: '#2ea043' },
+        onclick: (e) => { e.stopPropagation(); commit(); }
+      }, '✓ Done');
+
+      controlsDock.append(
+        makeElement('span', { style: { color: '#00f2fe', fontWeight: 'bold', fontSize: '11px', marginRight: '2px' } }, '✎ Callout Edit:'),
+        edgeCycleBtn, styleBtn, lineStyleBtn, fontSelect, okBtn
+      );
+
+      editorWrap.appendChild(textarea);
+      this.component.stageBox.appendChild(editorWrap);
+      this.component.stageBox.appendChild(controlsDock);
+
+      textarea.addEventListener('input', autoGrow);
+      textarea.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey) {
+          e.preventDefault(); commit();
+        } else if (e.key === 'Escape') {
+          e.preventDefault(); textarea.value = ''; commit();
+        }
+      });
+
+      onOutClick = (ev) => {
+        if (!editorWrap.contains(ev.target) && !controlsDock.contains(ev.target)) commit();
+      };
+
+      setTimeout(() => {
+        textarea.focus();
+        if (textarea.value.length > 0) {
+          textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+        }
         autoGrow();
-        edgeCycleBtn.textContent = `Dock: ${connectEdge.toUpperCase()}${isManual ? ' 🔒' : ''}`;
-        if (curveRecord) this.component.renderStage();
-      }
-    }, `Dock: ${connectEdge.toUpperCase()}${curveRecord?.manualEdge ? ' 🔒' : ''}`);
-
-    const styleBtn = makeElement('button', {
-      className: 'dr-nav-btn primary',
-      style: { padding: '2px 6px', fontSize: '10px' },
-      title: 'Cycle Frame: 2-Side Bracket ➔ 4-Side Box ➔ Plain',
-      onclick: (e) => {
-        e.stopPropagation();
-        const styles = ['bracket', 'box', 'none'];
-        boxStyle = styles[(styles.indexOf(boxStyle) + 1) % styles.length];
-        if (curveRecord) curveRecord.boxStyle = boxStyle;
-        styleBtn.textContent = boxStyle === 'bracket' ? '◺ 2-Side' : (boxStyle === 'box' ? '◻ Box' : 'Plain');
-        applyBracketStyles();
-        if (curveRecord) this.component.renderStage();
-      }
-    }, boxStyle === 'bracket' ? '◺ 2-Side' : (boxStyle === 'box' ? '◻ Box' : 'Plain'));
-
-    const fontSelect = makeElement('select', {
-      style: {
-        background: '#0d1117', color: '#00f2fe', border: '1px solid #30363d',
-        borderRadius: '4px', padding: '2px 4px', fontSize: '9.5px', fontFamily: 'monospace', outline: 'none'
-      },
-      onchange: (e) => {
-        fontF = e.target.value;
-        this.component.ensureFontLoaded(fontF);
-        if (curveRecord) curveRecord.fontFamily = fontF;
-        textarea.style.fontFamily = fontF;
-        autoGrow();
-        if (curveRecord) this.component.renderStage();
-      }
-    }, [
-      makeElement('option', { value: "'Architects Daughter', cursive, sans-serif", selected: fontF.includes('Architects') }, "Architect"),
-      makeElement('option', { value: "monospace", selected: fontF === 'monospace' }, "Mono"),
-      makeElement('option', { value: "'Plus Jakarta Sans', system-ui, sans-serif", selected: fontF.includes('Jakarta') }, "Sans")
-    ]);
-
-    let committed = false;
-    let onOutClick = null;
-
-    const commit = () => {
-      if (committed) return;
-      committed = true;
-      if (onOutClick) window.removeEventListener('mousedown', onOutClick);
-
-      const textVal = textarea.value.trim();
-      if (curveRecord) {
-        curveRecord.text = textVal;
-        curveRecord.connectEdge = connectEdge;
-        curveRecord.fontSize = fontS;
-        curveRecord.fontFamily = fontF;
-        curveRecord.boxStyle = boxStyle;
-      } else if (textVal) {
-        this.component.stageState.annotations.push({
-          id: 'text_' + Date.now(),
-          type: 'text_badge',
-          x: anchorPt[0],
-          y: anchorPt[1],
-          text: textVal,
-          fontSize: fontS,
-          fontFamily: fontF,
-          boxStyle: boxStyle,
-          connectEdge: connectEdge,
-          color: color
-        });
-      }
-
-      editorWrap.remove();
-      controlsDock.remove();
-      this.component.renderStage();
-    };
-
-    const okBtn = makeElement('button', {
-      className: 'dr-nav-btn primary',
-      style: { padding: '2px 10px', fontSize: '10px', background: '#238636', borderColor: '#2ea043' },
-      onclick: (e) => { e.stopPropagation(); commit(); }
-    }, '✓ Done');
-
-    controlsDock.append(
-      makeElement('span', { style: { color: '#00f2fe', fontWeight: 'bold', fontSize: '11px', marginRight: '2px' } }, '✎ Callout Edit:'),
-      edgeCycleBtn, styleBtn, fontSelect, okBtn
-    );
-
-    editorWrap.appendChild(textarea);
-    this.component.stageBox.appendChild(editorWrap);
-    this.component.stageBox.appendChild(controlsDock);
-
-    textarea.addEventListener('input', autoGrow);
-    textarea.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey) {
-        e.preventDefault(); commit();
-      } else if (e.key === 'Escape') {
-        e.preventDefault(); textarea.value = ''; commit();
-      }
-    });
-
-    onOutClick = (ev) => {
-      if (!editorWrap.contains(ev.target) && !controlsDock.contains(ev.target)) commit();
-    };
-
-    setTimeout(() => {
-      textarea.focus();
-      autoGrow();
-      window.addEventListener('mousedown', onOutClick);
-    }, 40);
-  }
+        window.addEventListener('mousedown', onOutClick);
+      }, 40);
+    }
   wrapTextLines(text, maxCharsPerLine) {
       if (!text) return [];
       const paragraphs = String(text).split('\n');

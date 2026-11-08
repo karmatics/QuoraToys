@@ -187,7 +187,7 @@ class QuoraInSituHUD {
 
       const activeFilter = this._activeCategory || 'all';
 
-      // 1. Category Filter Tab Bar
+      // Category Filter Tab Bar
       const filterBar = makeElement('div', {
         style: {
           display: 'flex', gap: '3px', marginBottom: '6px', paddingBottom: '5px',
@@ -197,8 +197,9 @@ class QuoraInSituHUD {
 
       const categories = [
         { id: 'all', label: 'All' },
+        { id: 'rapid', label: '⚡ Rapid Keys' },
         { id: 'knot', label: 'Knot & Tangent' },
-        { id: 'curve', label: 'Curve & Arrow' },
+        { id: 'curve', label: 'Splines & Arrows' },
         { id: 'text', label: 'Text & Frame' }
       ];
 
@@ -223,15 +224,18 @@ class QuoraInSituHUD {
 
       this._pillsContainer.appendChild(filterBar);
 
-      // 2. Command Definitions with Contextual Categories
+      // Command Definitions with Direct Accelerator Hotkeys
       const commands = [
+        { key: 'Type', label: 'Instant Callout Typing', category: 'rapid', desc: 'Type any letter or number immediately after drawing an arrow to attach and edit label text', action: 'edit_text' },
+        { key: '1–6', label: 'Quick Color Palette', category: 'rapid', desc: '1=Cyan, 2=Green, 3=Gold, 4=Coral, 5=Purple, 6=White', action: 'palette_select' },
+        { key: 'Click-Drag', label: 'Direct Curve Reshaping', category: 'rapid', desc: 'Grab any curve segment directly with the mouse to bend it through the cursor', action: 'direct_bend' },
         { key: 'H (Hold)', label: 'Meta Vector Help', category: 'curve', desc: 'Hold H anytime to see on-screen arrowheads and bracket callouts explaining all controls', action: 'meta_help' },
         { key: 'Ctrl (Hold)', label: 'Clutch / Rest Hand', category: 'curve', desc: 'Freeze curve growth to tune drawstring radius R, or release mouse to rest hand without breaking curve', action: 'clutch_rest' },
         { key: 'Space', label: 'Draw ↔ Tweak Mode', category: 'curve', desc: 'Toggle between drawing new curves and selecting/tweaking existing knots or difference lenses', action: 'toggle_tool' },
         { key: 'Tab', label: 'Next Knot on Curve', category: 'knot', desc: 'Advance active knot selection forward along the curve (Shift+Tab moves backward)', action: 'next_knot' },
         { key: 'Arrows', label: 'Nudge Knot (1px)', category: 'knot', desc: 'Use keyboard arrow keys to nudge the selected knot by 1px (or 10px with Shift)', action: 'nudge_knot' },
-        { key: 'A', label: 'Toggle Arrowhead', category: 'curve', desc: 'Add or remove the concave arrowhead on the active curve terminal or upcoming strokes', action: 'toggle_arrow' },
-        { key: 'T', label: 'Attach / Edit Text', category: 'text', desc: 'Focus the text editor at the curve terminal to type or update callout text immediately', action: 'edit_text' },
+        { key: 'A', label: 'Cycle Arrowhead', category: 'curve', desc: 'Cycles tip arrow ➔ tail arrow ➔ both ends ➔ none', action: 'toggle_arrow' },
+        { key: 'T', label: 'Attach / Edit Text', category: 'text', desc: 'Focus the text editor at the curve terminal or shape edge to type callout text immediately', action: 'edit_text' },
         { key: 'X', label: 'Swap Terminals', category: 'curve', desc: 'Instantly reverse endpoints: move arrowhead to opposite end and flip the text bracket', action: 'swap_ends' },
         { key: 'Click (Dot)', label: 'Midpoint Knot Split', category: 'knot', desc: 'Clicking the stationary midpoint dot on any segment bisects it at t=0.5 with a new knot', action: 'split_point' },
         { key: '➕ / +', label: 'Add Knot to Segment', category: 'knot', desc: 'Insert an on-curve knot on the active segment without altering overall curve shape', action: 'add_point' },
@@ -255,7 +259,6 @@ class QuoraInSituHUD {
         if (activeFilter !== 'all' && cmd.category !== activeFilter) return;
 
         const isKnotRelevant = cmd.category === 'knot' && hasKnot;
-        const isEntityRelevant = cmd.action === 'delete_curve' && (hasKnot || hasImage || curve);
 
         const card = makeElement('div', {
           className: 'qa-keyin-row',
@@ -309,8 +312,7 @@ class QuoraInSituHUD {
       });
 
       this.component.updateDynamicKeyInHUD();
-  }
-
+    }
   renderTransientCursorDial(controlsLayer, centerPt, curveRecord, callbacks = {}) {
       let dial = document.getElementById('qa-transient-cursor-dial');
       if (!dial) {

@@ -458,19 +458,18 @@ class QuoraArchitectureContent {
 
   static sidebar_roadmap_steps() {
     return [
-      "Decoupled Delegate Architecture:\n" +
-      "• QuoraStrokeManager: Pure spline mathematics, Schneider least-squares conversion, C^1 continuity enforcement, and concave arrowhead geometry.\n" +
-      "• QuoraGestureMachine: Touchdown deadzone (32px), drawstring tether dampening, Ctrl clutch hand-rest, and 1-click hover-knot grab.\n" +
-      "• QuoraPaintManager: Blockout masks with dynamically tuned feGaussianBlur SVG filters for clean image inpainting.\n" +
-      "• QuoraExportManager: Decoupled retina composite rendering and platform presets (Native 2x, Quora 16:9, Substack 21:9, Square 1:1).\n" +
-      "• QuoraKnotManager: Tangency ray alignment, symmetric collinear interior tangents, and point-drag constraint loosening.\n" +
-      "• QuoraTextManager: Detached floating callout editor dock and 2-sided architectural bracket placement.\n" +
-      "• QuoraImageManager: Multi-plate image management, proportional scaling, and z-order controls.\n" +
+      "Core Ergonomic Mandate:\n" +
+      "• Fast, intuitive visual studio: Zero Photoshop/Illustrator bloat.\n" +
+      "• Wide Ghost Reference Curve: Dragging any knot renders a wide 12px dashed ghost showing the prior curve state; hitting Escape or Right-Click cancels and reverts cleanly.\n" +
+      "• Endpoint Hover Tangency Ray: Hovering head or tail knots reveals the tangent ray immediately with a 650ms grace corridor so you can move your cursor onto the diamond handle.\n" +
+      "• Strict Midpoint Suppression: Never shows virtual divider points while moving, dragging, or hovering non-split areas. Shows at most one candidate dot on the segment nearest the cursor.\n" +
+      "• Web Image Drag Ingestion: Supports direct dragging of images from other browser tabs/windows (parsing text/uri-list, URL, and HTML img tags).\n" +
+      "• Real-Time Image Alpha Eraser: Erases pixels on image plates directly to transparent alpha via HTML5 canvas destination-out.\n" +
+      "• Automated Diagnostic Test Suite: 1-click self-test verifying C^1 continuity, ghost snapshot reversion, magnetic snap, and alpha eraser canvas compositing.\n" +
       "\n" +
-      "Documented Behavior & Future Potential:\n" +
-      "• Point-Driven Editing: Grabbing any knot releases angular constraints on itself and adjacent neighbors, allowing points to steer curves smoothly without kinks.\n" +
-      "• Non-Intrusive Callouts: Floating toolbars sit 24px clear of text boxes, and resize handles only appear on hover.\n" +
-      "• Diagnostic Hooks: Each manager exposes clean, inspectable state structures for future diagnostic overlays and visual quality audits."
+      "Refinement Focus:\n" +
+      "• 1. Variable width visual stroke previews.\n" +
+      "• 2. Interactive SVG optical difference detection diagnostics."
     ];
   }
 }

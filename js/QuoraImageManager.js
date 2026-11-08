@@ -357,6 +357,229 @@ class QuoraImageManager {
       this.component.renderStage();
       this.component.showKnotToast(`Image Opacity: ${Math.round(plate.opacity * 100)}%`);
   }
+
+  burnCurvesToTransparency(stageState, targetCurves = null) {
+    const plate = stageState.activeImage || stageState.placedImages[0];
+    if (!plate || !plate.img) return false;
+
+    const curvesToBurn = targetCurves || stageState.annotations.filter(a => a.type === 'curve' || a.type === 'paint');
+    if (curvesToBurn.length === 0) {
+      this.component.showKnotToast('No curves or masks selected to burn');
+      return false;
+    }
+
+    // Create an offscreen canvas at the native image resolution
+    const canvas = document.createElement('canvas');
+    canvas.width = plate.img.naturalWidth || plate.img.width;
+    canvas.height = plate.img.naturalHeight || plate.img.height;
+    const ctx = canvas.getContext('2d');
+
+    // Draw base image
+    ctx.drawImage(plate.img, 0, 0);
+
+    // Set composite mode to erase pixels directly from the image plate
+    ctx.globalCompositeOperation = 'destination-out';
+
+    const scaleX = canvas.width / plate.width;
+    const scaleY = canvas.height / plate.height;
+
+    curvesToBurn.forEach(ann => {
+      if (ann.type === 'curve' && ann.beziers) {
+        ctx.lineWidth = (ann.strokeWidth || 3.2) * scaleX;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ann.beziers.forEach((seg, idx) => {
+          const p0x = (seg[0][0] - plate.x) * scaleX;
+          const p0y = (seg[0][1] - plate.y) * scaleY;
+          const cp1x = (seg[1][0] - plate.x) * scaleX;
+          const cp1y = (seg[1][1] - plate.y) * scaleY;
+          const cp2x = (seg[2][0] - plate.x) * scaleX;
+          const cp2y = (seg[2][1] - plate.y) * scaleY;
+          const p1x = (seg[3][0] - plate.x) * scaleX;
+          const p1y = (seg[3][1] - plate.y) * scaleY;
+
+          if (idx === 0) ctx.moveTo(p0x, p0y);
+          ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p1x, p1y);
+        });
+        ctx.stroke();
+      } else if (ann.type === 'paint' && ann.bounds) {
+        const b = ann.bounds;
+        const bx = (b.x - plate.x) * scaleX;
+        const by = (b.y - plate.y) * scaleY;
+        const bw = b.w * scaleX;
+        const bh = b.h * scaleY;
+        ctx.fillRect(bx, by, bw, bh);
+      }
+    });
+
+    // Re-encode modified image with burned transparency
+    const updatedImg = new Image();
+    updatedImg.onload = () => {
+      plate.img = updatedImg;
+      this.component.renderStage();
+      this.component.showKnotToast('🔥 Burned transparency mask into image plate');
+    };
+    updatedImg.src = canvas.toDataURL('image/png');
+    return true;
+  }
+
+  async promptAddImageWorkflow(stageState, localFileInput) {
+    let clipboardBlob = null;
+    let clipboardImg = null;
+
+    // 1. Inspect clipboard for valid image content
+    try {
+      if (navigator.clipboard && navigator.clipboard.read) {
+        const items = await navigator.clipboard.read();
+        for (const item of items) {
+          for (const type of item.types) {
+            if (type.startsWith('image/')) {
+              clipboardBlob = await item.getType(type);
+              break;
+            }
+          }
+          if (clipboardBlob) break;
+        }
+      }
+    } catch (err) {
+      // Clipboard permission denied or empty
+    }
+
+    // 2. If no clipboard image is available, invoke file input directly
+    if (!clipboardBlob) {
+      if (localFileInput) localFileInput.click();
+      return;
+    }
+
+    // 3. Load clipboard image to display preview in modal
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      clipboardImg = new Image();
+      clipboardImg.onload = () => {
+        this._showAddImageAmbiguityDialog(stageState, clipboardImg, localFileInput);
+      };
+      clipboardImg.src = ev.target.result;
+    };
+    reader.readAsDataURL(clipboardBlob);
+  }
+
+  _showAddImageAmbiguityDialog(stageState, clipboardImg, localFileInput) {
+    const content = makeElement('div', {
+      style: {
+        display: 'flex', flexDirection: 'column', gap: '14px', padding: '8px 4px',
+        color: '#f8fafc', fontFamily: 'monospace'
+      }
+    });
+
+    const imgWidth = clipboardImg.naturalWidth || clipboardImg.width;
+    const imgHeight = clipboardImg.naturalHeight || clipboardImg.height;
+
+    content.innerHTML = `
+      <div style="font-size:11.5px; color:#94a3b8; line-height:1.5;">
+        A valid image was found on your clipboard. Would you like to place it directly or browse your file system?
+      </div>
+    `;
+
+    // Thumbnail Preview Card
+    const thumbCard = makeElement('div', {
+      style: {
+        display: 'flex', alignItems: 'center', gap: '12px',
+        background: 'rgba(0, 242, 254, 0.05)', border: '1.5px solid rgba(0, 242, 254, 0.3)',
+        borderRadius: '8px', padding: '10px'
+      }
+    }, [
+      makeElement('img', {
+        src: clipboardImg.src,
+        style: {
+          maxWidth: '90px', maxHeight: '70px', borderRadius: '4px',
+          objectFit: 'contain', background: '#090d16', border: '1px solid #1e293b'
+        }
+      }),
+      makeElement('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px' } }, [
+        makeElement('strong', { style: { color: '#00f2fe', fontSize: '12px' } }, 'Clipboard Image Available'),
+        makeElement('span', { style: { fontSize: '10.5px', color: '#cbd5e1' } }, `${imgWidth} × ${imgHeight} px`),
+        makeElement('span', { style: { fontSize: '9.5px', color: '#10b981' } }, '● Ready to place')
+      ])
+    ]);
+    content.appendChild(thumbCard);
+
+    const actionsRow = makeElement('div', {
+      style: { display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '6px' }
+    });
+
+    const useClipboardBtn = makeElement('button', {
+      className: 'dr-nav-btn primary',
+      style: { padding: '6px 14px', fontSize: '11px', fontWeight: 'bold' },
+      onclick: () => {
+        dialog.close();
+        this.addPlate(stageState, clipboardImg, 60, 60);
+      }
+    }, '📋 Place Clipboard Image');
+
+    const browseFilesBtn = makeElement('button', {
+      className: 'dr-nav-btn',
+      style: { padding: '6px 12px', fontSize: '11px', color: '#00f2fe', borderColor: '#00f2fe66' },
+      onclick: () => {
+        dialog.close();
+        if (localFileInput) localFileInput.click();
+      }
+    }, '📁 Browse File System...');
+
+    actionsRow.append(browseFilesBtn, useClipboardBtn);
+    content.appendChild(actionsRow);
+
+    const dialog = UITools.makeDialog({
+      title: '🖼️ Add Image Option',
+      size: [450, 270],
+      contentElement: content,
+      appendTo: document.body
+    });
+  }
+
+  eraseImagePlatePixels(plate, worldX, worldY, brushRadius = 24, softness = 0) {
+    if (!plate || !plate.img) return;
+
+    let canvas = plate._eraseCanvas;
+    if (!canvas) {
+      canvas = document.createElement('canvas');
+      canvas.width = plate.img.naturalWidth || plate.img.width;
+      canvas.height = plate.img.naturalHeight || plate.img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(plate.img, 0, 0);
+      plate._eraseCanvas = canvas;
+    }
+
+    const ctx = canvas.getContext('2d');
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+
+    const scaleX = canvas.width / plate.width;
+    const scaleY = canvas.height / plate.height;
+    const localX = (worldX - plate.x) * scaleX;
+    const localY = (worldY - plate.y) * scaleY;
+    const r = brushRadius * scaleX;
+
+    if (softness > 0) {
+      const grad = ctx.createRadialGradient(localX, localY, Math.max(0, r * 0.3), localX, localY, r);
+      grad.addColorStop(0, 'rgba(0,0,0,1)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(localX, localY, r, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = 'rgba(0,0,0,1)';
+      ctx.beginPath();
+      ctx.arc(localX, localY, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // Refresh plate texture directly from memory canvas
+    plate.img = canvas;
+    this.component.renderStage();
+  }
 }
 
 globalThis.QuoraImageManager = QuoraImageManager;

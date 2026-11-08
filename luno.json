@@ -1,6 +1,6 @@
 {
   "name": "QuoraToys",
-  "version": "2.8.0",
+  "version": "2.9.0",
   "description": "QuoraToys: Interactive visual solvers, kinetic vector annotations, living documentation, and in-situ browser tools",
   "type": "luno-web-app",
   "mainClass": "QuoraToysApp",
@@ -17,6 +17,7 @@
     "js/BezierVertex.js",
     "js/UpdateControlPoints.js",
     "js/CurveFitter.js",
+    "js/QuoraCurveAnalyzer.js",
     "js/QuoraStrokeManager.js",
     "js/QuoraPaintManager.js",
     "js/QuoraExportManager.js",
@@ -44,16 +45,20 @@
   "styles": [
     "css/basicsWithDialogBox.css"
   ],
-  "processedCountSinceCheckpoint": 0,
+  "processedCountSinceCheckpoint": 59,
   "changedMethods": {
-    "js/QuoraStrokeManager.js": "2026-11-07T22:19:07.761Z",
-    "js/QuoraPaintManager.js": "2026-11-07T22:19:07.761Z",
-    "js/QuoraExportManager.js": "2026-11-07T22:19:07.761Z",
-    "js/QuoraGestureMachine.js": "2026-11-07T22:19:07.761Z",
-    "js/QuoraAnnotationComponent.js": "2026-11-07T22:19:07.761Z",
-    "js/QuoraToysContent.js": "2026-11-07T22:19:07.761Z",
-    "luno.json": "2026-11-07T22:19:07.761Z"
+    "js/BezierVertex.js": "2026-11-07T23:30:00.000Z",
+    "js/UpdateControlPoints.js": "2026-11-07T23:30:00.000Z",
+    "js/QuoraKnotManager.js": "2026-11-08T02:22:18.489Z",
+    "js/QuoraImageManager.js": "2026-11-07T23:30:00.000Z",
+    "js/QuoraCurveAnalyzer.js": "2026-11-08T02:22:18.489Z",
+    "js/QuoraAnnotationComponent.js": "2026-11-08T02:59:38.288Z",
+    "js/QuoraToysContent.js": "2026-11-08T02:22:18.489Z",
+    "luno.json": "2026-11-08T02:02:17.373Z",
+    "js/QuoraStrokeManager.js": "2026-11-08T02:59:38.288Z",
+    "js/QuoraTextManager.js": "2026-11-08T02:59:38.288Z",
+    "js/QuoraInSituHUD.js": "2026-11-08T02:59:38.288Z"
   },
-  "lastCheckpointTime": "2026-11-07T22:19:43.374Z",
-  "pendingCheckpointDescription": "Clean working tree"
+  "lastCheckpointTime": "2026-11-06T04:12:00.000Z",
+  "pendingCheckpointDescription": "Added browser image drag-drop, image eraser brush, single dynamic midpoint, and curve analyzer"
 }
