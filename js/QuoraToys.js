@@ -88,11 +88,11 @@ class QuoraToys {
         <div class="fdr-dropzone-title">Universal Graphic Studio &amp; Spot-the-Difference Comparator</div>
         <div class="fdr-dropzone-subtitle">
           Drop any image, paste with <b>Ctrl+V</b>, or choose an option below.<br>
-          Draw smooth Bézier curves, arrows, and blockout masks, or compare puzzle images.
+          Draw fluid kinetic splines, arrows, and callouts with zero effort, or solve puzzles in seconds.
         </div>
         <div class="fdr-dropzone-actions">
           <button class="fdr-btn fdr-btn-accent" id="fdr-launch-annotation-direct-btn" style="background:#0284c7; border-color:#00f2fe; color:#fff; font-weight:800; padding: 8px 16px;">
-            ✏️ Launch Annotation Studio (Draw &amp; Arrows)
+            ✏️ Launch Annotation Studio (Draw, Arrows &amp; Text)
           </button>
           <button class="fdr-btn fdr-btn-primary" id="fdr-choose-file-btn" style="padding: 8px 14px;">📁 Choose Image File</button>
           <button class="fdr-btn" id="fdr-sample-puzzle-btn" style="padding: 8px 14px;">🧩 Load Sample Puzzle</button>
@@ -103,11 +103,11 @@ class QuoraToys {
       docs.className = 'fdr-docs-card';
       docs.innerHTML = `
         <div class="fdr-docs-header">
-          <span>💡 Two Powerful Tools in One Suite:</span>
+          <span>💡 Two Powerful Toys in One Suite:</span>
         </div>
         <div class="fdr-docs-why">
-          • <b>1. Universal Annotation Studio:</b> Annotate any picture in seconds with mathematically smoothed Bézier splines, auto arrowheads, speech balloons, and hard/soft blockout paint for Gemini AI.<br>
-          • <b>2. Spot-the-Difference Comparator:</b> Superimpose puzzle halves with sub-pixel alignment using 50% Alpha, Optical Flashing, or Scrolling Zebra Stripes.
+          • <b>1. The 5-Second Graphic Studio:</b> Rethinking curve drawing for the first time since the 1980s. Physical drag-lead dampening filters out hand tremors, direct rubber-wire dragging lets you bend curves effortlessly, and typing attaches architectural callouts instantly.<br>
+          • <b>2. Spot-the-Difference Shortcut Engine:</b> Let's be honest—when you've stared at a social media puzzle for five minutes and your eyes hurt, you just want to cheat. Superimpose both halves with 50% Alpha, 600ms Optical Flashing, or Zebra Stripes to make the answers jump right out at you.
         </div>
       `;
 

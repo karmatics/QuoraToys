@@ -218,10 +218,12 @@ class QuoraStrokeManager {
       }
 
       const lineStyle = curve.lineStyle || 'classic';
+      const sw = curve.strokeWidth || this.component.stageState.curveStrokeWidth || 3.2;
 
       // Update shadow path
       if (shadowEl) {
         shadowEl.setAttribute('d', d);
+        shadowEl.setAttribute('stroke-width', String(sw + 2.3));
         shadowEl.style.display = lineStyle === 'classic' ? 'block' : 'none';
       }
 
@@ -229,6 +231,7 @@ class QuoraStrokeManager {
       if (glowPath) {
         glowPath.setAttribute('d', d);
         glowPath.setAttribute('stroke', curve.color);
+        glowPath.setAttribute('stroke-width', String(lineStyle === 'lightsaber' ? sw + 10 : sw + 5));
         glowPath.style.display = lineStyle !== 'classic' ? 'block' : 'none';
         glowPath.style.filter = 'drop-shadow(0 0 8px ' + curve.color + ')';
       }
@@ -239,10 +242,13 @@ class QuoraStrokeManager {
         if (lineStyle === 'lightsaber' && paths.length >= 2) {
           paths[0].setAttribute('d', d);
           paths[0].setAttribute('stroke', curve.color);
+          paths[0].setAttribute('stroke-width', String(sw + 1.2));
           paths[1].setAttribute('d', d);
+          paths[1].setAttribute('stroke-width', String(Math.max(1.5, sw * 0.55)));
         } else if (paths.length > 0) {
           paths[0].setAttribute('d', d);
           paths[0].setAttribute('stroke', curve.color);
+          paths[0].setAttribute('stroke-width', String(sw));
         }
       }
 
@@ -258,7 +264,7 @@ class QuoraStrokeManager {
           const p0 = curve.beziers[0][0];
           const p1 = curve.beziers[0][1];
           const dist = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) || 1;
-          const arrow = this.renderConcaveArrowhead(p0, [(p1[0] - p0[0]) / dist, (p1[1] - p0[1]) / dist], curve.color, 2.0);
+          const arrow = this.renderConcaveArrowhead(p0, [(p1[0] - p0[0]) / dist, (p1[1] - p0[1]) / dist], curve.color, 2.0, sw);
           curve._arrowSh = arrow.shadow;
           curve._arrowFg = arrow.foreground;
           this.component.shadowLayer.appendChild(arrow.shadow);
@@ -271,7 +277,7 @@ class QuoraStrokeManager {
           const p2 = lastSeg[2];
           const p3 = lastSeg[3];
           const dist = Math.hypot(p3[0] - p2[0], p3[1] - p2[1]) || 1;
-          const arrow = this.renderConcaveArrowhead(p3, [(p2[0] - p3[0]) / dist, (p2[1] - p3[1]) / dist], curve.color, 2.0);
+          const arrow = this.renderConcaveArrowhead(p3, [(p2[0] - p3[0]) / dist, (p2[1] - p3[1]) / dist], curve.color, 2.0, sw);
           curve._arrowShTail = arrow.shadow;
           curve._arrowFgTail = arrow.foreground;
           this.component.shadowLayer.appendChild(arrow.shadow);
@@ -281,35 +287,39 @@ class QuoraStrokeManager {
 
       this.component.renderStage();
     }
-  renderConcaveArrowhead(p0, exitTangent, color, shadowOffset = 2.0) {
-    const ux = exitTangent[0];
-    const uy = exitTangent[1];
-    const nx = -uy;
-    const ny = ux;
+  renderConcaveArrowhead(p0, exitTangent, color, shadowOffset = 2.0, strokeWidth = 3.2) {
+      const ux = exitTangent[0];
+      const uy = exitTangent[1];
+      const nx = -uy;
+      const ny = ux;
 
-    const barbLen = 18;
-    const barbSpread = 11;
-    const b1 = [p0[0] + ux * barbLen + nx * barbSpread, p0[1] + uy * barbLen + ny * barbSpread];
-    const b2 = [p0[0] + ux * barbLen - nx * barbSpread, p0[1] + uy * barbLen - ny * barbSpread];
-    const c1 = [p0[0] + ux * 8 + nx * 2.5, p0[1] + uy * 8 + ny * 2.5];
-    const c2 = [p0[0] + ux * 8 - nx * 2.5, p0[1] + uy * 8 - ny * 2.5];
+      // Scale arrowhead barb geometry proportionally to curve stroke width
+      const sw = Math.max(1.5, Math.min(12, strokeWidth || 3.2));
+      const barbLen = Math.round(14 + sw * 1.25);
+      const barbSpread = Math.round(8 + sw * 0.95);
+      const waistBack = Math.round(6 + sw * 0.6);
+      const waistSpread = Math.max(2, sw * 0.75);
 
-    const arrowD = `M ${b1[0]} ${b1[1]} Q ${c1[0]} ${c1[1]} ${p0[0]} ${p0[1]} M ${p0[0]} ${p0[1]} Q ${c2[0]} ${c2[1]} ${b2[0]} ${b2[1]}`;
+      const b1 = [p0[0] + ux * barbLen + nx * barbSpread, p0[1] + uy * barbLen + ny * barbSpread];
+      const b2 = [p0[0] + ux * barbLen - nx * barbSpread, p0[1] + uy * barbLen - ny * barbSpread];
+      const c1 = [p0[0] + ux * waistBack + nx * waistSpread, p0[1] + uy * waistBack + ny * waistSpread];
+      const c2 = [p0[0] + ux * waistBack - nx * waistSpread, p0[1] + uy * waistBack - ny * waistSpread];
 
-    const arrowShadow = makeElement('svg:path', {
-      d: arrowD, transform: `translate(${shadowOffset}, ${shadowOffset})`,
-      stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': '5.5', fill: 'none',
-      'stroke-linecap': 'round', 'stroke-linejoin': 'round'
-    });
+      const arrowD = `M ${b1[0]} ${b1[1]} Q ${c1[0]} ${c1[1]} ${p0[0]} ${p0[1]} M ${p0[0]} ${p0[1]} Q ${c2[0]} ${c2[1]} ${b2[0]} ${b2[1]}`;
 
-    const arrowForeground = makeElement('svg:path', {
-      d: arrowD, stroke: color, 'stroke-width': '3.2', fill: 'none',
-      'stroke-linecap': 'round', 'stroke-linejoin': 'round'
-    });
+      const arrowShadow = makeElement('svg:path', {
+        d: arrowD, transform: `translate(${shadowOffset}, ${shadowOffset})`,
+        stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': String(sw + 2.4), fill: 'none',
+        'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+      });
 
-    return { shadow: arrowShadow, foreground: arrowForeground };
-  }
+      const arrowForeground = makeElement('svg:path', {
+        d: arrowD, stroke: color, 'stroke-width': String(sw), fill: 'none',
+        'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+      });
 
+      return { shadow: arrowShadow, foreground: arrowForeground };
+    }
   swapCurveTerminals(curve) {
     if (!curve || !curve.beziers || curve.beziers.length === 0) return;
     curve.arrowEnd = (curve.arrowEnd === 'tail') ? 'tip' : 'tail';

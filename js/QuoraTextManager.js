@@ -4,160 +4,218 @@ class QuoraTextManager {
   }
 
   renderCurveAttachedTextSvg(ann, textBadgesLayer, stageState) {
-    const beziers = ann.beziers;
-    if (!beziers || beziers.length === 0) return;
-    if (!ann.text || ann.text.trim() === '') return;
+      const beziers = ann.beziers;
+      if (!beziers || beziers.length === 0) return;
 
-    const isAtTail = (ann.textEnd !== 'tip');
-    const termSeg = isAtTail ? beziers[beziers.length - 1] : beziers[0];
-    const anchorPt = isAtTail ? termSeg[3] : termSeg[0];
+      const isActiveCurve = (ann === this.component.getActiveCurve());
+      const hasText = Boolean(ann.text && ann.text.trim() !== '');
 
-    const exitVec = isAtTail
-      ? [termSeg[3][0] - termSeg[2][0], termSeg[3][1] - termSeg[2][1]]
-      : [termSeg[0][0] - termSeg[1][0], termSeg[0][1] - termSeg[1][1]];
+      // Skip rendering if no text and not the actively selected curve
+      if (!hasText && !isActiveCurve) return;
 
-    const fontS = ann.fontSize || 22;
-    const fontF = ann.fontFamily || "'Architects Daughter', cursive, sans-serif";
-    const lineHeight = fontS * 1.25;
+      const isAtTail = (ann.textEnd !== 'tip');
+      const termSeg = isAtTail ? beziers[beziers.length - 1] : beziers[0];
+      const anchorPt = isAtTail ? termSeg[3] : termSeg[0];
 
-    const charW = fontS * (fontF.includes('mono') ? 0.60 : 0.54);
-    const padX = ann.boxStyle !== 'none' ? 14 : 4;
-    const padY = ann.boxStyle !== 'none' ? 8 : 4;
+      const exitVec = isAtTail
+        ? [termSeg[3][0] - termSeg[2][0], termSeg[3][1] - termSeg[2][1]]
+        : [termSeg[0][0] - termSeg[1][0], termSeg[0][1] - termSeg[1][1]];
 
-    const targetW = ann.boxWidth || 270;
-    const maxChars = Math.max(12, Math.floor((targetW - padX * 2) / charW));
-    const wrappedLines = this.wrapTextLines(ann.text || '', maxChars);
+      const fontS = ann.fontSize || 22;
+      const fontF = ann.fontFamily || "'Architects Daughter', cursive, sans-serif";
+      const lineHeight = fontS * 1.25;
 
-    let longestLineLen = 0;
-    wrappedLines.forEach(l => { if (l.length > longestLineLen) longestLineLen = l.length; });
+      const charW = fontS * (fontF.includes('mono') ? 0.60 : 0.54);
+      const padX = ann.boxStyle !== 'none' ? 14 : 4;
+      const padY = ann.boxStyle !== 'none' ? 8 : 4;
 
-    const boxW = ann.boxWidth || (Math.round(longestLineLen * charW) + padX * 2 + 8);
-    const boxH = Math.max(fontS + padY * 2, Math.round(wrappedLines.length * lineHeight) + padY * 2 + 4);
+      const targetW = ann.boxWidth || 270;
+      const maxChars = Math.max(12, Math.floor((targetW - padX * 2) / charW));
+      const wrappedLines = this.wrapTextLines(ann.text || '', maxChars);
 
-    const effectiveEdge = ann.manualEdge ? ann.connectEdge : null;
-    const placement = this.computeTextPlacement(anchorPt, exitVec, boxW, boxH, effectiveEdge);
-    ann.connectEdge = placement.connectEdge;
+      let longestLineLen = 0;
+      wrappedLines.forEach(l => { if (l.length > longestLineLen) longestLineLen = l.length; });
 
-    const { posX, posY, connectEdge, textAnchorType, uX } = placement;
+      const boxW = ann.boxWidth || (Math.round(longestLineLen * charW) + padX * 2 + 8);
+      const boxH = Math.max(fontS + padY * 2, Math.round(wrappedLines.length * lineHeight) + padY * 2 + 4);
 
-    const g = makeElement('svg:g', {
-      className: 'qa-curve-attached-label',
-      style: { cursor: 'move', userSelect: 'none' },
-      title: 'Double-click to edit text • Drag to reposition callout and curve tail',
-      ondblclick: (e) => {
+      const effectiveEdge = ann.manualEdge ? ann.connectEdge : null;
+      const placement = this.computeTextPlacement(anchorPt, exitVec, boxW, boxH, effectiveEdge);
+      ann.connectEdge = placement.connectEdge;
+
+      const { posX, posY, connectEdge, textAnchorType, uX } = placement;
+      const col = ann.color || '#00e676';
+
+      // RENDER ARCHITECTURAL GHOST SHELF PLACEHOLDER IF ACTIVE CURVE HAS NO TEXT
+      if (!hasText) {
+        const ghostW = 165;
+        const ghostH = 34;
+
+        let gX = posX;
+        let gY = posY;
+        if (connectEdge === 'right') gX = anchorPt[0] - ghostW;
+        else if (connectEdge === 'left') gX = anchorPt[0];
+        else if (connectEdge === 'top') { gX = anchorPt[0] - ghostW / 2; gY = anchorPt[1]; }
+        else if (connectEdge === 'bottom') { gX = anchorPt[0] - ghostW / 2; gY = anchorPt[1] - ghostH; }
+
+        const ghostG = makeElement('svg:g', {
+          className: 'qa-curve-attached-label qa-ghost-text-placeholder',
+          style: { cursor: 'text', userSelect: 'none', opacity: '0.45', transition: 'opacity 0.15s ease' },
+          title: 'Click or start typing on keyboard to add callout text',
+          onclick: (e) => {
+            e.stopPropagation();
+            this.promptInlineTailText(ann, anchorPt, connectEdge);
+          }
+        });
+
+        ghostG.addEventListener('mouseenter', () => { ghostG.style.opacity = '0.95'; });
+        ghostG.addEventListener('mouseleave', () => { ghostG.style.opacity = '0.45'; });
+
+        // Architectural dashed 2-sided bracket shelf
+        let bD = '';
+        if (connectEdge === 'left') {
+          bD = `M ${gX + ghostW} ${gY + ghostH} L ${gX} ${gY + ghostH} L ${gX} ${gY + 8}`;
+        } else if (connectEdge === 'right') {
+          bD = `M ${gX} ${gY + ghostH} L ${gX + ghostW} ${gY + ghostH} L ${gX + ghostW} ${gY + 8}`;
+        } else {
+          bD = `M ${gX} ${gY + ghostH} L ${gX + ghostW} ${gY + ghostH} M ${gX} ${gY + 12} L ${gX} ${gY + ghostH}`;
+        }
+
+        ghostG.appendChild(makeElement('svg:path', {
+          d: bD, fill: 'none', stroke: col, 'stroke-width': '1.8', 'stroke-dasharray': '4,3',
+          'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+        }));
+
+        const textX = connectEdge === 'right' ? (gX + ghostW - 12) : (gX + 12);
+        const textAnchor = connectEdge === 'right' ? 'end' : 'start';
+
+        ghostG.appendChild(makeElement('svg:text', {
+          x: textX, y: gY + 23, fill: col,
+          'font-family': fontF, 'font-size': '15px', 'font-style': 'italic', 'font-weight': 'bold',
+          'text-anchor': textAnchor
+        }, '✎ Type note...'));
+
+        textBadgesLayer.appendChild(ghostG);
+        return;
+      }
+
+      // RENDER SOLID ATTACHED TEXT BADGE
+      const g = makeElement('svg:g', {
+        className: 'qa-curve-attached-label',
+        style: { cursor: 'move', userSelect: 'none', transition: 'opacity 0.15s ease' },
+        title: 'Double-click to edit text • Drag to reposition callout and curve tail',
+        ondblclick: (e) => {
+          e.stopPropagation();
+          this.promptInlineTailText(ann, anchorPt, connectEdge);
+        }
+      });
+
+      let isDraggingBadge = false;
+      let startMouseX = 0, startMouseY = 0;
+
+      g.addEventListener('mousedown', (e) => {
+        if (e.button === 2) return;
         e.stopPropagation();
-        this.promptInlineTailText(ann, anchorPt, connectEdge);
+        isDraggingBadge = true;
+        startMouseX = e.clientX;
+        startMouseY = e.clientY;
+
+        const targetKnot = isAtTail
+          ? ann.vertices[ann.vertices.length - 1]
+          : ann.vertices[0];
+        const origX = targetKnot.point[0];
+        const origY = targetKnot.point[1];
+
+        const onBadgeDragMove = (ev) => {
+          if (!isDraggingBadge) return;
+          const z = stageState.zoom || 1.0;
+          const dx = (ev.clientX - startMouseX) / z;
+          const dy = (ev.clientY - startMouseY) / z;
+
+          targetKnot.point[0] = Math.round(origX + dx);
+          targetKnot.point[1] = Math.round(origY + dy);
+
+          this.component.commitCurveGeometryUpdate();
+          g.style.transform = `translate(${dx}px, ${dy}px)`;
+        };
+
+        const onBadgeDragUp = () => {
+          isDraggingBadge = false;
+          g.style.transform = '';
+          window.removeEventListener('mousemove', onBadgeDragMove);
+          window.removeEventListener('mouseup', onBadgeDragUp);
+          this.component.renderStage();
+        };
+
+        window.addEventListener('mousemove', onBadgeDragMove);
+        window.addEventListener('mouseup', onBadgeDragUp);
+      });
+
+      // Framing Shapes
+      if (ann.boxStyle === 'box') {
+        g.appendChild(makeElement('svg:rect', {
+          x: posX + 2, y: posY + 2, width: boxW, height: boxH, rx: '6',
+          fill: 'rgba(10, 15, 25, 0.95)', stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': '4.5'
+        }));
+        g.appendChild(makeElement('svg:rect', {
+          x: posX, y: posY, width: boxW, height: boxH, rx: '6',
+          fill: 'rgba(15, 23, 42, 0.96)', stroke: col, 'stroke-width': '2.5'
+        }));
+      } else if (ann.boxStyle === 'bracket' || !ann.boxStyle) {
+        g.appendChild(makeElement('svg:rect', {
+          x: posX, y: posY, width: boxW, height: boxH, rx: '4',
+          fill: 'rgba(9, 13, 22, 0.72)', stroke: 'none',
+          style: { pointerEvents: 'none' }
+        }));
+
+        // 2-Sided Architectural Bracket
+        let bD = '';
+        if (connectEdge === 'left') {
+          bD = `M ${posX + boxW} ${posY + boxH} L ${posX} ${posY + boxH} L ${posX} ${posY}`;
+        } else if (connectEdge === 'right') {
+          bD = `M ${posX} ${posY + boxH} L ${posX + boxW} ${posY + boxH} L ${posX + boxW} ${posY}`;
+        } else if (connectEdge === 'bottom') {
+          bD = (uX >= 0)
+            ? `M ${posX + boxW} ${posY + boxH} L ${posX} ${posY + boxH} L ${posX} ${posY}`
+            : `M ${posX} ${posY + boxH} L ${posX + boxW} ${posY + boxH} L ${posX + boxW} ${posY}`;
+        } else if (connectEdge === 'top') {
+          bD = (uX >= 0)
+            ? `M ${posX + boxW} ${posY} L ${posX} ${posY} L ${posX} ${posY + boxH}`
+            : `M ${posX} ${posY} L ${posX + boxW} ${posY} L ${posX + boxW} ${posY + boxH}`;
+        }
+
+        g.appendChild(makeElement('svg:path', {
+          d: bD, transform: 'translate(2, 2)', fill: 'none',
+          stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': '4.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+        }));
+        g.appendChild(makeElement('svg:path', {
+          d: bD, fill: 'none', stroke: col, 'stroke-width': '2.4', 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+        }));
       }
-    });
 
-    // Direct Drag-to-Reposition
-    let isDraggingBadge = false;
-    let startMouseX = 0, startMouseY = 0;
-
-    g.addEventListener('mousedown', (e) => {
-      if (e.button === 2) return;
-      e.stopPropagation();
-      isDraggingBadge = true;
-      startMouseX = e.clientX;
-      startMouseY = e.clientY;
-
-      const targetKnot = isAtTail
-        ? ann.vertices[ann.vertices.length - 1]
-        : ann.vertices[0];
-      const origX = targetKnot.point[0];
-      const origY = targetKnot.point[1];
-
-      const onBadgeDragMove = (ev) => {
-        if (!isDraggingBadge) return;
-        const z = stageState.zoom || 1.0;
-        targetKnot.point[0] = Math.round(origX + (ev.clientX - startMouseX) / z);
-        targetKnot.point[1] = Math.round(origY + (ev.clientY - startMouseY) / z);
-
-        this.component.commitCurveGeometryUpdate();
-        this.component.renderStage();
-      };
-
-      const onBadgeDragUp = () => {
-        isDraggingBadge = false;
-        window.removeEventListener('mousemove', onBadgeDragMove);
-        window.removeEventListener('mouseup', onBadgeDragUp);
-      };
-
-      window.addEventListener('mousemove', onBadgeDragMove);
-      window.addEventListener('mouseup', onBadgeDragUp);
-    });
-
-    const col = ann.color || '#00e676';
-
-    // 1. Framing Shapes with Non-Intrusive Contrast Matte
-    if (ann.boxStyle === 'box') {
-      g.appendChild(makeElement('svg:rect', {
-        x: posX + 2, y: posY + 2, width: boxW, height: boxH, rx: '6',
-        fill: 'rgba(10, 15, 25, 0.95)', stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': '4.5'
-      }));
-      g.appendChild(makeElement('svg:rect', {
-        x: posX, y: posY, width: boxW, height: boxH, rx: '6',
-        fill: 'rgba(15, 23, 42, 0.96)', stroke: col, 'stroke-width': '2.5'
-      }));
-    } else if (ann.boxStyle === 'bracket' || !ann.boxStyle) {
-      g.appendChild(makeElement('svg:rect', {
-        x: posX, y: posY, width: boxW, height: boxH, rx: '4',
-        fill: 'rgba(9, 13, 22, 0.72)', stroke: 'none',
-        style: { pointerEvents: 'none' }
-      }));
-
-      // 2-Sided Architectural Bracket
-      let bD = '';
-      if (connectEdge === 'left') {
-        bD = `M ${posX + boxW} ${posY + boxH} L ${posX} ${posY + boxH} L ${posX} ${posY}`;
-      } else if (connectEdge === 'right') {
-        bD = `M ${posX} ${posY + boxH} L ${posX + boxW} ${posY + boxH} L ${posX + boxW} ${posY}`;
-      } else if (connectEdge === 'bottom') {
-        bD = (uX >= 0)
-          ? `M ${posX + boxW} ${posY + boxH} L ${posX} ${posY + boxH} L ${posX} ${posY}`
-          : `M ${posX} ${posY + boxH} L ${posX + boxW} ${posY + boxH} L ${posX + boxW} ${posY}`;
-      } else if (connectEdge === 'top') {
-        bD = (uX >= 0)
-          ? `M ${posX + boxW} ${posY} L ${posX} ${posY} L ${posX} ${posY + boxH}`
-          : `M ${posX} ${posY} L ${posX + boxW} ${posY} L ${posX + boxW} ${posY + boxH}`;
+      let textAnchorX = posX + padX;
+      if (connectEdge === 'right') {
+        textAnchorX = posX + boxW - padX;
+      } else if (connectEdge === 'top' || connectEdge === 'bottom') {
+        textAnchorX = posX + boxW / 2;
       }
 
-      g.appendChild(makeElement('svg:path', {
-        d: bD, transform: 'translate(2, 2)', fill: 'none',
-        stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': '4.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
-      }));
-      g.appendChild(makeElement('svg:path', {
-        d: bD, fill: 'none', stroke: col, 'stroke-width': '2.4', 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
-      }));
+      const txt = makeElement('svg:text', {
+        x: textAnchorX, y: posY + padY + fontS * 0.88, fill: col,
+        'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold',
+        'text-anchor': textAnchorType,
+        style: { filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.85))' }
+      });
+
+      wrappedLines.forEach((l, i) => {
+        txt.appendChild(makeElement('svg:tspan', {
+          x: textAnchorX, dy: i === 0 ? '0' : `${lineHeight}px`
+        }, l));
+      });
+      g.appendChild(txt);
+
+      textBadgesLayer.appendChild(g);
     }
-
-    let textAnchorX = posX + padX;
-    if (connectEdge === 'right') {
-      textAnchorX = posX + boxW - padX;
-    } else if (connectEdge === 'top' || connectEdge === 'bottom') {
-      textAnchorX = posX + boxW / 2;
-    }
-
-    const txt = makeElement('svg:text', {
-      x: textAnchorX, y: posY + padY + fontS * 0.88, fill: col,
-      'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold',
-      'text-anchor': textAnchorType,
-      style: { filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.85))' }
-    });
-
-    wrappedLines.forEach((l, i) => {
-      txt.appendChild(makeElement('svg:tspan', {
-        x: textAnchorX, dy: i === 0 ? '0' : `${lineHeight}px`
-      }, l));
-    });
-    g.appendChild(txt);
-
-    // Notice: The stuck qa-box-resize-handle has been completely removed.
-    // The callout box auto-sizes cleanly to its text without intrusive resize rectangles.
-
-    textBadgesLayer.appendChild(g);
-  }
-
   promptInlineTailText(curveRecord, anchorPt, forcedEdge = null, initialText = '') {
       const existing = document.getElementById('qa-inline-tail-editor');
       if (existing) existing.remove();
@@ -489,7 +547,7 @@ class QuoraTextManager {
         style: { cursor: 'move', userSelect: 'none' },
         ondblclick: (e) => {
           e.stopPropagation();
-          this.promptInlineTailText(ann, [ann.x, ann.y], 'left-justified');
+          this.promptInlineTailText(ann, [ann.x, ann.y], 'left');
         }
       });
 
@@ -524,29 +582,42 @@ class QuoraTextManager {
       });
       g.appendChild(txt);
 
+      // Smooth transform-based dragging without innerHTML teardown during movement
       let isDrag = false;
       let sX = 0, sY = 0;
+      let initialX = ann.x, initialY = ann.y;
+
       g.addEventListener('mousedown', (e) => {
+        if (e.button === 2) return;
         e.stopPropagation();
         isDrag = true;
         sX = e.clientX; sY = e.clientY;
+        initialX = ann.x; initialY = ann.y;
 
         const onM = (ev) => {
           if (!isDrag) return;
           const z = stageState.zoom || 1.0;
-          ann.x += (ev.clientX - sX) / z;
-          ann.y += (ev.clientY - sY) / z;
-          sX = ev.clientX; sY = ev.clientY;
+          const dx = (ev.clientX - sX) / z;
+          const dy = (ev.clientY - sY) / z;
+          ann.x = Math.round(initialX + dx);
+          ann.y = Math.round(initialY + dy);
+          g.style.transform = `translate(${dx}px, ${dy}px)`;
+        };
+
+        const onU = () => {
+          isDrag = false;
+          g.style.transform = '';
+          window.removeEventListener('mousemove', onM);
+          window.removeEventListener('mouseup', onU);
           this.component.renderStage();
         };
-        const onU = () => { isDrag = false; window.removeEventListener('mousemove', onM); window.removeEventListener('mouseup', onU); };
+
         window.addEventListener('mousemove', onM);
         window.addEventListener('mouseup', onU);
       });
 
       textBadgesLayer.appendChild(g);
-  }
-
+    }
   computeTextPlacement(anchorPt, exitVec, boxW, boxH, forcedEdge = null) {
       const rawLen = Math.hypot(exitVec[0], exitVec[1]) || 1;
       const uX = exitVec[0] / rawLen;

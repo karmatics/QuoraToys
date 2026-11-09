@@ -197,10 +197,9 @@ class QuoraInSituHUD {
 
       const categories = [
         { id: 'all', label: 'All' },
-        { id: 'rapid', label: '⚡ Rapid Keys' },
-        { id: 'knot', label: 'Knot & Tangent' },
-        { id: 'curve', label: 'Splines & Arrows' },
-        { id: 'text', label: 'Text & Frame' }
+        { id: 'unified', label: '🪢 Unified Curve' },
+        { id: 'knot', label: 'Knots & Tangents' },
+        { id: 'style', label: 'Style & Palette' }
       ];
 
       categories.forEach(cat => {
@@ -224,34 +223,33 @@ class QuoraInSituHUD {
 
       this._pillsContainer.appendChild(filterBar);
 
-      // Command Definitions with Direct Accelerator Hotkeys
+      // Unified Architecture Command Definitions
       const commands = [
-        { key: 'Type', label: 'Instant Callout Typing', category: 'rapid', desc: 'Type any letter or number immediately after drawing an arrow to attach and edit label text', action: 'edit_text' },
-        { key: '1–6', label: 'Quick Color Palette', category: 'rapid', desc: '1=Cyan, 2=Green, 3=Gold, 4=Coral, 5=Purple, 6=White', action: 'palette_select' },
-        { key: 'Click-Drag', label: 'Direct Curve Reshaping', category: 'rapid', desc: 'Grab any curve segment directly with the mouse to bend it through the cursor', action: 'direct_bend' },
-        { key: 'H (Hold)', label: 'Meta Vector Help', category: 'curve', desc: 'Hold H anytime to see on-screen arrowheads and bracket callouts explaining all controls', action: 'meta_help' },
-        { key: 'Ctrl (Hold)', label: 'Clutch / Rest Hand', category: 'curve', desc: 'Freeze curve growth to tune drawstring radius R, or release mouse to rest hand without breaking curve', action: 'clutch_rest' },
-        { key: 'Space', label: 'Draw ↔ Tweak Mode', category: 'curve', desc: 'Toggle between drawing new curves and selecting/tweaking existing knots or difference lenses', action: 'toggle_tool' },
+        { key: 'Type / T', label: 'Instant Callout Text', category: 'unified', desc: 'Type any key immediately after drawing an arrow to attach and edit label text', action: 'edit_text' },
+        { key: 'Shift+Drag', label: 'Ruler-Straight Arrow', category: 'unified', desc: 'Hold Shift while dragging to draw a perfectly straight line or arrow', action: 'straight_arrow' },
+        { key: 'Drag Curve', label: 'Direct Curve Bending', category: 'unified', desc: 'Click and drag any curve segment directly with the mouse to bend it through the cursor', action: 'direct_bend' },
+        { key: 'End ➔ Head', label: 'Extend or Loop Curve', category: 'unified', desc: 'Drag from an endpoint to continue the spline; end near the start to auto-close into a loop ring', action: 'loop_extend' },
+        { key: 'A', label: 'Cycle Arrowhead', category: 'unified', desc: 'Cycles tip arrow ➔ tail arrow ➔ both ends ➔ none', action: 'toggle_arrow' },
+        { key: 'L', label: 'Toggle Loop (Ring)', category: 'unified', desc: 'Closes active curve into a continuous loop highlight or opens back into an arrow', action: 'toggle_loop' },
+        { key: 'S', label: 'Straighten to Line', category: 'unified', desc: 'Collapses curve by removing all intermediate knots, making a direct straight arrow', action: 'straighten' },
+        { key: 'X', label: 'Swap Terminals', category: 'unified', desc: 'Instantly reverse endpoints: move arrowhead to opposite end and flip the text bracket', action: 'swap_ends' },
+        { key: '[ / ]', label: 'Stroke Width / Angle', category: 'style', desc: 'Adjusts stroke thickness by 0.5px (or rotates tangent ray angle when a knot is selected)', action: 'tune_width' },
+        { key: '1–6', label: 'Quick Color Palette', category: 'style', desc: '1=Cyan, 2=Green, 3=Gold, 4=Coral, 5=Purple, 6=White', action: 'palette_select' },
+        { key: 'Ctrl (Hold)', label: 'Clutch / Rest Hand', category: 'unified', desc: 'Freeze curve growth to tune drawstring radius R, or release mouse to rest hand without breaking curve', action: 'clutch_rest' },
+        { key: 'H (Hold)', label: 'Meta Vector Help', category: 'unified', desc: 'Hold H anytime to see on-screen arrowheads and bracket callouts explaining all controls', action: 'meta_help' },
         { key: 'Tab', label: 'Next Knot on Curve', category: 'knot', desc: 'Advance active knot selection forward along the curve (Shift+Tab moves backward)', action: 'next_knot' },
         { key: 'Arrows', label: 'Nudge Knot (1px)', category: 'knot', desc: 'Use keyboard arrow keys to nudge the selected knot by 1px (or 10px with Shift)', action: 'nudge_knot' },
-        { key: 'A', label: 'Cycle Arrowhead', category: 'curve', desc: 'Cycles tip arrow ➔ tail arrow ➔ both ends ➔ none', action: 'toggle_arrow' },
-        { key: 'T', label: 'Attach / Edit Text', category: 'text', desc: 'Focus the text editor at the curve terminal or shape edge to type callout text immediately', action: 'edit_text' },
-        { key: 'X', label: 'Swap Terminals', category: 'curve', desc: 'Instantly reverse endpoints: move arrowhead to opposite end and flip the text bracket', action: 'swap_ends' },
         { key: 'Click (Dot)', label: 'Midpoint Knot Split', category: 'knot', desc: 'Clicking the stationary midpoint dot on any segment bisects it at t=0.5 with a new knot', action: 'split_point' },
-        { key: '➕ / +', label: 'Add Knot to Segment', category: 'knot', desc: 'Insert an on-curve knot on the active segment without altering overall curve shape', action: 'add_point' },
         { key: 'Right-Click', label: 'Delete Knot', category: 'knot', desc: 'Right-clicking any knot handle deletes that point and re-relaxes the curve smoothly', action: 'delete_knot' },
         { key: 'Del', label: 'Delete Knot / Entity', category: 'knot', desc: 'Deletes the active knot, selected image plate, or curve entity', action: 'delete_curve' },
-        { key: 'C', label: 'Toggle Cusp (45°)', category: 'knot', desc: 'Breaks continuous tangency into a sharp 45° corner/cusp at the active knot', action: 'toggle_cusp' },
+        { key: 'C', label: 'Toggle Cusp (45°)', category: 'knot', desc: 'Breaks continuous tangency into a sharp corner/cusp at the active knot', action: 'toggle_cusp' },
         { key: 'B', label: 'Cycle Balance (0.5/1.5)', category: 'knot', desc: 'Cycles handle length ratio balance between 0.5, 1.5, and 1.0', action: 'cycle_balance' },
         { key: '+ / -', label: 'Tune Curvature (C)', category: 'knot', desc: 'Increases or decreases curvature tension C in increments of 0.2', action: 'tune_curvature' },
-        { key: 'S', label: 'Straighten to Line', category: 'curve', desc: 'Collapses curve by removing all intermediate knots, making a direct straight arrow', action: 'straighten' },
-        { key: 'R', label: 'Reset Knot Constraints', category: 'knot', desc: 'Resets active knot constraints back to default relaxed state (0 offset, C=1, B=1)', action: 'reset_knot' },
-        { key: 'W', label: 'Wipe All Constraints', category: 'curve', desc: 'Wipes all custom constraints across all knots on the selected curve', action: 'wipe_curve' }
+        { key: 'R', label: 'Reset Knot Constraints', category: 'knot', desc: 'Resets active knot constraints back to default relaxed state (0 offset, C=1, B=1)', action: 'reset_knot' }
       ];
 
       const curve = this.component.getActiveCurve();
       const hasKnot = Boolean(curve && curve.vertices && this.component._activeKnotIdx !== null);
-      const hasImage = Boolean(this.component.stageState?.activeImage);
 
       this._commandPills = {};
 
@@ -274,10 +272,11 @@ class QuoraInSituHUD {
           onclick: (e) => {
             e.stopPropagation();
             if (cmd.action === 'toggle_arrow') this.component.toggleArrowhead();
+            else if (cmd.action === 'toggle_loop') this.component.toggleLoopMode();
             else if (cmd.action === 'edit_text') this.component.triggerTextOnActiveOrCanvas();
             else if (cmd.action === 'swap_ends') this.component.swapActiveCurveTerminals();
-            else if (cmd.action === 'add_point') this.component.addKnotToActiveCurve();
             else if (cmd.action === 'delete_curve') this.component.deleteSelectedEntity();
+            else if (cmd.action === 'tune_width') this.component.cycleStrokeWidth();
             else this.component.executeKeyInCommand(cmd.action);
           }
         });
@@ -313,38 +312,47 @@ class QuoraInSituHUD {
 
       this.component.updateDynamicKeyInHUD();
     }
+
   renderTransientCursorDial(controlsLayer, centerPt, curveRecord, callbacks = {}) {
       let dial = document.getElementById('qa-transient-cursor-dial');
       if (!dial) {
         dial = makeElement('svg:g', {
           id: 'qa-transient-cursor-dial',
-          style: { transition: 'opacity 0.15s ease', pointerEvents: 'auto' }
+          style: { transition: 'opacity 0.18s ease', pointerEvents: 'auto' }
         });
         controlsLayer.appendChild(dial);
       }
 
       dial.innerHTML = '';
-      const r = 54;
+      const r = 56;
+      const curColor = (curveRecord?.color || this.component.stageState.currentColor || '#00e676').toLowerCase();
 
       // Glowing background dial ring
       const ringBackdrop = makeElement('svg:circle', {
         cx: centerPt[0], cy: centerPt[1], r: String(r),
-        fill: 'rgba(9, 13, 22, 0.90)', stroke: '#00f2fe', 'stroke-width': '1.5',
-        style: { filter: 'drop-shadow(0 4px 18px rgba(0,0,0,0.85))' }
+        fill: 'rgba(9, 13, 22, 0.94)', stroke: '#00f2fe', 'stroke-width': '1.5',
+        style: { filter: 'drop-shadow(0 6px 20px rgba(0,0,0,0.85))' }
       });
       dial.appendChild(ringBackdrop);
 
-      // Center pause indicator
-      dial.appendChild(makeElement('svg:circle', {
-        cx: centerPt[0], cy: centerPt[1], r: '5', fill: '#ffd700', stroke: '#ffffff', 'stroke-width': '1.5'
-      }));
+      // Center dismissal dot
+      const centerDot = makeElement('svg:circle', {
+        cx: centerPt[0], cy: centerPt[1], r: '6.5', fill: '#ffd700', stroke: '#ffffff', 'stroke-width': '1.5',
+        style: { cursor: 'pointer' },
+        title: 'Click to dismiss dial',
+        onclick: (e) => {
+          e.stopPropagation();
+          this.hideTransientCursorDial();
+        }
+      });
+      dial.appendChild(centerDot);
 
       // 4 Cardinal Action Nodes
       const actions = [
-        { id: 'arrow', label: '🏹', title: 'Toggle Arrowhead [A]', angle: -Math.PI / 2, fn: callbacks.onToggleArrow },
+        { id: 'arrow', label: '🏹', title: 'Cycle Arrowhead [A]', angle: -Math.PI / 2, fn: callbacks.onToggleArrow },
         { id: 'text', label: '💬', title: 'Attach Text Callout [T]', angle: 0, fn: callbacks.onAttachText },
         { id: 'swap', label: '⇄', title: 'Swap Terminals [X]', angle: Math.PI / 2, fn: callbacks.onSwapEnds },
-        { id: 'snap', label: '⚡', title: 'Snap Natural Tangency [R]', angle: Math.PI, fn: callbacks.onResetSnap }
+        { id: 'loop', label: '🔄', title: 'Toggle Loop Ring [L]', angle: Math.PI, fn: () => this.component.toggleLoopMode() }
       ];
 
       actions.forEach(act => {
@@ -361,7 +369,7 @@ class QuoraInSituHUD {
         });
 
         nodeG.appendChild(makeElement('svg:circle', {
-          cx: bX, cy: bY, r: '10.5', fill: 'rgba(15, 23, 42, 0.95)',
+          cx: bX, cy: bY, r: '11', fill: 'rgba(15, 23, 42, 0.95)',
           stroke: '#00f2fe', 'stroke-width': '1.2'
         }));
 
@@ -374,32 +382,59 @@ class QuoraInSituHUD {
       });
 
       // Outer Color Jewel Dots Ring
-      const palette = ['#00f2fe', '#00e676', '#ffd700', '#ff2d55', '#c084fc', '#ffffff'];
-      const outerR = r + 14;
+      const palette = [
+        { hex: '#00f2fe', title: 'Cyber Cyan (1)' },
+        { hex: '#00e676', title: 'Matrix Green (2)' },
+        { hex: '#ffd700', title: 'Electric Gold (3)' },
+        { hex: '#ff2d55', title: 'Coral Red (4)' },
+        { hex: '#c084fc', title: 'Neon Purple (5)' },
+        { hex: '#ffffff', title: 'Pure White (6)' }
+      ];
+      const outerR = r + 15;
 
-      palette.forEach((hex, i) => {
+      palette.forEach((item, i) => {
         const angle = (i * (Math.PI / 3)) - (Math.PI / 2);
         const pX = centerPt[0] + Math.cos(angle) * outerR;
         const pY = centerPt[1] + Math.sin(angle) * outerR;
+        const isSelected = (item.hex.toLowerCase() === curColor);
 
-        const swatch = makeElement('svg:circle', {
-          cx: pX, cy: pY, r: '5.5', fill: hex, stroke: '#090d16', 'stroke-width': '1.5',
-          style: { cursor: 'pointer', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.7))' },
-          title: `Set Color: ${hex}`,
+        const jewelG = makeElement('svg:g', {
+          style: { cursor: 'pointer' },
+          title: `Set Color: ${item.title}`,
           onmousedown: (e) => {
             e.stopPropagation();
-            this.component.stageState.currentColor = hex;
-            if (this.component.colorIndicatorDot) this.component.colorIndicatorDot.style.background = hex;
-            if (curveRecord) curveRecord.color = hex;
+            this.component.stageState.currentColor = item.hex;
+            this.component.updatePaletteHighlight();
+            if (curveRecord) {
+              curveRecord.color = item.hex;
+              this.component.commitCurveGeometryUpdate();
+            }
             this.component.renderStage();
-            this.component.showKnotToast(`Color: ${hex}`);
+            this.renderTransientCursorDial(controlsLayer, centerPt, curveRecord, callbacks);
+            this.component.showKnotToast(`Color: ${item.hex}`);
           }
         });
-        dial.appendChild(swatch);
+
+        const swatch = makeElement('svg:circle', {
+          cx: pX, cy: pY, r: isSelected ? '7.5' : '6.0',
+          fill: item.hex, stroke: isSelected ? '#ffffff' : '#090d16',
+          'stroke-width': isSelected ? '2.2' : '1.5',
+          style: { filter: isSelected ? 'drop-shadow(0 0 8px ' + item.hex + ')' : 'drop-shadow(0 2px 4px rgba(0,0,0,0.8))' }
+        });
+        jewelG.appendChild(swatch);
+
+        if (isSelected) {
+          jewelG.appendChild(makeElement('svg:circle', {
+            cx: pX, cy: pY, r: '2.5', fill: '#090d16', style: { pointerEvents: 'none' }
+          }));
+        }
+
+        dial.appendChild(jewelG);
       });
 
       dial.style.display = 'block';
-  }
+      dial.style.opacity = '1';
+    }
   hideTransientCursorDial() {
       const dial = document.getElementById('qa-transient-cursor-dial');
       if (dial) dial.style.display = 'none';

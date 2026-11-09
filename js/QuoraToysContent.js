@@ -36,29 +36,31 @@ class QuoraStudioContent {
   }
 
   static p_studio_intro_1() {
-    return [
-      "Spot-the-difference puzzles on social platforms like Quora are notoriously tricky for the human eye when scanned side-by-side. The human brain normalizes small variances across saccades, making subtle alterations invisible.",
-      "By cropping one half of the puzzle and superimposing it directly on top of the other, pixel alignment transforms an exhausting search into an instantaneous optical recognition task."
-    ];
-  }
+      return [
+        "Look, let's just admit it: nobody actually enjoys squinting back and forth between two nearly identical cartoon panels for ten minutes. Spot-the-difference puzzles on Quora and social media feeds are engineered to exploit human cognitive blindspots and waste your time.",
+        "When you've stared at the screen until your eyes water and your brain refuses to see that fifth microscopic difference, you don't need a lecture on visual psychology—you need a fun, shameless optical cheat code.",
+        "QuoraToys is your digital X-ray machine. It takes the side-by-side puzzle, lets you crop either half, and superimposes it right on top of the other with pixel-perfect alignment. You get to solve the puzzle in five seconds, drop your answer in the comments, and get on with your day."
+      ];
+    }
 
   static p_studio_intro_2() {
-    return [
-      "QuoraToys provides three distinct optical comparison techniques to reveal hidden differences:",
-      "1. **50% Alpha Blend:** Overlays both halves with transparency. Identical regions align smoothly; mismatched regions appear doubled or ghosted.",
-      "2. **Optical Flashing (600ms):** Toggles the overlay on and off rapidly. Because human vision is hyper-sensitive to motion, mismatched pixels appear to flicker or dance, immediately drawing your gaze.",
-      "3. **Scrolling Zebra Stripes:** Sweeps a moving horizontal or vertical grid across the image. Differences flutter as the stripe boundaries pass over them."
-    ];
-  }
+      return [
+        "Here's how you can cheat—err, scientifically solve—any puzzle in seconds:",
+        "1. **50% Ghost Alpha:** Overlap both halves with transparency. Everything identical turns sharp and solid; any modified pixel immediately doubles or looks fuzzy.",
+        "2. **⚡ Optical Flashing (600ms):** Toggles the overlay on and off. The human visual system has an involuntary, hardwired motion reflex. Any difference starts dancing and flickering right in front of your eyes—it's impossible to miss.",
+        "3. **▤ Scrolling Zebra Stripes:** Sweeps moving zebra lines across the seam. Subtle line shifts and color variances flutter like a venetian blind.",
+        "Once you spot them, click '⭕ Circle Diff', drag a ring around each difference, and export a clean comparison card with twin magnifier lenses."
+      ];
+    }
 
   static sidebar_comparator_features() {
-    return [
-      "Optical Comparator Superpowers:\n" +
-      "• Sub-Pixel Nudge: Fine-tune overlay alignment using Arrow keys (or Shift + Arrow for 10px jumps).\n" +
-      "• Circle Diff Mode: Click and drag to circle any spotted difference; both images are saved into the difference stack.\n" +
-      "• Direct Export to Studio: Tap '🎨 Studio' to transfer the cropped comparison and all marked differences into the Universal Graphic Studio."
-    ];
-  }
+      return [
+        "The Shameless Shortcut Engine:\n" +
+        "• 1-Click Crop: Crop Puzzle B, drag it over Puzzle A, and tap Arrow keys for sub-pixel nudge.\n" +
+        "• Optical Flashing: Triggers the biological motion reflex so differences jump right into your vision.\n" +
+        "• Circle & Export: Automatically generates side-by-side magnifier lenses comparing before and after, ready to paste into Quora replies."
+      ];
+    }
 }
 
 // --- Chapter 1: Pro Annotation & Kinetic Splines ---
@@ -115,15 +117,16 @@ class QuoraAnnotationContent {
   }
 
   static sidebar_hybrid_pen_mechanics() {
-    return [
-      "Hybrid Gesture Specification:\n" +
-      "• Touch Down at $P_0$: Displays a pale boundary circle ($R=32\\text{px}$) and fat white tip indicator.\n" +
-      "• Click Release Inside $R$: Commits $P_0$ as a discrete vertex. Chain relaxes dynamically as the mouse moves; previous segments stay solid while the active lead is dashed.\n" +
-      "• Right-Click / Enter Commit: Discards swinging cursor drift and commits strictly the clicked nodes $[P_0 \\dots P_k]$.\n" +
-      "• Drag Exceeding $R$: The solid white drawstring pulls the curve tip at $P_{\\text{pen}} = \\text{Cursor} - \\mathbf{u} \\cdot R$."
-    ];
-  }
-
+      return [
+        "The Unified Curve Philosophy:\n" +
+        "• Everything is a Curve: An arrow is a curve with an arrowhead. A highlight ring is a closed curve loop. A callout is a curve with attached text.\n" +
+        "• Touch Down at $P_0$: Displays a pale boundary circle ($R=32\\text{px}$) and fat white tip indicator.\n" +
+        "• Click Release Inside $R$: Commits $P_0$ as a discrete vertex. Chain relaxes dynamically as the mouse moves; previous segments stay solid while the active lead is dashed.\n" +
+        "• Drag Exceeding $R$: The solid white drawstring pulls the curve tip at $P_{\\text{pen}} = \\text{Cursor} - \\mathbf{u} \\cdot R$.\n" +
+        "• Direct Rubber-Wire Bending: Grab any curve segment with the mouse and pull to bend the spline directly through your cursor.\n" +
+        "• Endpoint Snapping & Extension: Starting a stroke at an endpoint continues the curve; ending near the origin snaps into a closed loop ring."
+      ];
+    }
   static p_pause_clutch_handrest() {
     return [
       "Drawing complex technical annotations with a mouse or trackpad causes hand fatigue. Under the **Pause & Tether-Clutch** protocol, holding the `Ctrl` key acts as a mechanical clutch:",
@@ -182,6 +185,24 @@ class QuoraAnnotationContent {
       "• Blockout Paint: Mask logos or watermarks using solid or feathered paint for Gemini AI inpainting."
     ];
   }
+
+  static p_annotation_problem() {
+      return [
+        "Vector curve drawing has been trapped in the 1980s for forty years. When John Warnock and Adobe introduced PostScript Bézier curves in the mid-1980s, they gave users the pen tool: click an anchor point, drag out two rigid tangent handles, guess where the curve will bow, and tweak stalks. It felt like assembling scaffolding, not drawing.",
+        "Four decades later, mainstream vector editors still impose that exact same tedious ritual. If you want to draw a simple curved arrow pointing to a detail on an image, you either have to fight complex control handles or settle for squiggly mouse scribbles that look like MS Paint.",
+        "QuoraToys breaks this 40-year stagnation with three foundational principles: **kinetic physical smoothing, direct rubber-wire bending, and the complete elimination of the vector/pixel boundary**.",
+        "To the creator, it shouldn't matter whether an edit is raster or vector. If you need to erase an unwanted element or watermark, use the alpha eraser brush directly on the image plate. If you need an arrow or callout, just draw a curve—the kinetic string-tether absorbs hand tremors like a weighted calligraphy brush, directional arrowheads scale automatically, and an architectural text bracket appears ready for you to type in five seconds."
+      ];
+    }
+
+  static p_kinetic_tether() {
+      return [
+        "The drawing experience in QuoraToys combines kinetic physical dampening with direct tactile manipulation:",
+        "1. **The Kinetic String-Tether (Virtual Drag-Lead):** Involuntary physiological tremors in the human hand cause jagged wobbles when using a mouse or trackpad. QuoraToys attaches a virtual 32px elastic lead between your cursor and the pen tip. Tremors are absorbed at the source, letting anyone pull sweeping, elegant calligraphy arcs with zero effort.",
+        "2. **Direct 'Rubber-Wire' Reshaping:** In Illustrator, modifying a curve requires switching to the direct selection tool, clicking an anchor, and hunting for tiny handle dots. In QuoraToys, you simply grab the curve itself with your mouse and pull. The wire bends right through your cursor, dynamically placing an on-curve knot that keeps the curve smooth.",
+        "3. **Instant Draw-and-Type Acceleration:** The instant a curve ends, an architectural dashed bracket shelf (`✎ Type note...`) appears at the tail. Typing any character immediately typesets your message in Architect's Daughter font with a 2-sided bracket. If you don't type anything, the ghost shelf vanishes completely."
+      ];
+    }
 }
 
 // --- Chapter 2: In-Situ Bookmarklet Hub ---
@@ -281,12 +302,12 @@ class QuoraVisionContent {
   }
 
   static p_sovereign_1() {
-    return [
-      "Modern content platforms like Quora are increasingly saturated with low-effort automated content ('slop') and engagement farming. As algorithms prioritize volume over depth, valuable institutional knowledge and technical expertise get buried.",
-      "QuoraToys was created as a countermeasure: high-signal visual commentary that stands out immediately in a crowded feed. A clear, beautifully annotated image cut with mathematical precision stops the scroll and communicates complex spatial ideas in seconds."
-    ];
-  }
-
+      return [
+        "Social platforms like Quora are being overwhelmed by automated AI content farms churning out hundreds of thousands of low-effort, generic text answers to capture ad revenue. As engagement algorithms optimize for dwell time and inflammatory outrage, authentic insight is drowned in algorithmic noise.",
+        "The definitive antidote to generative text-slop is **high-density visual proof**: mathematical diagrams, sub-pixel image comparisons, and verifiable graphic commentary that an LLM cannot hallucinate.",
+        "A clear, beautifully annotated image cut with mathematical precision stops the scroll. A viewer can evaluate real evidence in two seconds, bypassing endless paragraphs of automated filler."
+      ];
+    }
   static p_sovereign_2() {
     return [
       "By decoupling visual annotation and archiving from the platform itself, authors retain sovereignty over their work. When you solve a puzzle, explain an invention, or document CAD history in Quora, QuoraToys preserves the clean visual assets locally in high resolution for reuse across all four quadrants of your portfolio."
@@ -351,12 +372,12 @@ class QuoraArchitectureContent {
   }
 
   static p_audit_intro() {
-    return [
-      "Building high-performance creative software requires transparency regarding where shortcuts were taken and how technical debt is systematically retired.",
-      "During early development iterations, several components were implemented as rough prototypes: rotation calculations mixed degrees with radians, tool palettes were trapped within container viewports, and generic color picker routines were substituted for the original code. This document records the resolution of those issues and establishes the long-term engineering plan."
-    ];
-  }
-
+      return [
+        "Building high-performance creative software requires transparency regarding where shortcuts were taken and how technical debt is systematically retired.",
+        "During early prototyping, vector handles and palettes were tested under rough conditions. Over successive refactorings, we replaced fragile multi-modal tool buttons with a single unified curve drafting instrument, eradicated high-frequency DOM teardown during dragging, and resolved the historic 40-year PostScript handle friction.",
+        "With these issues resolved, the annotation pipeline functions as a unified system: drawing gestures convert into responsive on-curve knots, drop shadows remain strictly below foreground strokes, and floating palettes move across the entire screen without boundary clipping."
+      ];
+    }
   static sidebar_audit_items() {
     return [
       "Key Audit Findings:\n" +
@@ -431,13 +452,12 @@ class QuoraArchitectureContent {
   }
 
   static p_math_tether_and_knots() {
-    return [
-      "The drawing experience is governed by two complementary mathematical systems:",
-      "1. **The Kinetic String-Tether:** An analog low-pass filter simulation. The pen tip trails the cursor by an elastic lead radius ($R = 32\\text{px}$), filtering physiological micro-tremors before points reach the curve fitter.",
-      "2. **Reverse Bézier Extraction:** Schneider's least-squares algorithm fits cubic segments to the gesture. Segment endpoints become on-curve Knots. Baseline tangents are calculated from neighbor vectors, and angular deviations are preserved as signed radian offsets."
-    ];
-  }
-
+      return [
+        "QuoraToys replaces the 1980s PostScript handle dogma with two unified, human-centered systems:",
+        "1. **Kinetic Physical Smoothing:** Simulates analog mechanical lead dampening ($P_{\\text{pen}} = \\text{Cursor} - \\mathbf{u} \\cdot R$). The author draws with natural speed, and physiological tremors are eliminated before points ever reach the solver.",
+        "2. **On-Curve Knots & Direct Wire Bending:** Schneider's least-squares algorithm fits cubic Bézier segments with knots placed directly on the curve path. Clicking and dragging the curve body calculates the parameter $t$ under the mouse and solves adjacent control points so the spline passes through the cursor without requiring handle manipulation."
+      ];
+    }
   static sidebar_math_formulas() {
     return [
       "Core Mathematical Relationships:\n" +
