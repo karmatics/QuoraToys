@@ -7,55 +7,58 @@ class QuoraToysApp {
   }
 
   async run(env) {
-    if (this.rootElement) this.destroy();
+      if (this.rootElement) this.destroy();
 
-    if (!env || !env.container) {
-      throw new Error('[QuoraToysApp] run() requires an environment object with a valid container.');
+      if (!env || !env.container) {
+        throw new Error('[QuoraToysApp] run() requires an environment object with a valid container.');
+      }
+
+      this.env = env;
+      this.rootElement = env.container;
+
+      document.documentElement.style.overflowY = 'auto';
+      document.body.style.overflowY = 'auto';
+
+      this.rootElement.style.overflowX = 'hidden';
+      this.rootElement.style.overflowY = 'visible';
+      this.rootElement.style.height = 'auto';
+      this.rootElement.style.minHeight = '100vh';
+      this.rootElement.style.boxSizing = 'border-box';
+      this.rootElement.style.width = '100%';
+
+      // Prioritize Annotation Studio directly front & center on launch
+      const pages = [
+        { id: 'annotation', title: '0. Pro Annotation Studio (Draw, Arrows & Text)', docClass: () => globalThis.QuoraAnnotationContent },
+        { id: 'studio', title: '1. Spot-The-Difference Comparator', docClass: () => globalThis.QuoraStudioContent },
+        { id: 'bookmarklet', title: '2. In-Situ Bookmarklet Hub', docClass: () => globalThis.QuoraBookmarkletContent },
+        { id: 'extension', title: '3. Chrome Extension & Ambient Tools', docClass: () => globalThis.QuoraExtensionContent },
+        { id: 'archiver', title: '4. Quora Answer Archiver & Scraper', docClass: () => globalThis.QuoraArchiverContent },
+        { id: 'vision', title: '5. The Sovereign Feed: Anti-Slop & Community Leverage', docClass: () => globalThis.QuoraVisionContent },
+        { id: 'architecture', title: '6. Architecture Audit, Math Specifications & Refactor Blueprint', docClass: () => globalThis.QuoraArchitectureContent }
+      ];
+
+      this.activePageId = 'annotation';
+      document.body.classList.add('dr-studio-mode');
+
+      this.reader = new DocumentReader({
+        container: this.rootElement,
+        brandTitle: 'QuoraToys Suite',
+        brandIcon: '🎨',
+        dossierId: 'QuoraToys',
+        pages: pages
+      });
+
+      await this.reader.init();
+
+      if (typeof SidePanel !== 'undefined') {
+        this.sidePanel = new SidePanel('left', 300, null);
+        this._buildSidePanel(pages);
+        this.sidePanel.open();
+      }
+
+      globalThis._quoraToysAppInstance = this;
+      return this;
     }
-
-    this.env = env;
-    this.rootElement = env.container;
-
-    document.documentElement.style.overflowY = 'auto';
-    document.body.style.overflowY = 'auto';
-
-    this.rootElement.style.overflowX = 'hidden';
-    this.rootElement.style.overflowY = 'visible';
-    this.rootElement.style.height = 'auto';
-    this.rootElement.style.minHeight = '100vh';
-    this.rootElement.style.boxSizing = 'border-box';
-    this.rootElement.style.width = '100%';
-
-    const pages = [
-      { id: 'studio', title: '0. Spot-The-Difference Studio', docClass: () => globalThis.QuoraStudioContent },
-      { id: 'annotation', title: '1. Pro Annotation & Kinetic Splines', docClass: () => globalThis.QuoraAnnotationContent },
-      { id: 'bookmarklet', title: '2. In-Situ Bookmarklet Hub', docClass: () => globalThis.QuoraBookmarkletContent },
-      { id: 'extension', title: '3. Chrome Extension & Ambient Tools', docClass: () => globalThis.QuoraExtensionContent },
-      { id: 'archiver', title: '4. Quora Answer Archiver & Scraper', docClass: () => globalThis.QuoraArchiverContent },
-      { id: 'vision', title: '5. The Sovereign Feed: Anti-Slop & Community Leverage', docClass: () => globalThis.QuoraVisionContent },
-      { id: 'architecture', title: '6. Architecture Audit, Math Specifications & Refactor Blueprint', docClass: () => globalThis.QuoraArchitectureContent }
-    ];
-
-    this.reader = new DocumentReader({
-      container: this.rootElement,
-      brandTitle: 'QuoraToys Suite',
-      brandIcon: '🧩',
-      dossierId: 'QuoraToys',
-      pages: pages
-    });
-
-    await this.reader.init();
-
-    if (typeof SidePanel !== 'undefined') {
-      this.sidePanel = new SidePanel('left', 300, null);
-      this._buildSidePanel(pages);
-      this.sidePanel.open();
-    }
-
-    globalThis._quoraToysAppInstance = this;
-    return this;
-  }
-
   _buildSidePanel(pages) {
     if (!this.sidePanel) return;
 
@@ -154,41 +157,47 @@ class QuoraToysApp {
   }
 
   selectChapter(pageId, targetBlockId = null) {
-    const isPageChange = (this.activePageId !== pageId);
-    this.activePageId = pageId;
+      const isPageChange = (this.activePageId !== pageId);
+      this.activePageId = pageId;
 
-    if (this.sidePanel) {
-      this.sidePanel.contentContainer.querySelectorAll('.cp-chapter-card').forEach(card => {
-        const isCur = card.dataset.pageId === pageId;
-        card.style.background = isCur ? 'rgba(0, 230, 118, 0.08)' : 'rgba(15, 23, 42, 0.45)';
-        card.style.borderColor = isCur ? 'rgba(0, 230, 118, 0.6)' : '#1e293b';
+      // Full-bleed mode toggle on body: removes top blank header on studio canvas
+      if (pageId === 'annotation') {
+        document.body.classList.add('dr-studio-mode');
+      } else {
+        document.body.classList.remove('dr-studio-mode');
+      }
 
-        const titleText = card.querySelector('.cp-chapter-title-text');
-        if (titleText) titleText.style.color = isCur ? '#00e676' : '#f8fafc';
+      if (this.sidePanel) {
+        this.sidePanel.contentContainer.querySelectorAll('.cp-chapter-card').forEach(card => {
+          const isCur = card.dataset.pageId === pageId;
+          card.style.background = isCur ? 'rgba(0, 230, 118, 0.08)' : 'rgba(15, 23, 42, 0.45)';
+          card.style.borderColor = isCur ? 'rgba(0, 230, 118, 0.6)' : '#1e293b';
 
-        const chevron = card.querySelector('.cp-chapter-chevron');
-        if (chevron) chevron.textContent = isCur ? '▼' : '▶';
+          const titleText = card.querySelector('.cp-chapter-title-text');
+          if (titleText) titleText.style.color = isCur ? '#00e676' : '#f8fafc';
 
-        const secList = card.querySelector('.cp-sec-list');
-        if (secList) secList.style.display = isCur ? 'flex' : 'none';
-      });
+          const chevron = card.querySelector('.cp-chapter-chevron');
+          if (chevron) chevron.textContent = isCur ? '▼' : '▶';
+
+          const secList = card.querySelector('.cp-sec-list');
+          if (secList) secList.style.display = isCur ? 'flex' : 'none';
+        });
+      }
+
+      if (this.reader && typeof this.reader.switchPage === 'function') {
+        if (isPageChange) this.reader.switchPage(pageId, true);
+      }
+
+      if (targetBlockId) {
+        setTimeout(() => {
+          if (this.reader && typeof this.reader.highlightTarget === 'function') {
+            this.reader.highlightTarget(targetBlockId);
+          }
+        }, isPageChange ? 220 : 50);
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
     }
-
-    if (this.reader && typeof this.reader.switchPage === 'function') {
-      if (isPageChange) this.reader.switchPage(pageId, true);
-    }
-
-    if (targetBlockId) {
-      setTimeout(() => {
-        if (this.reader && typeof this.reader.highlightTarget === 'function') {
-          this.reader.highlightTarget(targetBlockId);
-        }
-      }, isPageChange ? 220 : 50);
-    } else {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  }
-
   destroy() {
     if (this.sidePanel) {
       this.sidePanel.destroy();

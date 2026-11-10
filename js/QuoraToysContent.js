@@ -458,18 +458,18 @@ class QuoraArchitectureContent {
         "2. **On-Curve Knots & Direct Wire Bending:** Schneider's least-squares algorithm fits cubic Bézier segments with knots placed directly on the curve path. Clicking and dragging the curve body calculates the parameter $t$ under the mouse and solves adjacent control points so the spline passes through the cursor without requiring handle manipulation."
       ];
     }
-  static sidebar_math_formulas() {
-    return [
-      "Core Mathematical Relationships:\n" +
-      "• Kinetic Pull: P_pen = Cursor - normalize(Cursor - P_last) * R\n" +
-      "• Angular Deviation: theta = atan2(T_base x T_actual, T_base . T_actual)\n" +
-      "• Scale Factor: S_out = 3 * ||P_1 - V_i|| / D_next\n" +
-      "• Curvature: C = (S_out + S_in) / 2\n" +
-      "• Balance: B = (2 * S_in) / (S_out + S_in)\n" +
-      "• Arrowhead Barbs: P_barb = P_0 + U * 18 +/- N * 11, with concave control points pulled inward toward stem U."
-    ];
-  }
 
+  static sidebar_math_formulas() {
+      return [
+        "Core Mathematical Formulations:\n" +
+        "• Kinetic Drag-Lead: P_pen = Cursor - normalize(Cursor - P_last) * R (R = 32px)\n" +
+        "• True Opposite-Corner Bounds: Fixed = P_orig + Size_orig; P_new = Fixed - Size_new (SW/NE/NW/SE invariant)\n" +
+        "• Text Decoupled Layers: Glow in glowLayer; Plasma Core in stroke/text layers; Drop Shadow in shadowLayer\n" +
+        "• Smooth Angle Projection: P_deg = P_knot + T * 94px (projected 26px beyond grab handle at 60 FPS)\n" +
+        "• CAD Zoom Invariance: W_svg = W_screen / z (constant pixel width across zoom for lines and handles)\n" +
+        "• Plasma Neon: Core = 255 * 0.88 + C * 0.12 over pure 14px feGaussianBlur stdDeviation=5.0 bloom"
+      ];
+    }
   static p_roadmap_overview() {
     return [
       "The engineering plan focuses on expanding geometric primitives while factoring large methods into modular, testable units."

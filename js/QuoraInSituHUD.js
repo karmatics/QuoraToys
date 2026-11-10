@@ -314,32 +314,38 @@ class QuoraInSituHUD {
     }
 
   renderTransientCursorDial(controlsLayer, centerPt, curveRecord, callbacks = {}) {
+      // Insulate the dial inside its own dedicated layer so controlsLayer.innerHTML = '' NEVER wipes it!
+      const targetLayer = this.component.hudDialLayer || controlsLayer;
+
       let dial = document.getElementById('qa-transient-cursor-dial');
       if (!dial) {
         dial = makeElement('svg:g', {
           id: 'qa-transient-cursor-dial',
-          style: { transition: 'opacity 0.18s ease', pointerEvents: 'auto' }
+          className: 'qa-radial-dial-node',
+          style: { transition: 'opacity 0.2s ease', pointerEvents: 'auto' }
         });
-        controlsLayer.appendChild(dial);
+        targetLayer.appendChild(dial);
       }
 
       dial.innerHTML = '';
-      const r = 56;
+      const z = this.component.stageState.zoom || 1.0;
+      const invScale = 1 / z;
+      const r = 56 * invScale;
       const curColor = (curveRecord?.color || this.component.stageState.currentColor || '#00e676').toLowerCase();
 
       // Glowing background dial ring
       const ringBackdrop = makeElement('svg:circle', {
         cx: centerPt[0], cy: centerPt[1], r: String(r),
-        fill: 'rgba(9, 13, 22, 0.94)', stroke: '#00f2fe', 'stroke-width': '1.5',
-        style: { filter: 'drop-shadow(0 6px 20px rgba(0,0,0,0.85))' }
+        fill: 'rgba(9, 13, 22, 0.96)', stroke: '#00f2fe', 'stroke-width': String(1.5 * invScale),
+        style: { filter: 'drop-shadow(0 8px 28px rgba(0,0,0,0.9))' }
       });
       dial.appendChild(ringBackdrop);
 
-      // Center dismissal dot
+      // Center dismissal dot (Click to close)
       const centerDot = makeElement('svg:circle', {
-        cx: centerPt[0], cy: centerPt[1], r: '6.5', fill: '#ffd700', stroke: '#ffffff', 'stroke-width': '1.5',
+        cx: centerPt[0], cy: centerPt[1], r: String(7.0 * invScale), fill: '#ffd700', stroke: '#ffffff', 'stroke-width': String(1.5 * invScale),
         style: { cursor: 'pointer' },
-        title: 'Click to dismiss dial',
+        title: 'Click or press Esc to close dial',
         onclick: (e) => {
           e.stopPropagation();
           this.hideTransientCursorDial();
@@ -356,10 +362,11 @@ class QuoraInSituHUD {
       ];
 
       actions.forEach(act => {
-        const bX = centerPt[0] + Math.cos(act.angle) * (r - 16);
-        const bY = centerPt[1] + Math.sin(act.angle) * (r - 16);
+        const bX = centerPt[0] + Math.cos(act.angle) * (r - 16 * invScale);
+        const bY = centerPt[1] + Math.sin(act.angle) * (r - 16 * invScale);
 
         const nodeG = makeElement('svg:g', {
+          className: 'qa-radial-dial-node',
           style: { cursor: 'pointer' },
           title: act.title,
           onmousedown: (e) => {
@@ -369,12 +376,12 @@ class QuoraInSituHUD {
         });
 
         nodeG.appendChild(makeElement('svg:circle', {
-          cx: bX, cy: bY, r: '11', fill: 'rgba(15, 23, 42, 0.95)',
-          stroke: '#00f2fe', 'stroke-width': '1.2'
+          cx: bX, cy: bY, r: String(11 * invScale), fill: 'rgba(15, 23, 42, 0.95)',
+          stroke: '#00f2fe', 'stroke-width': String(1.2 * invScale)
         }));
 
         nodeG.appendChild(makeElement('svg:text', {
-          x: bX, y: bY + 3.5, fill: '#ffffff', 'font-size': '10.5px',
+          x: bX, y: bY + 3.5 * invScale, fill: '#ffffff', 'font-size': `${10.5 * invScale}px`,
           'text-anchor': 'middle', style: { pointerEvents: 'none' }
         }, act.label));
 
@@ -383,14 +390,14 @@ class QuoraInSituHUD {
 
       // Outer Color Jewel Dots Ring
       const palette = [
-        { hex: '#00f2fe', title: 'Cyber Cyan (1)' },
-        { hex: '#00e676', title: 'Matrix Green (2)' },
-        { hex: '#ffd700', title: 'Electric Gold (3)' },
-        { hex: '#ff2d55', title: 'Coral Red (4)' },
-        { hex: '#c084fc', title: 'Neon Purple (5)' },
-        { hex: '#ffffff', title: 'Pure White (6)' }
+        { hex: '#00f2fe', title: 'Cyan (1)' },
+        { hex: '#00e676', title: 'Green (2)' },
+        { hex: '#ffd700', title: 'Gold (3)' },
+        { hex: '#ff2d55', title: 'Coral (4)' },
+        { hex: '#c084fc', title: 'Purple (5)' },
+        { hex: '#ffffff', title: 'White (6)' }
       ];
-      const outerR = r + 15;
+      const outerR = r + 16 * invScale;
 
       palette.forEach((item, i) => {
         const angle = (i * (Math.PI / 3)) - (Math.PI / 2);
@@ -399,6 +406,7 @@ class QuoraInSituHUD {
         const isSelected = (item.hex.toLowerCase() === curColor);
 
         const jewelG = makeElement('svg:g', {
+          className: 'qa-radial-dial-node',
           style: { cursor: 'pointer' },
           title: `Set Color: ${item.title}`,
           onmousedown: (e) => {
@@ -416,19 +424,12 @@ class QuoraInSituHUD {
         });
 
         const swatch = makeElement('svg:circle', {
-          cx: pX, cy: pY, r: isSelected ? '7.5' : '6.0',
+          cx: pX, cy: pY, r: String((isSelected ? 7.5 : 6.0) * invScale),
           fill: item.hex, stroke: isSelected ? '#ffffff' : '#090d16',
-          'stroke-width': isSelected ? '2.2' : '1.5',
-          style: { filter: isSelected ? 'drop-shadow(0 0 8px ' + item.hex + ')' : 'drop-shadow(0 2px 4px rgba(0,0,0,0.8))' }
+          'stroke-width': String((isSelected ? 2.2 : 1.5) * invScale),
+          style: { filter: isSelected ? `drop-shadow(0 0 8px ${item.hex})` : 'drop-shadow(0 2px 4px rgba(0,0,0,0.8))' }
         });
         jewelG.appendChild(swatch);
-
-        if (isSelected) {
-          jewelG.appendChild(makeElement('svg:circle', {
-            cx: pX, cy: pY, r: '2.5', fill: '#090d16', style: { pointerEvents: 'none' }
-          }));
-        }
-
         dial.appendChild(jewelG);
       });
 
@@ -450,6 +451,17 @@ class QuoraInSituHUD {
         card.style.color = '';
       }, 180);
   }
+
+  openDialAt(centerPt, curveRecord = null) {
+      const curCurve = curveRecord || this.component.getActiveCurve();
+      this.renderTransientCursorDial(this.component.hudDialLayer || this.component.svgSurface, centerPt, curCurve, {
+        onToggleArrow: () => this.component.toggleArrowhead(),
+        onAttachText: () => this.component.triggerTextOnActiveOrCanvas(),
+        onSwapEnds: () => this.component.swapActiveCurveTerminals(),
+        onResetSnap: () => this.component.executeKeyInCommand('reset_knot')
+      });
+      QuoraLogger.getInstance().log('gestures', 3, 'Opened Radial Tool Dial', { pt: centerPt });
+    }
 }
 
 globalThis.QuoraInSituHUD = QuoraInSituHUD;

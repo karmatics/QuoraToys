@@ -107,98 +107,101 @@ class QuoraStrokeManager {
   }
 
   commitSpline(beziers, color, hasArrow, existingVertices = null) {
-    if (!beziers || beziers.length === 0) return;
+      if (!beziers || beziers.length === 0) return;
 
-    let d = 'M ' + beziers[0][0].join(' ');
-    for (let i = 0; i < beziers.length; i++) {
-      const [start, cp1, cp2, end] = beziers[i];
-      d += ` C ${cp1.join(' ')}, ${cp2.join(' ')}, ${end.join(' ')}`;
-    }
-
-    const shadowOffset = 2.0;
-    const shadowColor = 'rgba(10, 15, 25, 0.95)';
-    const lineStyle = this.component.stageState.lineStyle || 'classic'; // 'classic' | 'lightsaber' | 'neon'
-
-    // Shadow Layer: Suppressed in lightsaber/neon mode to allow glowing bloom
-    const shadowPath = makeElement('svg:path', {
-      d, transform: `translate(${shadowOffset}, ${shadowOffset})`,
-      stroke: shadowColor, 'stroke-width': '5.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none',
-      style: { display: lineStyle === 'classic' ? 'block' : 'none' }
-    });
-
-    // Glow Layer: Wide bloom for lightsaber/neon line styles
-    const glowPath = makeElement('svg:path', {
-      d, stroke: color, 'stroke-width': lineStyle === 'lightsaber' ? '14' : '8',
-      'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none',
-      style: {
-        display: lineStyle !== 'classic' ? 'block' : 'none',
-        filter: 'drop-shadow(0 0 8px ' + color + ')',
-        opacity: '0.85'
+      let d = 'M ' + beziers[0][0].join(' ');
+      for (let i = 0; i < beziers.length; i++) {
+        const [start, cp1, cp2, end] = beziers[i];
+        d += ` C ${cp1.join(' ')}, ${cp2.join(' ')}, ${end.join(' ')}`;
       }
-    });
 
-    // Foreground Stroke Layer
-    const splineGroup = makeElement('svg:g', { className: 'qa-spline-group' });
+      const shadowOffset = 2.0;
+      const shadowColor = 'rgba(10, 15, 25, 0.95)';
+      const lineStyle = this.component.stageState.lineStyle || 'classic'; // 'classic' | 'neon'
+      const baseW = this.component.stageState.curveStrokeWidth || 3.2;
+      const z = this.component.stageState.cadStrokeMode ? (this.component.stageState.zoom || 1.0) : 1.0;
+      const sw = baseW / z;
 
-    if (lineStyle === 'lightsaber') {
-      // Outer colored core
-      const outerCore = makeElement('svg:path', {
-        d, stroke: color, 'stroke-width': '4.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none'
+      // Shadow Layer: Suppressed completely in Neon mode
+      const shadowPath = makeElement('svg:path', {
+        d, transform: `translate(${shadowOffset}, ${shadowOffset})`,
+        stroke: shadowColor, 'stroke-width': String((baseW + 2.3) / z), 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none',
+        style: { display: lineStyle === 'classic' ? 'block' : 'none' }
       });
-      // Luminous overexposed white center core
-      const innerCore = makeElement('svg:path', {
-        d, stroke: '#ffffff', 'stroke-width': '2.2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none',
-        style: { filter: 'drop-shadow(0 0 2px #ffffff)' }
+
+      // Outer Glow Layer: In Neon mode, purely saturated color aura with smooth Gaussian diffusion (no hard edge)
+      const glowPath = makeElement('svg:path', {
+        d, stroke: color, 'stroke-width': String((baseW + 10) / z),
+        'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none',
+        style: {
+          display: lineStyle === 'neon' ? 'block' : 'none',
+          filter: 'url(#qa-neon-glow)',
+          opacity: '0.92'
+        }
       });
-      splineGroup.append(outerCore, innerCore);
-    } else {
-      // Classic crisp stroke
-      const mainSpline = makeElement('svg:path', {
-        d, stroke: color, 'stroke-width': '3.2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none'
-      });
-      splineGroup.appendChild(mainSpline);
+
+      // Foreground Stroke Layer
+      const splineGroup = makeElement('svg:g', { className: 'qa-spline-group' });
+
+      if (lineStyle === 'neon') {
+        const coreTint = this.getLuminousCoreColor(color);
+
+        // Plasma center blade (nearly white tinted, narrow 2.5px with subtle 0.8px feather)
+        const innerCore = makeElement('svg:path', {
+          d, stroke: coreTint, 'stroke-width': String(2.5 / z), 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none',
+          style: { filter: 'url(#qa-neon-core)' }
+        });
+        splineGroup.appendChild(innerCore);
+      } else {
+        // Classic crisp stroke with drop shadow
+        const mainSpline = makeElement('svg:path', {
+          d, stroke: color, 'stroke-width': String(sw), 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none'
+        });
+        splineGroup.appendChild(mainSpline);
+      }
+
+      const vertices = existingVertices || this.beziersToVertices(beziers);
+
+      const curveRecord = {
+        id: 'curve_' + Date.now(),
+        type: 'curve',
+        beziers,
+        vertices,
+        color,
+        lineStyle: lineStyle,
+        arrowEnd: hasArrow ? 'tip' : 'none',
+        textEnd: 'tail',
+        text: '',
+        hasTextBox: this.component.stageState.hasBorder,
+        boxStyle: 'bracket',
+        fontFamily: this.component.stageState.fontFamily,
+        fontSize: this.component.stageState.fontSize || 22,
+        connectEdge: null,
+        elements: [shadowPath, splineGroup, glowPath]
+      };
+
+      this.component.shadowLayer.appendChild(shadowPath);
+      this.component.glowLayer.appendChild(glowPath);
+      this.component.strokeLayer.appendChild(splineGroup);
+
+      if (hasArrow) {
+        const p0 = beziers[0][0];
+        const p1 = beziers[0][1];
+        const dist = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) || 1;
+        const arrow = this.renderConcaveArrowhead(p0, [(p1[0] - p0[0]) / dist, (p1[1] - p0[1]) / dist], color, 2.0, baseW, lineStyle);
+        curveRecord._arrowSh = arrow.shadow;
+        curveRecord._arrowFg = arrow.foreground;
+        curveRecord._arrowGlow = arrow.glow;
+        if (arrow.shadow) this.component.shadowLayer.appendChild(arrow.shadow);
+        if (arrow.glow) this.component.glowLayer.appendChild(arrow.glow);
+        this.component.strokeLayer.appendChild(arrow.foreground);
+      }
+
+      this.component.stageState.annotations.push(curveRecord);
+      this.component.stageState.selectedItem = curveRecord;
+      this.component.renderStage();
+      this.component.updateDynamicKeyInHUD();
     }
-
-    const vertices = existingVertices || this.beziersToVertices(beziers);
-
-    const curveRecord = {
-      id: 'curve_' + Date.now(),
-      type: 'curve',
-      beziers,
-      vertices,
-      color,
-      lineStyle: lineStyle,
-      arrowEnd: hasArrow ? 'tip' : 'none',
-      textEnd: 'tail',
-      text: '',
-      hasTextBox: this.component.stageState.hasBorder,
-      boxStyle: 'bracket',
-      fontFamily: this.component.stageState.fontFamily,
-      fontSize: this.component.stageState.fontSize || 22,
-      connectEdge: null,
-      elements: [shadowPath, splineGroup, glowPath]
-    };
-
-    this.component.shadowLayer.appendChild(shadowPath);
-    this.component.glowLayer.appendChild(glowPath);
-    this.component.strokeLayer.appendChild(splineGroup);
-
-    if (hasArrow) {
-      const p0 = beziers[0][0];
-      const p1 = beziers[0][1];
-      const dist = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) || 1;
-      const arrow = this.renderConcaveArrowhead(p0, [(p1[0] - p0[0]) / dist, (p1[1] - p0[1]) / dist], color, 2.0);
-      curveRecord._arrowSh = arrow.shadow;
-      curveRecord._arrowFg = arrow.foreground;
-      this.component.shadowLayer.appendChild(arrow.shadow);
-      this.component.strokeLayer.appendChild(arrow.foreground);
-    }
-
-    this.component.stageState.annotations.push(curveRecord);
-    this.component.stageState.selectedItem = curveRecord;
-    this.component.renderStage();
-    this.component.updateDynamicKeyInHUD();
-  }
 
   updateCurveGeometry() {
       const curve = this.component.getActiveCurve();
@@ -218,45 +221,52 @@ class QuoraStrokeManager {
       }
 
       const lineStyle = curve.lineStyle || 'classic';
-      const sw = curve.strokeWidth || this.component.stageState.curveStrokeWidth || 3.2;
+      const baseW = curve.strokeWidth || this.component.stageState.curveStrokeWidth || 3.2;
+      const z = this.component.stageState.cadStrokeMode ? (this.component.stageState.zoom || 1.0) : 1.0;
+      const sw = baseW / z;
 
-      // Update shadow path
+      // Update shadow path (suppressed in neon mode)
       if (shadowEl) {
         shadowEl.setAttribute('d', d);
-        shadowEl.setAttribute('stroke-width', String(sw + 2.3));
+        shadowEl.setAttribute('stroke-width', String((baseW + 2.3) / z));
         shadowEl.style.display = lineStyle === 'classic' ? 'block' : 'none';
       }
 
-      // Update glow bloom path
+      // Update glow bloom path (fully saturated color with smooth Gaussian bloom in neon mode)
       if (glowPath) {
         glowPath.setAttribute('d', d);
         glowPath.setAttribute('stroke', curve.color);
-        glowPath.setAttribute('stroke-width', String(lineStyle === 'lightsaber' ? sw + 10 : sw + 5));
-        glowPath.style.display = lineStyle !== 'classic' ? 'block' : 'none';
-        glowPath.style.filter = 'drop-shadow(0 0 8px ' + curve.color + ')';
+        glowPath.setAttribute('stroke-width', String((baseW + 10) / z));
+        glowPath.style.display = lineStyle === 'neon' ? 'block' : 'none';
+        glowPath.style.filter = 'url(#qa-neon-glow)';
+        glowPath.style.opacity = '0.92';
       }
 
       // Update foreground splines
       if (splineGroup) {
-        const paths = splineGroup.querySelectorAll('path');
-        if (lineStyle === 'lightsaber' && paths.length >= 2) {
-          paths[0].setAttribute('d', d);
-          paths[0].setAttribute('stroke', curve.color);
-          paths[0].setAttribute('stroke-width', String(sw + 1.2));
-          paths[1].setAttribute('d', d);
-          paths[1].setAttribute('stroke-width', String(Math.max(1.5, sw * 0.55)));
-        } else if (paths.length > 0) {
-          paths[0].setAttribute('d', d);
-          paths[0].setAttribute('stroke', curve.color);
-          paths[0].setAttribute('stroke-width', String(sw));
+        splineGroup.innerHTML = '';
+        if (lineStyle === 'neon') {
+          const coreTint = this.getLuminousCoreColor(curve.color);
+          const innerCore = makeElement('svg:path', {
+            d, stroke: coreTint, 'stroke-width': String(2.5 / z), 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none',
+            style: { filter: 'url(#qa-neon-core)' }
+          });
+          splineGroup.appendChild(innerCore);
+        } else {
+          const mainSpline = makeElement('svg:path', {
+            d, stroke: curve.color, 'stroke-width': String(sw), 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none'
+          });
+          splineGroup.appendChild(mainSpline);
         }
       }
 
       // Remove existing arrowheads before re-attaching
       if (curve._arrowFg) { curve._arrowFg.remove(); curve._arrowFg = null; }
       if (curve._arrowSh) { curve._arrowSh.remove(); curve._arrowSh = null; }
+      if (curve._arrowGlow) { curve._arrowGlow.remove(); curve._arrowGlow = null; }
       if (curve._arrowFgTail) { curve._arrowFgTail.remove(); curve._arrowFgTail = null; }
       if (curve._arrowShTail) { curve._arrowShTail.remove(); curve._arrowShTail = null; }
+      if (curve._arrowGlowTail) { curve._arrowGlowTail.remove(); curve._arrowGlowTail = null; }
 
       if (!curve.isClosed && curve.beziers.length > 0) {
         // 1. Tip Arrowhead
@@ -264,10 +274,12 @@ class QuoraStrokeManager {
           const p0 = curve.beziers[0][0];
           const p1 = curve.beziers[0][1];
           const dist = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) || 1;
-          const arrow = this.renderConcaveArrowhead(p0, [(p1[0] - p0[0]) / dist, (p1[1] - p0[1]) / dist], curve.color, 2.0, sw);
+          const arrow = this.renderConcaveArrowhead(p0, [(p1[0] - p0[0]) / dist, (p1[1] - p0[1]) / dist], curve.color, 2.0, baseW, lineStyle);
           curve._arrowSh = arrow.shadow;
           curve._arrowFg = arrow.foreground;
-          this.component.shadowLayer.appendChild(arrow.shadow);
+          curve._arrowGlow = arrow.glow;
+          if (arrow.shadow) this.component.shadowLayer.appendChild(arrow.shadow);
+          if (arrow.glow) this.component.glowLayer.appendChild(arrow.glow);
           this.component.strokeLayer.appendChild(arrow.foreground);
         }
 
@@ -277,28 +289,33 @@ class QuoraStrokeManager {
           const p2 = lastSeg[2];
           const p3 = lastSeg[3];
           const dist = Math.hypot(p3[0] - p2[0], p3[1] - p2[1]) || 1;
-          const arrow = this.renderConcaveArrowhead(p3, [(p2[0] - p3[0]) / dist, (p2[1] - p3[1]) / dist], curve.color, 2.0, sw);
+          const arrow = this.renderConcaveArrowhead(p3, [(p2[0] - p3[0]) / dist, (p2[1] - p3[1]) / dist], curve.color, 2.0, baseW, lineStyle);
           curve._arrowShTail = arrow.shadow;
           curve._arrowFgTail = arrow.foreground;
-          this.component.shadowLayer.appendChild(arrow.shadow);
+          curve._arrowGlowTail = arrow.glow;
+          if (arrow.shadow) this.component.shadowLayer.appendChild(arrow.shadow);
+          if (arrow.glow) this.component.glowLayer.appendChild(arrow.glow);
           this.component.strokeLayer.appendChild(arrow.foreground);
         }
       }
 
       this.component.renderStage();
     }
-  renderConcaveArrowhead(p0, exitTangent, color, shadowOffset = 2.0, strokeWidth = 3.2) {
+
+  renderConcaveArrowhead(p0, exitTangent, color, shadowOffset = 2.0, strokeWidth = 3.2, lineStyle = 'classic') {
       const ux = exitTangent[0];
       const uy = exitTangent[1];
       const nx = -uy;
       const ny = ux;
 
-      // Scale arrowhead barb geometry proportionally to curve stroke width
+      const z = (this.component.stageState.cadStrokeMode) ? (this.component.stageState.zoom || 1.0) : 1.0;
       const sw = Math.max(1.5, Math.min(12, strokeWidth || 3.2));
-      const barbLen = Math.round(14 + sw * 1.25);
-      const barbSpread = Math.round(8 + sw * 0.95);
-      const waistBack = Math.round(6 + sw * 0.6);
-      const waistSpread = Math.max(2, sw * 0.75);
+      const effectiveSw = sw / z;
+
+      const barbLen = Math.round((14 + sw * 1.25) / Math.sqrt(z));
+      const barbSpread = Math.round((8 + sw * 0.95) / Math.sqrt(z));
+      const waistBack = Math.round((6 + sw * 0.6) / Math.sqrt(z));
+      const waistSpread = Math.max(2, (sw * 0.75) / Math.sqrt(z));
 
       const b1 = [p0[0] + ux * barbLen + nx * barbSpread, p0[1] + uy * barbLen + ny * barbSpread];
       const b2 = [p0[0] + ux * barbLen - nx * barbSpread, p0[1] + uy * barbLen - ny * barbSpread];
@@ -307,18 +324,39 @@ class QuoraStrokeManager {
 
       const arrowD = `M ${b1[0]} ${b1[1]} Q ${c1[0]} ${c1[1]} ${p0[0]} ${p0[1]} M ${p0[0]} ${p0[1]} Q ${c2[0]} ${c2[1]} ${b2[0]} ${b2[1]}`;
 
-      const arrowShadow = makeElement('svg:path', {
-        d: arrowD, transform: `translate(${shadowOffset}, ${shadowOffset})`,
-        stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': String(sw + 2.4), fill: 'none',
-        'stroke-linecap': 'round', 'stroke-linejoin': 'round'
-      });
+      let arrowShadow = null;
+      let arrowGlow = null;
+      let arrowForeground = null;
 
-      const arrowForeground = makeElement('svg:path', {
-        d: arrowD, stroke: color, 'stroke-width': String(sw), fill: 'none',
-        'stroke-linecap': 'round', 'stroke-linejoin': 'round'
-      });
+      if (lineStyle === 'classic') {
+        arrowShadow = makeElement('svg:path', {
+          d: arrowD, transform: `translate(${shadowOffset}, ${shadowOffset})`,
+          stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': String((sw + 2.4) / z), fill: 'none',
+          'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+        });
+        arrowForeground = makeElement('svg:path', {
+          d: arrowD, stroke: color, 'stroke-width': String(effectiveSw), fill: 'none',
+          'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+        });
+      } else if (lineStyle === 'neon') {
+        const coreTint = this.getLuminousCoreColor(color);
 
-      return { shadow: arrowShadow, foreground: arrowForeground };
+        // Neon Arrowhead Outer Glow Layer (Diffuse Gaussian bloom)
+        arrowGlow = makeElement('svg:path', {
+          d: arrowD, stroke: color, 'stroke-width': String((sw + 10) / z), fill: 'none',
+          'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+          style: { filter: 'url(#qa-neon-glow)', opacity: '0.92' }
+        });
+
+        // Neon Arrowhead Inner Core (Narrow 2.5px plasma blade)
+        arrowForeground = makeElement('svg:path', {
+          d: arrowD, stroke: coreTint, 'stroke-width': String(2.5 / z), fill: 'none',
+          'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+          style: { filter: 'url(#qa-neon-core)' }
+        });
+      }
+
+      return { shadow: arrowShadow, foreground: arrowForeground, glow: arrowGlow };
     }
   swapCurveTerminals(curve) {
     if (!curve || !curve.beziers || curve.beziers.length === 0) return;
@@ -348,6 +386,79 @@ class QuoraStrokeManager {
     this.component.exposeBezierHandles(curve);
     this.component.showKnotToast(`✓ Point inserted on curve at #${idx + 2}`);
   }
+
+  getLuminousCoreColor(colorStr) {
+      if (!colorStr) return 'rgb(255, 255, 255)';
+      let r = 255, g = 255, b = 255;
+      const str = String(colorStr).trim();
+
+      if (str.startsWith('#')) {
+        let hex = str.slice(1);
+        if (hex.length === 3) hex = hex.split('').map(x => x + x).join('');
+        r = parseInt(hex.slice(0, 2), 16) || 255;
+        g = parseInt(hex.slice(2, 4), 16) || 255;
+        b = parseInt(hex.slice(4, 6), 16) || 255;
+      } else if (str.startsWith('rgb')) {
+        const match = str.match(/rgb\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/i);
+        if (match) {
+          r = parseInt(match[1], 10);
+          g = parseInt(match[2], 10);
+          b = parseInt(match[3], 10);
+        }
+      }
+
+      // Exact user formula: Blend 88% towards pure white so the plasma blade is nearly white with a subtle hint of color
+      // For pure red (255, 0, 0), this produces rgb(255, 224, 224)
+      const coreR = Math.round(255 * 0.88 + r * 0.12);
+      const coreG = Math.round(255 * 0.88 + g * 0.12);
+      const coreB = Math.round(255 * 0.88 + b * 0.12);
+      return `rgb(${coreR}, ${coreG}, ${coreB})`;
+    }
+  applyCadZoomCompensation(zoomLevel = 1.0) {
+      const z = Math.max(0.1, zoomLevel || 1.0);
+      const annotations = this.component.stageState.annotations || [];
+
+      annotations.forEach(ann => {
+        if (ann.type === 'curve' && ann.elements) {
+          const [shadowEl, splineGroup, glowPath] = ann.elements;
+          const baseW = ann.strokeWidth || 3.2;
+          const compW = baseW / z;
+          const lineStyle = ann.lineStyle || 'classic';
+
+          if (shadowEl) {
+            shadowEl.setAttribute('stroke-width', String((baseW + 2.3) / z));
+          }
+
+          if (glowPath) {
+            glowPath.setAttribute('stroke-width', String((baseW + 9) / z));
+          }
+
+          if (splineGroup) {
+            const paths = splineGroup.querySelectorAll('path');
+            if (lineStyle === 'neon' && paths.length >= 2) {
+              paths[0].setAttribute('stroke-width', String(compW));
+              paths[1].setAttribute('stroke-width', String(2.4 / z));
+            } else if (paths.length > 0) {
+              paths[0].setAttribute('stroke-width', String(compW));
+            }
+          }
+
+          // Compensate arrowheads
+          if (ann._arrowFg) {
+            const fgPaths = ann._arrowFg.querySelectorAll ? ann._arrowFg.querySelectorAll('path') : [];
+            if (fgPaths.length >= 2) {
+              fgPaths[0].setAttribute('stroke-width', String(compW));
+              fgPaths[1].setAttribute('stroke-width', String(2.0 / z));
+            } else if (ann._arrowFg.setAttribute) {
+              ann._arrowFg.setAttribute('stroke-width', String(compW));
+            }
+          }
+          if (ann._arrowSh && ann._arrowSh.setAttribute) {
+            ann._arrowSh.setAttribute('stroke-width', String((baseW + 2.4) / z));
+          }
+        }
+      });
+    }
 }
 
 globalThis.QuoraStrokeManager = QuoraStrokeManager;

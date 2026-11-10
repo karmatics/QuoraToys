@@ -120,13 +120,15 @@ class QuoraImageManager {
       const plate = stageState.activeImage;
       if (!plate) return;
 
+      const z = stageState.zoom || 1.0;
+      const invScale = (1 / z).toFixed(3);
       const g = makeElement('svg:g', { className: 'qa-image-plate-control' });
 
       // 1. Transparent Drag Surface
       const dragSurface = makeElement('svg:rect', {
         x: plate.x, y: plate.y, width: plate.width, height: plate.height,
-        fill: 'rgba(0, 242, 254, 0.02)', stroke: '#00f2fe', 'stroke-width': '1.8',
-        'stroke-dasharray': '6,4',
+        fill: 'rgba(0, 242, 254, 0.02)', stroke: '#00f2fe', 'stroke-width': String(1.8 / z),
+        'stroke-dasharray': `${6/z},${4/z}`,
         style: { cursor: 'move', pointerEvents: 'all' },
         title: 'Drag to move image plate • Press Delete to remove'
       });
@@ -147,9 +149,9 @@ class QuoraImageManager {
 
         const onPlateMove = (ev) => {
           if (!isMoving) return;
-          const z = stageState.zoom || 1.0;
-          plate.x = Math.round(initialPlateX + (ev.clientX - startMouseX) / z);
-          plate.y = Math.round(initialPlateY + (ev.clientY - startMouseY) / z);
+          const curZ = stageState.zoom || 1.0;
+          plate.x = Math.round(initialPlateX + (ev.clientX - startMouseX) / curZ);
+          plate.y = Math.round(initialPlateY + (ev.clientY - startMouseY) / curZ);
           this.component.renderStage();
         };
 
@@ -165,53 +167,62 @@ class QuoraImageManager {
 
       g.appendChild(dragSurface);
 
-      // 2. Mini Action Deck Docked Above Image Top Edge
-      const deckY = plate.y - 28;
+      // 2. Zoom-Invariant Mini Action Deck Docked Above Image Top Edge
+      const deckY = plate.y - (30 / z);
       const deckX = plate.x;
 
       const deckForeign = makeElement('svg:foreignObject', {
         className: 'qa-plate-mini-toolbar',
-        x: deckX, y: deckY, width: '270', height: '26',
-        style: { overflow: 'visible', pointerEvents: 'auto' }
+        x: deckX, y: deckY, width: '340', height: '30',
+        style: {
+          overflow: 'visible', pointerEvents: 'auto',
+          transformOrigin: '0 100%', transform: `scale(${invScale})`
+        }
       });
 
       const isFaded = (plate.opacity === 0.5);
 
       const deckWrap = makeElement('div', {
         style: {
-          display: 'inline-flex', alignItems: 'center', gap: '3px',
-          background: 'rgba(9, 13, 22, 0.94)', border: '1px solid rgba(0, 242, 254, 0.45)',
-          borderRadius: '14px', padding: '2px 6px', boxShadow: '0 4px 12px rgba(0,0,0,0.7)',
-          backdropFilter: 'blur(8px)'
+          display: 'inline-flex', alignItems: 'center', gap: '4px',
+          background: 'rgba(9, 13, 22, 0.96)', border: '1px solid rgba(0, 242, 254, 0.45)',
+          borderRadius: '14px', padding: '2px 8px', boxShadow: '0 4px 14px rgba(0,0,0,0.85)',
+          backdropFilter: 'blur(10px)'
         }
       }, [
         makeElement('button', {
           className: 'dr-nav-btn',
-          style: { padding: '1px 6px', fontSize: '9.5px', color: '#00f2fe' },
+          style: { padding: '2px 7px', fontSize: '10px', color: '#00f2fe' },
           title: 'Clone image plate (D)',
           onclick: (e) => { e.stopPropagation(); this.duplicateActivePlate(stageState); }
         }, '⧉ Clone'),
         makeElement('button', {
           className: 'dr-nav-btn',
-          style: { padding: '1px 6px', fontSize: '9.5px', color: isFaded ? '#ffd700' : '#cbd5e1' },
+          style: { padding: '2px 7px', fontSize: '10px', color: '#38bdf8' },
+          title: 'Crop image plate to sub-rectangle',
+          onclick: (e) => { e.stopPropagation(); this.startPlateCrop(plate); }
+        }, '✂️ Crop'),
+        makeElement('button', {
+          className: 'dr-nav-btn',
+          style: { padding: '2px 7px', fontSize: '10px', color: isFaded ? '#ffd700' : '#cbd5e1' },
           title: 'Toggle Opacity (100% / 50%)',
           onclick: (e) => { e.stopPropagation(); this.togglePlateOpacity(stageState, plate); }
         }, isFaded ? '◐ 50%' : '● 100%'),
         makeElement('button', {
           className: 'dr-nav-btn',
-          style: { padding: '1px 5px', fontSize: '9.5px' },
+          style: { padding: '2px 5px', fontSize: '10px' },
           title: 'Bring forward in layer stack',
           onclick: (e) => { e.stopPropagation(); this.bringForward(stageState, plate); }
         }, '▲'),
         makeElement('button', {
           className: 'dr-nav-btn',
-          style: { padding: '1px 5px', fontSize: '9.5px' },
+          style: { padding: '2px 5px', fontSize: '10px' },
           title: 'Send backward in layer stack',
           onclick: (e) => { e.stopPropagation(); this.sendBackward(stageState, plate); }
         }, '▼'),
         makeElement('button', {
           className: 'dr-nav-btn',
-          style: { padding: '1px 6px', fontSize: '9.5px', color: '#ff7b72' },
+          style: { padding: '2px 7px', fontSize: '10px', color: '#ff7b72' },
           title: 'Delete image plate (Del)',
           onclick: (e) => { e.stopPropagation(); this.deleteActivePlate(stageState); }
         }, '🗑️ Del')
@@ -220,7 +231,9 @@ class QuoraImageManager {
       deckForeign.appendChild(deckWrap);
       g.appendChild(deckForeign);
 
-      // 3. 4-Corner Proportional Resize Grips
+      // 3. True Opposite-Corner Anchored Resize Grips
+      const gripSize = 10 / z;
+      const halfGrip = gripSize / 2;
       const corners = [
         { id: 'nw', x: plate.x, y: plate.y, cursor: 'nwse-resize' },
         { id: 'ne', x: plate.x + plate.width, y: plate.y, cursor: 'nesw-resize' },
@@ -230,10 +243,14 @@ class QuoraImageManager {
 
       corners.forEach(corner => {
         const grip = makeElement('svg:rect', {
-          x: corner.x - 5, y: corner.y - 5, width: '10', height: '10',
-          fill: '#00f2fe', stroke: '#ffffff', 'stroke-width': '1.5', rx: '2',
+          className: 'qa-image-resize-grip',
+          'data-orig-x': corner.x,
+          'data-orig-y': corner.y,
+          x: corner.x - halfGrip, y: corner.y - halfGrip,
+          width: gripSize, height: gripSize,
+          fill: '#00f2fe', stroke: '#ffffff', 'stroke-width': String(1.5 / z), rx: String(2 / z),
           style: { cursor: corner.cursor, pointerEvents: 'all', filter: 'drop-shadow(0 0 4px rgba(0,0,0,0.8))' },
-          title: 'Drag to scale image proportionally'
+          title: 'Drag to scale image with opposite corner fixed'
         });
 
         let isResizing = false;
@@ -251,29 +268,45 @@ class QuoraImageManager {
 
           const onResizeMove = (ev) => {
             if (!isResizing) return;
-            const z = stageState.zoom || 1.0;
-            const deltaX = (ev.clientX - startX) / z;
+            const curZ = stageState.zoom || 1.0;
+            const deltaX = (ev.clientX - startX) / curZ;
 
+            // MATHEMATICALLY EXACT OPPOSITE-CORNER ANCHORING
             if (corner.id === 'se') {
-              const newW = Math.max(60, startW + deltaX);
+              // Opposite corner is NW (startPlateX, startPlateY) - stays completely still!
+              const newW = Math.max(40, startW + deltaX);
+              plate.x = startPlateX;
+              plate.y = startPlateY;
               plate.width = newW;
               plate.height = Math.round(newW / plate.aspect);
-            } else if (corner.id === 'sw') {
-              const newW = Math.max(60, startW - deltaX);
-              plate.x = startPlateX + (startW - newW);
-              plate.width = newW;
-              plate.height = Math.round(newW / plate.aspect);
-            } else if (corner.id === 'ne') {
-              const newW = Math.max(60, startW + deltaX);
+            } else if (corner.id === 'nw') {
+              // Opposite corner is SE (startPlateX + startW, startPlateY + startH) - stays completely still!
+              const fixedX = startPlateX + startW;
+              const fixedY = startPlateY + startH;
+              const newW = Math.max(40, startW - deltaX);
               const newH = Math.round(newW / plate.aspect);
-              plate.y = startPlateY + (startH - newH);
+              plate.x = fixedX - newW;
+              plate.y = fixedY - newH;
               plate.width = newW;
               plate.height = newH;
-            } else if (corner.id === 'nw') {
-              const newW = Math.max(60, startW - deltaX);
+            } else if (corner.id === 'ne') {
+              // Opposite corner is SW (startPlateX, startPlateY + startH) - stays completely still!
+              const fixedX = startPlateX;
+              const fixedY = startPlateY + startH;
+              const newW = Math.max(40, startW + deltaX);
               const newH = Math.round(newW / plate.aspect);
-              plate.x = startPlateX + (startW - newW);
-              plate.y = startPlateY + (startH - newH);
+              plate.x = fixedX;
+              plate.y = fixedY - newH;
+              plate.width = newW;
+              plate.height = newH;
+            } else if (corner.id === 'sw') {
+              // Opposite corner is NE (startPlateX + startW, startPlateY) - stays completely still!
+              const fixedX = startPlateX + startW;
+              const fixedY = startPlateY;
+              const newW = Math.max(40, startW - deltaX);
+              const newH = Math.round(newW / plate.aspect);
+              plate.x = fixedX - newW;
+              plate.y = fixedY;
               plate.width = newW;
               plate.height = newH;
             }
@@ -295,7 +328,7 @@ class QuoraImageManager {
       });
 
       controlsLayer.appendChild(g);
-  }
+    }
   deleteActivePlate(stageState) {
     if (!stageState.activeImage) return false;
     const idx = stageState.placedImages.indexOf(stageState.activeImage);
@@ -425,118 +458,119 @@ class QuoraImageManager {
   }
 
   async promptAddImageWorkflow(stageState, localFileInput) {
-    let clipboardBlob = null;
-    let clipboardImg = null;
+      let clipboardBlob = null;
+      let clipboardImg = null;
 
-    // 1. Inspect clipboard for valid image content
-    try {
-      if (navigator.clipboard && navigator.clipboard.read) {
-        const items = await navigator.clipboard.read();
-        for (const item of items) {
-          for (const type of item.types) {
-            if (type.startsWith('image/')) {
-              clipboardBlob = await item.getType(type);
-              break;
+      try {
+        if (navigator.clipboard && navigator.clipboard.read) {
+          const items = await navigator.clipboard.read();
+          for (const item of items) {
+            for (const type of item.types) {
+              if (type.startsWith('image/')) {
+                clipboardBlob = await item.getType(type);
+                break;
+              }
             }
+            if (clipboardBlob) break;
           }
-          if (clipboardBlob) break;
         }
+      } catch (err) {
+        // Clipboard permission denied or empty
       }
-    } catch (err) {
-      // Clipboard permission denied or empty
-    }
 
-    // 2. If no clipboard image is available, invoke file input directly
-    if (!clipboardBlob) {
-      if (localFileInput) localFileInput.click();
-      return;
-    }
+      // If no clipboard image is found, directly open file browser with zero modal clutter
+      if (!clipboardBlob) {
+        if (localFileInput) localFileInput.click();
+        return;
+      }
 
-    // 3. Load clipboard image to display preview in modal
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      clipboardImg = new Image();
-      clipboardImg.onload = () => {
-        this._showAddImageAmbiguityDialog(stageState, clipboardImg, localFileInput);
+      // If clipboard image is detected, present clean thumbnail choice
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        clipboardImg = new Image();
+        clipboardImg.onload = () => {
+          this._showAddImageAmbiguityDialog(stageState, clipboardImg, localFileInput);
+        };
+        clipboardImg.src = ev.target.result;
       };
-      clipboardImg.src = ev.target.result;
-    };
-    reader.readAsDataURL(clipboardBlob);
-  }
+      reader.readAsDataURL(clipboardBlob);
+    }
 
   _showAddImageAmbiguityDialog(stageState, clipboardImg, localFileInput) {
-    const content = makeElement('div', {
-      style: {
-        display: 'flex', flexDirection: 'column', gap: '14px', padding: '8px 4px',
-        color: '#f8fafc', fontFamily: 'monospace'
-      }
-    });
-
-    const imgWidth = clipboardImg.naturalWidth || clipboardImg.width;
-    const imgHeight = clipboardImg.naturalHeight || clipboardImg.height;
-
-    content.innerHTML = `
-      <div style="font-size:11.5px; color:#94a3b8; line-height:1.5;">
-        A valid image was found on your clipboard. Would you like to place it directly or browse your file system?
-      </div>
-    `;
-
-    // Thumbnail Preview Card
-    const thumbCard = makeElement('div', {
-      style: {
-        display: 'flex', alignItems: 'center', gap: '12px',
-        background: 'rgba(0, 242, 254, 0.05)', border: '1.5px solid rgba(0, 242, 254, 0.3)',
-        borderRadius: '8px', padding: '10px'
-      }
-    }, [
-      makeElement('img', {
-        src: clipboardImg.src,
+      const content = makeElement('div', {
         style: {
-          maxWidth: '90px', maxHeight: '70px', borderRadius: '4px',
-          objectFit: 'contain', background: '#090d16', border: '1px solid #1e293b'
+          display: 'flex', flexDirection: 'column', gap: '14px', padding: '10px 4px',
+          color: '#f8fafc', fontFamily: 'monospace'
         }
-      }),
-      makeElement('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px' } }, [
-        makeElement('strong', { style: { color: '#00f2fe', fontSize: '12px' } }, 'Clipboard Image Available'),
-        makeElement('span', { style: { fontSize: '10.5px', color: '#cbd5e1' } }, `${imgWidth} × ${imgHeight} px`),
-        makeElement('span', { style: { fontSize: '9.5px', color: '#10b981' } }, '● Ready to place')
-      ])
-    ]);
-    content.appendChild(thumbCard);
+      });
 
-    const actionsRow = makeElement('div', {
-      style: { display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '6px' }
-    });
+      const imgWidth = clipboardImg.naturalWidth || clipboardImg.width;
+      const imgHeight = clipboardImg.naturalHeight || clipboardImg.height;
 
-    const useClipboardBtn = makeElement('button', {
-      className: 'dr-nav-btn primary',
-      style: { padding: '6px 14px', fontSize: '11px', fontWeight: 'bold' },
-      onclick: () => {
-        dialog.close();
-        this.addPlate(stageState, clipboardImg, 60, 60);
-      }
-    }, '📋 Place Clipboard Image');
+      content.innerHTML = `
+        <div style="font-size:11.5px; color:#94a3b8; line-height:1.5;">
+          A valid image is ready on your clipboard. Place it directly, or choose another file from disk:
+        </div>
+      `;
 
-    const browseFilesBtn = makeElement('button', {
-      className: 'dr-nav-btn',
-      style: { padding: '6px 12px', fontSize: '11px', color: '#00f2fe', borderColor: '#00f2fe66' },
-      onclick: () => {
-        dialog.close();
-        if (localFileInput) localFileInput.click();
-      }
-    }, '📁 Browse File System...');
+      const thumbCard = makeElement('div', {
+        style: {
+          display: 'flex', alignItems: 'center', gap: '14px',
+          background: 'rgba(0, 242, 254, 0.05)', border: '1.5px solid rgba(0, 242, 254, 0.3)',
+          borderRadius: '8px', padding: '10px'
+        }
+      }, [
+        makeElement('img', {
+          src: clipboardImg.src,
+          style: {
+            maxWidth: '100px', maxHeight: '75px', borderRadius: '4px',
+            objectFit: 'contain', background: '#090d16', border: '1px solid #1e293b'
+          }
+        }),
+        makeElement('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px' } }, [
+          makeElement('strong', { style: { color: '#00f2fe', fontSize: '12px' } }, 'Clipboard Image Ready'),
+          makeElement('span', { style: { fontSize: '10.5px', color: '#cbd5e1' } }, `${imgWidth} × ${imgHeight} px`),
+          makeElement('span', { style: { fontSize: '9.5px', color: '#10b981' } }, '● Click below to place')
+        ])
+      ]);
+      content.appendChild(thumbCard);
 
-    actionsRow.append(browseFilesBtn, useClipboardBtn);
-    content.appendChild(actionsRow);
+      const actionsRow = makeElement('div', {
+        style: { display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '6px' }
+      });
 
-    const dialog = UITools.makeDialog({
-      title: '🖼️ Add Image Option',
-      size: [450, 270],
-      contentElement: content,
-      appendTo: document.body
-    });
-  }
+      const useClipboardBtn = makeElement('button', {
+        className: 'dr-nav-btn primary',
+        style: { padding: '6px 14px', fontSize: '11px', fontWeight: 'bold' },
+        onclick: () => {
+          dialog.close();
+          this.addPlate(stageState, clipboardImg, 60, 60);
+        }
+      }, '📋 Place Clipboard Image');
 
+      const browseFilesBtn = makeElement('button', {
+        className: 'dr-nav-btn',
+        style: { padding: '6px 12px', fontSize: '11px', color: '#00f2fe', borderColor: '#00f2fe66' },
+        onclick: () => {
+          dialog.close();
+          if (localFileInput) localFileInput.click();
+        }
+      }, '📁 Browse Disk...');
+
+      actionsRow.append(browseFilesBtn, useClipboardBtn);
+      content.appendChild(actionsRow);
+
+      const dialogMaker = (typeof UITools !== 'undefined' && typeof UITools.makeDialog === 'function')
+        ? UITools.makeDialog
+        : (opts => new DialogBox(opts));
+
+      const dialog = dialogMaker({
+        title: '🖼️ Add Image',
+        size: [460, 260],
+        contentElement: content,
+        appendTo: document.body
+      });
+    }
   eraseImagePlatePixels(plate, worldX, worldY, brushRadius = 24, softness = 0) {
     if (!plate || !plate.img) return;
 
@@ -580,6 +614,154 @@ class QuoraImageManager {
     plate.img = canvas;
     this.component.renderStage();
   }
+
+  applyZoomScale(zoomLevel) {
+      const z = Math.max(0.1, zoomLevel || 1.0);
+      const invScale = (1 / z).toFixed(3);
+
+      // Keep the plate top action deck at constant legible screen size
+      const toolbars = document.querySelectorAll('.qa-plate-mini-toolbar');
+      toolbars.forEach(tb => {
+        tb.style.transformOrigin = '0 100%';
+        tb.style.transform = `scale(${invScale})`;
+      });
+
+      // Keep the corner resize grips at constant comfortable screen size
+      const grips = document.querySelectorAll('.qa-image-resize-grip');
+      grips.forEach(g => {
+        const origX = parseFloat(g.dataset.origX || g.getAttribute('x'));
+        const origY = parseFloat(g.dataset.origY || g.getAttribute('y'));
+        const halfSize = (10 / z) / 2;
+        g.setAttribute('x', origX - halfSize);
+        g.setAttribute('y', origY - halfSize);
+        g.setAttribute('width', (10 / z).toFixed(2));
+        g.setAttribute('height', (10 / z).toFixed(2));
+      });
+    }
+
+  startPlateCrop(plate) {
+      if (!plate || !plate.img) return;
+      const stageState = this.component.stageState;
+
+      const overlay = makeElement('div', {
+        id: 'qa-plate-crop-overlay',
+        style: {
+          position: 'absolute', top: `${plate.y}px`, left: `${plate.x}px`,
+          width: `${plate.width}px`, height: `${plate.height}px`,
+          boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.65)', border: '2px dashed #00f2fe',
+          zIndex: '150', cursor: 'crosshair', boxSizing: 'border-box'
+        }
+      });
+
+      const banner = makeElement('div', {
+        style: {
+          position: 'absolute', top: '-34px', left: '0',
+          background: '#090d16', border: '1px solid #00f2fe', borderRadius: '4px',
+          padding: '3px 8px', color: '#00f2fe', fontSize: '10.5px', fontWeight: 'bold'
+        }
+      }, '✂️ Drag rectangle inside image to crop • Esc to cancel');
+      overlay.appendChild(banner);
+
+      let startX = 0, startY = 0;
+      let isSelecting = false;
+      let cropBox = null;
+
+      const onDown = (e) => {
+        e.stopPropagation();
+        const rect = overlay.getBoundingClientRect();
+        const z = stageState.zoom || 1.0;
+        startX = (e.clientX - rect.left) / z;
+        startY = (e.clientY - rect.top) / z;
+        isSelecting = true;
+
+        cropBox = makeElement('div', {
+          style: {
+            position: 'absolute', left: `${startX}px`, top: `${startY}px`, width: '0', height: '0',
+            border: '2px solid #00e676', background: 'rgba(0, 230, 118, 0.2)', pointerEvents: 'none'
+          }
+        });
+        overlay.appendChild(cropBox);
+      };
+
+      const onMove = (e) => {
+        if (!isSelecting || !cropBox) return;
+        const rect = overlay.getBoundingClientRect();
+        const z = stageState.zoom || 1.0;
+        const curX = Math.max(0, Math.min(plate.width, (e.clientX - rect.left) / z));
+        const curY = Math.max(0, Math.min(plate.height, (e.clientY - rect.top) / z));
+
+        const x = Math.min(startX, curX);
+        const y = Math.min(startY, curY);
+        const w = Math.abs(curX - startX);
+        const h = Math.abs(curY - startY);
+
+        cropBox.style.left = `${x}px`;
+        cropBox.style.top = `${y}px`;
+        cropBox.style.width = `${w}px`;
+        cropBox.style.height = `${h}px`;
+      };
+
+      const onUp = (e) => {
+        if (!isSelecting || !cropBox) return;
+        isSelecting = false;
+
+        const rect = overlay.getBoundingClientRect();
+        const z = stageState.zoom || 1.0;
+        const endX = Math.max(0, Math.min(plate.width, (e.clientX - rect.left) / z));
+        const endY = Math.max(0, Math.min(plate.height, (e.clientY - rect.top) / z));
+
+        const cropW = Math.abs(endX - startX);
+        const cropH = Math.abs(endY - startY);
+        const cropX = Math.min(startX, endX);
+        const cropY = Math.min(startY, endY);
+
+        overlay.remove();
+        window.removeEventListener('keydown', onKey);
+
+        if (cropW > 15 && cropH > 15) {
+          // Execute crop on an offscreen canvas
+          const naturalW = plate.img.naturalWidth || plate.img.width;
+          const naturalH = plate.img.naturalHeight || plate.img.height;
+          const scaleX = naturalW / plate.width;
+          const scaleY = naturalH / plate.height;
+
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(cropW * scaleX);
+          canvas.height = Math.round(cropH * scaleY);
+          const ctx = canvas.getContext('2d');
+
+          ctx.drawImage(
+            plate.img,
+            Math.round(cropX * scaleX), Math.round(cropY * scaleY), canvas.width, canvas.height,
+            0, 0, canvas.width, canvas.height
+          );
+
+          plate.x += cropX;
+          plate.y += cropY;
+          plate.width = Math.round(cropW);
+          plate.height = Math.round(cropH);
+          plate.aspect = cropW / cropH;
+          plate.img = canvas;
+
+          this.component.renderStage();
+          this.component.showKnotToast('✂️ Cropped image plate');
+        }
+      };
+
+      const onKey = (ev) => {
+        if (ev.key === 'Escape') {
+          overlay.remove();
+          window.removeEventListener('keydown', onKey);
+        }
+      };
+
+      overlay.addEventListener('mousedown', onDown);
+      overlay.addEventListener('mousemove', onMove);
+      overlay.addEventListener('mouseup', onUp);
+      window.addEventListener('keydown', onKey);
+
+      this.component.stageBox.appendChild(overlay);
+    }
 }
 
 globalThis.QuoraImageManager = QuoraImageManager;
