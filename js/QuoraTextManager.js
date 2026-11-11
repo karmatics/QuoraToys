@@ -10,10 +10,8 @@ class QuoraTextManager {
       const isActiveCurve = (ann === this.component.getActiveCurve());
       const hasText = Boolean(ann.text && ann.text.trim() !== '');
 
-      // Skip rendering if no text and not actively selected
       if (!hasText && !isActiveCurve) return;
 
-      // Clean up any existing decoupled elements across all layers
       if (ann._textElements) {
         Object.values(ann._textElements).forEach(el => { if (el && el.remove) el.remove(); });
         ann._textElements = null;
@@ -30,7 +28,6 @@ class QuoraTextManager {
       const fontS = ann.fontSize || 20;
       const fontF = ann.fontFamily || "'Architects Daughter', cursive, sans-serif";
 
-      // Compact typography bounds measurement via canvas metrics
       const bounds = this.measureTextBounds(ann.text || '', fontS, fontF);
       const padX = ann.boxStyle !== 'none' ? 8 : 4;
       const padY = ann.boxStyle !== 'none' ? 4 : 2;
@@ -42,12 +39,11 @@ class QuoraTextManager {
       const placement = this.computeTextPlacement(anchorPt, exitVec, boxW, boxH, effectiveEdge);
       ann.connectEdge = placement.connectEdge;
 
-      const { posX, posY, connectEdge, textAnchorType, bracketPath } = placement;
+      const { posX, posY, textAnchorType, dBracket } = placement;
       const col = ann.color || '#00e676';
       const isNeon = (ann.lineStyle === 'neon');
       const coreTint = isNeon ? this.component.strokeManager.getLuminousCoreColor(col) : col;
 
-      // GHOST SHELF PLACEHOLDER IF ACTIVE CURVE HAS NO TEXT
       if (!hasText) {
         const ghostW = 120;
         const ghostH = 26;
@@ -59,38 +55,35 @@ class QuoraTextManager {
           title: 'Click or start typing on keyboard to add callout text',
           onclick: (e) => {
             e.stopPropagation();
-            this.promptInlineTailText(ann, anchorPt, connectEdge);
+            this.promptInlineTailText(ann, anchorPt, ghostPlacement.connectEdge);
           }
         });
 
         ghostG.addEventListener('mouseenter', () => { ghostG.style.opacity = '0.95'; });
         ghostG.addEventListener('mouseleave', () => { ghostG.style.opacity = '0.45'; });
 
-        // Shelf underline in ghost mode
-        ghostG.appendChild(makeElement('svg:path', {
-          d: `M ${ghostPlacement.posX} ${ghostPlacement.posY + ghostH} L ${ghostPlacement.posX + ghostW} ${ghostPlacement.posY + ghostH}`,
-          fill: 'none', stroke: col, 'stroke-width': '1.6', 'stroke-dasharray': '3,3',
-          'stroke-linecap': 'round', 'stroke-linejoin': 'round'
-        }));
+        if (ghostPlacement.dBracket) {
+          ghostG.appendChild(makeElement('svg:path', {
+            d: ghostPlacement.dBracket,
+            fill: 'none', stroke: col, 'stroke-width': '1.6', 'stroke-dasharray': '3,3',
+            'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+          }));
+        }
 
-        const textX = ghostPlacement.connectEdge === 'right' ? (ghostPlacement.posX + ghostW - 6) : (ghostPlacement.posX + 6);
-        const textAnchor = ghostPlacement.connectEdge === 'right' ? 'end' : 'start';
+        const textX = ghostPlacement.textAnchorType === 'end'
+          ? (ghostPlacement.posX + ghostW - 6)
+          : (ghostPlacement.textAnchorType === 'middle' ? (ghostPlacement.posX + ghostW / 2) : (ghostPlacement.posX + 6));
 
         ghostG.appendChild(makeElement('svg:text', {
           x: textX, y: ghostPlacement.posY + 18, fill: col,
           'font-family': fontF, 'font-size': '13px', 'font-style': 'italic', 'font-weight': 'bold',
-          'text-anchor': textAnchor
+          'text-anchor': ghostPlacement.textAnchorType
         }, '✎ Type note...'));
 
         textBadgesLayer.appendChild(ghostG);
         ann._textElements = { ghost: ghostG };
         return;
       }
-
-      // Absolute Bracket Path
-      const dBracket = `M ${posX} ${posY} ` + bracketPath.replace(/([0-9.]+)\s+([0-9.]+)/g, (match, px, py) => {
-        return `${posX + parseFloat(px)} ${posY + parseFloat(py)}`;
-      });
 
       let textAnchorX = posX + padX;
       if (textAnchorType === 'end') {
@@ -101,14 +94,14 @@ class QuoraTextManager {
 
       const textElementsMap = {};
 
-      // 1. SHADOW LAYER: All keyline dark drop shadows (Classic mode only)
+      // 1. Shadow Layer: Classic drop shadow
       if (!isNeon) {
         const shadowG = makeElement('svg:g', {
           transform: 'translate(2, 2)',
           style: { pointerEvents: 'none' }
         });
 
-        if (ann.boxStyle === 'bracket' || !ann.boxStyle) {
+        if ((ann.boxStyle === 'bracket' || !ann.boxStyle) && dBracket) {
           shadowG.appendChild(makeElement('svg:path', {
             d: dBracket, fill: 'none', stroke: 'rgba(10, 15, 25, 0.95)',
             'stroke-width': '4.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
@@ -131,13 +124,13 @@ class QuoraTextManager {
         textElementsMap.shadow = shadowG;
       }
 
-      // 2. GLOW LAYER: Luminous Gaussian bloom around bracket AND letters (Neon mode)
+      // 2. Glow Layer: Neon Gaussian bloom
       if (isNeon) {
         const glowG = makeElement('svg:g', {
           style: { pointerEvents: 'none', opacity: '0.92' }
         });
 
-        if (ann.boxStyle === 'bracket' || !ann.boxStyle) {
+        if ((ann.boxStyle === 'bracket' || !ann.boxStyle) && dBracket) {
           glowG.appendChild(makeElement('svg:path', {
             d: dBracket, fill: 'none', stroke: col, 'stroke-width': '10',
             'stroke-linecap': 'round', 'stroke-linejoin': 'round',
@@ -163,26 +156,24 @@ class QuoraTextManager {
         textElementsMap.glow = glowG;
       }
 
-      // 3. FOREGROUND LAYER: Luminous plasma core or crisp classic strokes
+      // 3. Foreground Layer: Callout frame and text
       const g = makeElement('svg:g', {
         className: 'qa-curve-attached-label',
         style: { cursor: 'move', userSelect: 'none', transition: 'opacity 0.15s ease' },
         title: 'Double-click to edit text • Drag to reposition callout and curve tail',
         ondblclick: (e) => {
           e.stopPropagation();
-          this.promptInlineTailText(ann, anchorPt, connectEdge);
+          this.promptInlineTailText(ann, anchorPt, placement.connectEdge);
         }
       });
 
-      // Dark backdrop for readability
       g.appendChild(makeElement('svg:rect', {
         x: posX, y: posY, width: boxW, height: boxH, rx: '4',
         fill: isNeon ? 'rgba(9, 13, 22, 0.88)' : 'rgba(9, 13, 22, 0.72)', stroke: 'none',
         style: { pointerEvents: 'none' }
       }));
 
-      // Foreground Bracket
-      if (ann.boxStyle === 'bracket' || !ann.boxStyle) {
+      if ((ann.boxStyle === 'bracket' || !ann.boxStyle) && dBracket) {
         g.appendChild(makeElement('svg:path', {
           d: dBracket, fill: 'none', stroke: isNeon ? coreTint : col,
           'stroke-width': '2.4',
@@ -191,7 +182,6 @@ class QuoraTextManager {
         }));
       }
 
-      // Foreground Text
       const txt = makeElement('svg:text', {
         x: textAnchorX, y: posY + padY + fontS * 0.88, fill: isNeon ? coreTint : col,
         'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold',
@@ -205,7 +195,7 @@ class QuoraTextManager {
       });
       g.appendChild(txt);
 
-      // Repositioning drag handler
+      // Dynamic drag synchronizer
       let isDraggingBadge = false;
       let startMouseX = 0, startMouseY = 0;
 
@@ -213,6 +203,14 @@ class QuoraTextManager {
         if (e.button === 2) return;
         e.stopPropagation();
         isDraggingBadge = true;
+
+        this.component.selectItem(ann);
+        this.component._activeKnotIdx = isAtTail ? (ann.vertices.length - 1) : 0;
+
+        // Remove any static tangent ray at the old position immediately
+        const staleRay = document.getElementById('qa-outbound-tangent-ray');
+        if (staleRay) staleRay.remove();
+
         startMouseX = e.clientX;
         startMouseY = e.clientY;
 
@@ -230,6 +228,12 @@ class QuoraTextManager {
 
           targetKnot.point[0] = Math.round(origX + dx);
           targetKnot.point[1] = Math.round(origY + dy);
+          targetKnot.isExplicitTangent = false;
+          targetKnot.tangentAngleOffset = 0;
+
+          // Ensure no stray ray sits frozen in space
+          const ray = document.getElementById('qa-outbound-tangent-ray');
+          if (ray) ray.remove();
 
           this.component.commitCurveGeometryUpdate();
         };
@@ -238,6 +242,9 @@ class QuoraTextManager {
           isDraggingBadge = false;
           window.removeEventListener('mousemove', onBadgeDragMove);
           window.removeEventListener('mouseup', onBadgeDragUp);
+
+          this.component.commitCurveGeometryUpdate();
+          this.component.exposeBezierHandles(ann);
           this.component.renderStage();
         };
 
@@ -249,7 +256,6 @@ class QuoraTextManager {
       textElementsMap.fg = g;
       ann._textElements = textElementsMap;
     }
-
   promptInlineTailText(curveRecord, anchorPt, forcedEdge = null, initialText = '') {
       const existing = document.getElementById('qa-inline-tail-editor');
       if (existing) existing.remove();
@@ -283,7 +289,6 @@ class QuoraTextManager {
       let placement = this.computeTextPlacement(anchorPt, exitVec, width, estHeight, effectiveEdge);
       let connectEdge = placement.connectEdge;
 
-      // Editor container placed directly at the callout location
       const editorWrap = makeElement('div', {
         id: 'qa-inline-tail-editor',
         style: {
@@ -321,26 +326,14 @@ class QuoraTextManager {
           textarea.style.border = `2px solid ${color}`;
           textarea.style.borderRadius = boxStyle === 'pill' ? '24px' : '4px';
         } else if (boxStyle === 'bracket') {
-          if (placement.isDirectHorizontal) {
-            textarea.style.borderBottom = `2px solid ${color}`;
-          } else if (connectEdge === 'left') {
-            textarea.style.borderLeft = `2px solid ${color}`;
-            textarea.style.borderBottom = `2px solid ${color}`;
-          } else if (connectEdge === 'right') {
-            textarea.style.borderRight = `2px solid ${color}`;
-            textarea.style.borderBottom = `2px solid ${color}`;
-          } else if (connectEdge === 'bottom') {
-            textarea.style.borderBottom = `2px solid ${color}`;
-            textarea.style.borderLeft = `2px solid ${color}`;
-          } else if (connectEdge === 'top') {
-            textarea.style.borderTop = `2px solid ${color}`;
-            textarea.style.borderLeft = `2px solid ${color}`;
-          }
+          if (placement.showLeft) textarea.style.borderLeft = `2px solid ${color}`;
+          if (placement.showRight) textarea.style.borderRight = `2px solid ${color}`;
+          if (placement.showTop) textarea.style.borderTop = `2px solid ${color}`;
+          if (placement.showBottom) textarea.style.borderBottom = `2px solid ${color}`;
         }
       };
       applyFrameStyles();
 
-      // Floating Controls Deck positioned comfortably 28px away
       const controlsDock = makeElement('div', {
         id: 'qa-callout-editor-dock',
         style: {
@@ -402,7 +395,7 @@ class QuoraTextManager {
       const styleBtn = makeElement('button', {
         className: 'dr-nav-btn primary',
         style: { padding: '2px 6px', fontSize: '10px' },
-        title: 'Cycle Frame: 2-Side Bracket ➔ Rounded Box ➔ Pill ➔ Plain',
+        title: 'Cycle Frame: Bracket -> Rounded Box -> Pill -> Plain',
         onclick: (e) => {
           e.stopPropagation();
           const styles = ['bracket', 'box', 'pill', 'none'];
@@ -413,41 +406,6 @@ class QuoraTextManager {
           if (curveRecord) this.component.renderStage();
         }
       }, boxStyle === 'bracket' ? '◺ Bracket' : (boxStyle === 'box' ? '◻ Box' : (boxStyle === 'pill' ? '💊 Pill' : 'Plain')));
-
-      const lineStyleBtn = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '2px 6px', fontSize: '10px', color: '#ffd700', borderColor: 'rgba(255, 215, 0, 0.45)' },
-        title: 'Toggle Line Style: Classic Shadow ➔ Lightsaber Neon Glow',
-        onclick: (e) => {
-          e.stopPropagation();
-          const styles = ['classic', 'neon'];
-          const curStyle = curveRecord?.lineStyle || this.component.stageState.lineStyle || 'classic';
-          const nextStyle = styles[(styles.indexOf(curStyle) + 1) % styles.length];
-          if (curveRecord) curveRecord.lineStyle = nextStyle;
-          this.component.stageState.lineStyle = nextStyle;
-          lineStyleBtn.textContent = nextStyle === 'neon' ? '💡 Neon' : '🖋️ Classic';
-          this.component.commitCurveGeometryUpdate();
-        }
-      }, (curveRecord?.lineStyle === 'neon') ? '💡 Neon' : '🖋️ Classic');
-
-      const fontSelect = makeElement('select', {
-        style: {
-          background: '#0d1117', color: '#00f2fe', border: '1px solid #30363d',
-          borderRadius: '4px', padding: '2px 4px', fontSize: '9.5px', fontFamily: 'monospace', outline: 'none'
-        },
-        onchange: (e) => {
-          fontF = e.target.value;
-          this.component.ensureFontLoaded(fontF);
-          if (curveRecord) curveRecord.fontFamily = fontF;
-          textarea.style.fontFamily = fontF;
-          autoGrow();
-          if (curveRecord) this.component.renderStage();
-        }
-      }, [
-        makeElement('option', { value: "'Architects Daughter', cursive, sans-serif", selected: fontF.includes('Architects') }, "Architect"),
-        makeElement('option', { value: "monospace", selected: fontF === 'monospace' }, "Mono"),
-        makeElement('option', { value: "'Plus Jakarta Sans', system-ui, sans-serif", selected: fontF.includes('Jakarta') }, "Sans")
-      ]);
 
       let committed = false;
       let onOutClick = null;
@@ -494,7 +452,7 @@ class QuoraTextManager {
 
       controlsDock.append(
         makeElement('span', { style: { color: '#00f2fe', fontWeight: 'bold', fontSize: '11px', marginRight: '2px' } }, '✎ Callout:'),
-        edgeCycleBtn, styleBtn, lineStyleBtn, fontSelect, okBtn
+        edgeCycleBtn, styleBtn, okBtn
       );
 
       editorWrap.appendChild(textarea);
@@ -711,145 +669,211 @@ class QuoraTextManager {
       badgeElementsMap.fg = g;
       ann._badgeElements = badgeElementsMap;
     }
+
   computeTextPlacement(anchorPt, exitVec, boxW, boxH, forcedEdge = null) {
-      const rawLen = Math.hypot(exitVec[0], exitVec[1]) || 1;
-      const uX = exitVec[0] / rawLen;
-      const uY = exitVec[1] / rawLen;
+      const ax = anchorPt[0];
+      const ay = anchorPt[1];
 
-      // Angle of incoming curve vector in degrees (-180 to 180)
-      const angleDeg = Math.atan2(uY, uX) * (180 / Math.PI);
-      const absAngle = Math.abs(angleDeg);
+      let rawLen = Math.hypot(exitVec[0], exitVec[1]) || 1;
+      let vx = exitVec[0] / rawLen;
+      let vy = exitVec[1] / rawLen;
 
-      // Single-edge condition: within 18° of horizontal (0° or 180°)
-      const isDirectHorizontal = (absAngle <= 18) || (Math.abs(absAngle - 180) <= 18);
+      if (Math.abs(vx) < 1e-4 && Math.abs(vy) < 1e-4) {
+        vx = 1;
+        vy = 0;
+      }
 
-      // Determine connection point (cx, cy) relative to box top-left (0, 0)
-      // 360° smooth traversal from midpoint (at 90° to edge) to corner (at 45°)
+      // Arrival angle in degrees: 0° is pure right, +90° is pure down (+y), -90° is pure up (-y), ±180° is pure left (-x)
+      const angleDeg = Math.atan2(vy, vx) * (180 / Math.PI);
+
+      let showLeft = false;
+      let showRight = false;
+      let showTop = false;
+      let showBottom = false;
+
       let cx = 0;
-      let cy = boxH / 2;
-      let connectEdge = 'left';
-      let textAlign = 'left';
-      let textAnchorType = 'start';
-      let bracketPath = '';
+      let cy = 0;
 
-      if (uX >= 0) {
-        // Curve heading Right -> box sits to the right of anchorPt -> connects on Left/Top/Bottom
-        if (uY >= 0) {
-          // Heading Down-Right (0° to 90°)
-          if (angleDeg < 45) {
-            // Angle 0° (pure horizontal) -> 45°: on Left edge, moving from midpoint (boxH/2) to bottom corner (boxH)
-            const t = angleDeg / 45; // 0 at horizontal, 1 at 45°
-            cx = 0;
-            cy = (boxH / 2) + t * (boxH / 2);
-            connectEdge = 'left';
-            textAlign = 'left';
-            textAnchorType = 'start';
-
-            if (isDirectHorizontal) {
-              bracketPath = `M 0 ${boxH} L ${boxW} ${boxH}`; // Single shelf underline
-            } else {
-              bracketPath = `M 0 0 L 0 ${boxH} L ${boxW} ${boxH}`; // Left wall + bottom shelf
-            }
-          } else {
-            // Angle 45° -> 90° (pure vertical down): on Top edge, moving from left corner (0) to midpoint (boxW/2)
-            const t = (angleDeg - 45) / 45; // 0 at 45°, 1 at 90°
-            cx = t * (boxW / 2);
-            cy = 0;
-            connectEdge = 'top';
-            textAlign = (cx > boxW * 0.35) ? 'center' : 'left';
-            textAnchorType = (cx > boxW * 0.35) ? 'middle' : 'start';
-            bracketPath = `M 0 ${boxH} L 0 0 L ${boxW} 0`; // Top shelf + left wall
-          }
-        } else {
-          // Heading Up-Right (-90° to 0°)
-          const negAngle = -angleDeg;
-          if (negAngle < 45) {
-            // Angle 0° (pure horizontal) -> -45°: on Left edge, moving from midpoint (boxH/2) to top corner (0)
-            const t = negAngle / 45;
-            cx = 0;
-            cy = (boxH / 2) - t * (boxH / 2);
-            connectEdge = 'left';
-            textAlign = 'left';
-            textAnchorType = 'start';
-
-            if (isDirectHorizontal) {
-              bracketPath = `M 0 ${boxH} L ${boxW} ${boxH}`; // Single shelf underline
-            } else {
-              bracketPath = `M 0 ${boxH} L 0 0 L ${boxW} 0`; // Left wall + top shelf
-            }
-          } else {
-            // Angle -45° -> -90° (pure vertical up): on Bottom edge, moving from left corner (0) to midpoint (boxW/2)
-            const t = (negAngle - 45) / 45;
-            cx = t * (boxW / 2);
-            cy = boxH;
-            connectEdge = 'bottom';
-            textAlign = (cx > boxW * 0.35) ? 'center' : 'left';
-            textAnchorType = (cx > boxW * 0.35) ? 'middle' : 'start';
-            bracketPath = `M 0 0 L 0 ${boxH} L ${boxW} ${boxH}`; // Bottom shelf + left wall
-          }
+      if (forcedEdge && forcedEdge !== 'auto') {
+        if (forcedEdge === 'left') {
+          showLeft = true;
+          cx = 0;
+          cy = Math.round(boxH / 2);
+        } else if (forcedEdge === 'right') {
+          showRight = true;
+          cx = boxW;
+          cy = Math.round(boxH / 2);
+        } else if (forcedEdge === 'top') {
+          showTop = true;
+          cx = Math.round(boxW / 2);
+          cy = 0;
+        } else if (forcedEdge === 'bottom') {
+          showBottom = true;
+          cx = Math.round(boxW / 2);
+          cy = boxH;
         }
       } else {
-        // Curve heading Left -> box sits to the left of anchorPt -> connects on Right/Top/Bottom
-        if (uY >= 0) {
-          // Heading Down-Left (90° to 180°)
-          const relAngle = 180 - angleDeg; // 90 at pure down, 0 at pure left
-          if (relAngle < 45) {
-            // Angle 180° (pure horizontal) -> 135°: on Right edge, moving from midpoint (boxH/2) to bottom corner (boxH)
-            const t = relAngle / 45;
-            cx = boxW;
-            cy = (boxH / 2) + t * (boxH / 2);
-            connectEdge = 'right';
-            textAlign = 'right';
-            textAnchorType = 'end';
-
-            if (isDirectHorizontal) {
-              bracketPath = `M 0 ${boxH} L ${boxW} ${boxH}`; // Single shelf underline
+        // Continuous 360° mapping across the 4 quadrants
+        if (angleDeg >= 0 && angleDeg < 90) {
+          // Sector 1: Down-Right (0° to 90°)
+          if (angleDeg <= 30) {
+            // Within 30° of horizontal: ONLY Left vertical edge
+            showLeft = true;
+            const t = angleDeg / 45;
+            cx = 0;
+            cy = Math.round((boxH / 2) * (1 - t));
+          } else if (angleDeg < 60) {
+            // Corner zone (30° to 60°): Left + Top meeting at (0, 0)
+            showLeft = true;
+            showTop = true;
+            if (angleDeg <= 45) {
+              const t = angleDeg / 45;
+              cx = 0;
+              cy = Math.round((boxH / 2) * (1 - t));
             } else {
-              bracketPath = `M ${boxW} 0 L ${boxW} ${boxH} L 0 ${boxH}`; // Right wall + bottom shelf
+              const s = (angleDeg - 45) / 45;
+              cx = Math.round(s * (boxW / 2));
+              cy = 0;
             }
           } else {
-            // Angle 135° -> 90° (pure vertical down): on Top edge, moving from right corner (boxW) to midpoint (boxW/2)
-            const t = (relAngle - 45) / 45;
-            cx = boxW - t * (boxW / 2);
+            // Within 30° of vertical: ONLY Top horizontal edge
+            showTop = true;
+            const s = (angleDeg - 45) / 45;
+            cx = Math.round(s * (boxW / 2));
             cy = 0;
-            connectEdge = 'top';
-            textAlign = (cx < boxW * 0.65) ? 'center' : 'right';
-            textAnchorType = (cx < boxW * 0.65) ? 'middle' : 'end';
-            bracketPath = `M ${boxW} ${boxH} L ${boxW} 0 L 0 0`; // Top shelf + right wall
+          }
+        } else if (angleDeg >= 90 && angleDeg <= 180) {
+          // Sector 2: Down-Left (90° to 180°)
+          const gamma = 180 - angleDeg;
+          if (gamma <= 30) {
+            // Within 30° of horizontal: ONLY Right vertical edge
+            showRight = true;
+            const t = gamma / 45;
+            cx = boxW;
+            cy = Math.round((boxH / 2) * (1 - t));
+          } else if (gamma < 60) {
+            // Corner zone (120° to 150°): Right + Top meeting at (boxW, 0)
+            showRight = true;
+            showTop = true;
+            if (gamma <= 45) {
+              const t = gamma / 45;
+              cx = boxW;
+              cy = Math.round((boxH / 2) * (1 - t));
+            } else {
+              const s = (gamma - 45) / 45;
+              cx = Math.round(boxW - s * (boxW / 2));
+              cy = 0;
+            }
+          } else {
+            // Within 30° of vertical: ONLY Top horizontal edge
+            showTop = true;
+            const s = (gamma - 45) / 45;
+            cx = Math.round(boxW - s * (boxW / 2));
+            cy = 0;
+          }
+        } else if (angleDeg < 0 && angleDeg >= -90) {
+          // Sector 3: Up-Right (-90° to 0°)
+          const beta = -angleDeg;
+          if (beta <= 30) {
+            // Within 30° of horizontal: ONLY Left vertical edge
+            showLeft = true;
+            const t = beta / 45;
+            cx = 0;
+            cy = Math.round((boxH / 2) * (1 + t));
+          } else if (beta < 60) {
+            // Corner zone (-30° to -60°): Left + Bottom meeting at (0, boxH)
+            showLeft = true;
+            showBottom = true;
+            if (beta <= 45) {
+              const t = beta / 45;
+              cx = 0;
+              cy = Math.round((boxH / 2) * (1 + t));
+            } else {
+              const s = (beta - 45) / 45;
+              cx = Math.round(s * (boxW / 2));
+              cy = boxH;
+            }
+          } else {
+            // Within 30° of vertical: ONLY Bottom horizontal edge
+            showBottom = true;
+            const s = (beta - 45) / 45;
+            cx = Math.round(s * (boxW / 2));
+            cy = boxH;
           }
         } else {
-          // Heading Up-Left (-180° to -90°)
-          const relAngle = 180 - (-angleDeg);
-          if (relAngle < 45) {
-            // Angle -180° (pure horizontal) -> -135°: on Right edge, moving from midpoint (boxH/2) to top corner (0)
-            const t = relAngle / 45;
+          // Sector 4: Up-Left (-180° to -90°)
+          const delta = 180 + angleDeg;
+          if (delta <= 30) {
+            // Within 30° of horizontal: ONLY Right vertical edge
+            showRight = true;
+            const t = delta / 45;
             cx = boxW;
-            cy = (boxH / 2) - t * (boxH / 2);
-            connectEdge = 'right';
-            textAlign = 'right';
-            textAnchorType = 'end';
-
-            if (isDirectHorizontal) {
-              bracketPath = `M 0 ${boxH} L ${boxW} ${boxH}`; // Single shelf underline
+            cy = Math.round((boxH / 2) * (1 + t));
+          } else if (delta < 60) {
+            // Corner zone (-120° to -150°): Right + Bottom meeting at (boxW, boxH)
+            showRight = true;
+            showBottom = true;
+            if (delta <= 45) {
+              const t = delta / 45;
+              cx = boxW;
+              cy = Math.round((boxH / 2) * (1 + t));
             } else {
-              bracketPath = `M ${boxW} ${boxH} L ${boxW} 0 L 0 0`; // Right wall + top shelf
+              const s = (delta - 45) / 45;
+              cx = Math.round(boxW - s * (boxW / 2));
+              cy = boxH;
             }
           } else {
-            // Angle -135° -> -90° (pure vertical up): on Bottom edge, moving from right corner (boxW) to midpoint (boxW/2)
-            const t = (relAngle - 45) / 45;
-            cx = boxW - t * (boxW / 2);
+            // Within 30° of vertical: ONLY Bottom horizontal edge
+            showBottom = true;
+            const s = (delta - 45) / 45;
+            cx = Math.round(boxW - s * (boxW / 2));
             cy = boxH;
-            connectEdge = 'bottom';
-            textAlign = (cx < boxW * 0.65) ? 'center' : 'right';
-            textAnchorType = (cx < boxW * 0.65) ? 'middle' : 'end';
-            bracketPath = `M ${boxW} 0 L ${boxW} ${boxH} L 0 ${boxH}`; // Bottom shelf + right wall
           }
         }
       }
 
-      // Top-left origin of the box
-      const posX = Math.round(anchorPt[0] - cx);
-      const posY = Math.round(anchorPt[1] - cy);
+      const posX = Math.round(ax - cx);
+      const posY = Math.round(ay - cy);
+
+      let textAnchorType = 'start';
+      let textAlign = 'left';
+      if (showRight && !showLeft) {
+        textAnchorType = 'end';
+        textAlign = 'right';
+      } else if (!showLeft && !showRight) {
+        textAnchorType = 'middle';
+        textAlign = 'center';
+      }
+
+      let connectEdge = 'left';
+      if (showLeft && showTop) connectEdge = 'left-top';
+      else if (showLeft && showBottom) connectEdge = 'left-bottom';
+      else if (showRight && showTop) connectEdge = 'right-top';
+      else if (showRight && showBottom) connectEdge = 'right-bottom';
+      else if (showLeft) connectEdge = 'left';
+      else if (showRight) connectEdge = 'right';
+      else if (showTop) connectEdge = 'top';
+      else if (showBottom) connectEdge = 'bottom';
+
+      // Construct contiguous SVG path: exactly 1 or 2 perpendicular edges, never 2 parallel edges
+      let dBracket = '';
+      if (showLeft && showTop) {
+        dBracket = `M ${posX} ${posY + boxH} L ${posX} ${posY} L ${posX + boxW} ${posY}`;
+      } else if (showLeft && showBottom) {
+        dBracket = `M ${posX} ${posY} L ${posX} ${posY + boxH} L ${posX + boxW} ${posY + boxH}`;
+      } else if (showRight && showTop) {
+        dBracket = `M ${posX} ${posY} L ${posX + boxW} ${posY} L ${posX + boxW} ${posY + boxH}`;
+      } else if (showRight && showBottom) {
+        dBracket = `M ${posX} ${posY + boxH} L ${posX + boxW} ${posY + boxH} L ${posX + boxW} ${posY}`;
+      } else if (showLeft) {
+        dBracket = `M ${posX} ${posY} L ${posX} ${posY + boxH}`;
+      } else if (showRight) {
+        dBracket = `M ${posX + boxW} ${posY} L ${posX + boxW} ${posY + boxH}`;
+      } else if (showTop) {
+        dBracket = `M ${posX} ${posY} L ${posX + boxW} ${posY}`;
+      } else if (showBottom) {
+        dBracket = `M ${posX} ${posY + boxH} L ${posX + boxW} ${posY + boxH}`;
+      }
 
       return {
         connectEdge,
@@ -861,10 +885,12 @@ class QuoraTextManager {
         cy,
         textAnchorType,
         textAlign,
-        isDirectHorizontal,
-        bracketPath,
-        uX,
-        uY
+        dBracket,
+        showLeft,
+        showRight,
+        showTop,
+        showBottom,
+        angleDeg
       };
     }
   measureTextBounds(text, fontSize = 20, fontFamily = "'Architects Daughter', cursive, sans-serif") {

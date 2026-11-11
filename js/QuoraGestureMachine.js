@@ -52,12 +52,18 @@ class QuoraGestureMachine {
       if (this.svgSurface && this.svgSurface._preview) { this.svgSurface._preview.remove(); this.svgSurface._preview = null; }
       if (this.svgSurface && this.svgSurface._previewGlow) { this.svgSurface._previewGlow.remove(); this.svgSurface._previewGlow = null; }
       if (this.svgSurface && this.svgSurface._previewArrow) { this.svgSurface._previewArrow.remove(); this.svgSurface._previewArrow = null; }
+      if (this.svgSurface && this.svgSurface._previewArrowGlow) { this.svgSurface._previewArrowGlow.remove(); this.svgSurface._previewArrowGlow = null; }
+
+      const dial = document.getElementById('qa-transient-cursor-dial');
+      if (dial) dial.remove();
+      const clutch = document.getElementById('qa-clutch-rest-badge');
+      if (clutch) clutch.remove();
+
       if (this.component && this.component.inSituHud) {
         this.component.inSituHud.hideCursorReticle();
         this.component.inSituHud.hideTransientCursorDial();
       }
     }
-
   onMouseDown(e) {
       // If clicked on an interactive control handle or HUD, ignore canvas click
       if (e.target.closest('.qa-on-curve-knot-handle, .qa-tangent-handle-group, .qa-segment-midpoint-group, .qa-movable-label-group, .qa-image-plate-control, #qa-keyin-matrix-hud, #qa-transient-cursor-dial, .qa-selectable-callout, .qa-movable-text-badge, #qa-knot-context-menu')) return;
@@ -662,36 +668,7 @@ class QuoraGestureMachine {
               this.component.commitCurveGeometryUpdate();
               this.component.showKnotToast('🔄 Snapped Closed: Loop Ring Active');
             }
-
-            const tailKnot = lastCurve.vertices[lastCurve.vertices.length - 1];
-            const lastSeg = lastCurve.beziers[lastCurve.beziers.length - 1];
-            const uExit = [lastSeg[3][0] - lastSeg[2][0], lastSeg[3][1] - lastSeg[2][1]];
-            const lenExit = Math.hypot(uExit[0], uExit[1]) || 1;
-            const normal = [-uExit[1] / lenExit, uExit[0] / lenExit];
-
-            const dialCenter = [
-              Math.round(tailKnot.point[0] + normal[0] * 68 + (uExit[0] / lenExit) * 20),
-              Math.round(tailKnot.point[1] + normal[1] * 68 + (uExit[1] / lenExit) * 20)
-            ];
-
-            const tf = this.component.computeAutoBounds();
-            dialCenter[0] = Math.max(70, Math.min(tf.totalW - 70, dialCenter[0]));
-            dialCenter[1] = Math.max(70, Math.min(tf.totalH - 70, dialCenter[1]));
-
-            // Stably render the heads-up dial into the insulated hudDialLayer
-            if (this.component.inSituHud) {
-              this.component.inSituHud.renderTransientCursorDial(
-                this.component.hudDialLayer || this.component.svgSurface,
-                dialCenter,
-                lastCurve,
-                {
-                  onToggleArrow: () => this.component.toggleArrowhead(),
-                  onAttachText: () => this.component.triggerTextOnActiveOrCanvas(),
-                  onSwapEnds: () => this.component.swapActiveCurveTerminals(),
-                  onResetSnap: () => this.component.executeKeyInCommand('reset_knot')
-                }
-              );
-            }
+            // Intrusive automatic pop-up dial removed cleanly
           }
         }
       }

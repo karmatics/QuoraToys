@@ -436,11 +436,11 @@ class QuoraInSituHUD {
       dial.style.display = 'block';
       dial.style.opacity = '1';
     }
+
   hideTransientCursorDial() {
       const dial = document.getElementById('qa-transient-cursor-dial');
-      if (dial) dial.style.display = 'none';
-  }
-
+      if (dial) dial.remove();
+    }
   flashKeyCommand(action) {
       if (!this._commandPills || !this._commandPills[action]) return;
       const card = this._commandPills[action];

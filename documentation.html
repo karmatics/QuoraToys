@@ -47,16 +47,28 @@
 
   <div class="doc-container" style="margin-top: 40px;">
     <h1>QuoraToys &amp; Studio: Comprehensive Architecture &amp; Living Specification</h1>
-    <p><em>Version 2.5.0 • Living Architecture &amp; Engineering Dossier</em></p>
+    <p><em>Version 2.6.0 • Living Architecture &amp; Engineering Dossier</em></p>
 
     <div class="card cyan">
-      <strong>Core Purpose:</strong> Universal Graphic Studio for instantaneous visual analysis and annotations. Delivers mathematical curve smoothing, drawstring-tether tremor reduction, target-first directional arrowheads, sub-pixel puzzle difference superimposition, and clean retina exports.
+      <strong>Core Purpose:</strong> Universal Graphic Studio for instantaneous visual analysis and annotations. Delivers mathematical curve smoothing, drawstring-tether tremor reduction, target-first directional arrowheads, continuous 360° callout frames, and clean retina exports.
     </div>
 
-    <h2>1. Unified Hybrid Pen Architecture &amp; Gesture Machine</h2>
+    <h2>1. Continuous 360° Callout Frame &amp; Angular Connection Specification</h2>
+    <div class="card success">
+      <h4>Strict Frame Invariant (One or Two Edges Only):</h4>
+      <p>The callout bracket never displays two parallel edges (e.g., top and bottom together). It displays either a single vertical edge, a single horizontal edge, or two perpendicular edges meeting at the arrival corner.</p>
+      <ul>
+        <li><strong>Trajectory Vector:</strong> $\mathbf{v} = P_{\text{end}} - P_{\text{cp}}$, $\alpha = \operatorname{atan2}(v_y, v_x)$.</li>
+        <li><strong>$\pm 30^\circ$ of Cardinal Horizontal:</strong> Displays <em>only</em> the arrival vertical edge (Left or Right). The contact point sits at the dead center ($H/2$) for pure horizontal, sliding smoothly toward the corner as $\alpha$ tilts.</li>
+        <li><strong>$\pm 30^\circ$ of Cardinal Vertical:</strong> Displays <em>only</em> the arrival horizontal edge (Top or Bottom). The contact point sits at the dead center ($W/2$) for pure vertical, sliding toward the corner as $\alpha$ tilts.</li>
+        <li><strong>$30^\circ \text{ to } 60^\circ$ Corner Zone:</strong> Both perpendicular edges turn on, meeting at the corner point $(0, 0)$, $(W, 0)$, $(0, H)$, or $(W, H)$ at exactly $\pm 45^\circ$ or $\pm 135^\circ$.</li>
+        <li><strong>Zero Gap Guarantee:</strong> $(p_x + c_x, p_y + c_y) = P_{\text{end}}$ everywhere along the full 360° range.</li>
+      </ul>
+    </div>
+
+    <h2>2. Unified Hybrid Pen Architecture &amp; Gesture Machine</h2>
     <div class="card purple">
       <h4>Eliminating Modal Switching Between "Click" and "Drag":</h4>
-      <p>Users will no longer choose between separate tool buttons. When touching down at $P_0$:</p>
       <ul>
         <li>A pale deadzone circle of radius $R$ ($32\text{px}$) appears with a fat white point indicator at $P_0$.</li>
         <li><strong>Click Release Inside $R$:</strong> Registers as a discrete knot insertion, entering point-by-point mode with live rubber-banding.</li>
@@ -64,38 +76,17 @@
       </ul>
     </div>
 
-    <h2>2. Pause &amp; Tether-Clutch Hand-Rest Protocol (`Ctrl` Key)</h2>
+    <h2>3. Tangency Ray Synchronization Protocol</h2>
     <div class="card warning">
-      <h4>Resting Hand Without Breaking Curve Integrity:</h4>
+      <h4>Zero-Artifact Drag Synchronization:</h4>
       <ul>
-        <li>Holding <code>Ctrl</code> freezes curve growth; moving the cursor dynamically scales the tether radius $R$.</li>
-        <li>Releasing the mouse button while holding <code>Ctrl</code> activates the <strong>Hand-Rest Clutch</strong>. The author can release the mouse or trackpad completely.</li>
-        <li>Clicking down again and releasing <code>Ctrl</code> resumes curve pulling without splitting or terminating the Bézier segment.</li>
+        <li>Dragging an attached callout text box moves the endpoint knot of the curve directly under the cursor.</li>
+        <li>Any stale outbound tangent ray (<code>#qa-outbound-tangent-ray</code>) is destroyed at the start of drag, preventing it from being left behind in mid-air.</li>
+        <li>On drag release, <code>exposeBezierHandles()</code> regenerates the knot marker and outbound ray at the new coordinates.</li>
       </ul>
     </div>
 
-    <h2>3. Self-Annotating In-Situ Help (`H` Key)</h2>
-    <div class="card success">
-      <h4>Using QuoraToys to Annotate QuoraToys:</h4>
-      <p>Pressing <code>H</code> dynamically renders native vector annotations on the canvas itself:</p>
-      <ul>
-        <li>Concave arrowheads point directly to the drawstring and deadzone boundary.</li>
-        <li>Architect's Daughter text callouts explain real-time shortcuts: <em>"Drag drawstring to pull curve"</em>, <em>"Hold Ctrl to adjust length or rest hand"</em>, <em>"Shift to rewind vertices"</em>.</li>
-      </ul>
-    </div>
-
-    <h2>4. Outbound Tangent Rays with Counterfactual Snapping</h2>
-    <div class="card cyan">
-      <h4>Long-Leverage Directional Tuning:</h4>
-      <pre>
-1. Outbound Vector: P_ray = P_endpoint + Tangent * L_handle (L_handle >= 40px)
-2. Counterfactual Relaxation Baseline: T_base = normalize(P_endpoint - P_neighbor)
-3. Angular Delta: theta = atan2(T_base x Tangent, T_base . Tangent)
-4. Magnetic Snap: If |theta| &lt; 5 degrees (0.087 rad), Tangent snaps to T_base (zero constraint offset).
-      </pre>
-    </div>
-
-    <h2>5. The 8-Layer Composition Hierarchy</h2>
+    <h2>4. The 8-Layer Composition Hierarchy</h2>
     <table>
       <thead>
         <tr><th>Z-Index</th><th>Layer Name</th><th>Elements Included</th><th>Styling Mandate</th></tr>
@@ -107,7 +98,7 @@
         <tr><td>4</td><td><code>glowLayer</code></td><td>Selection auras and 28px transparent hover pick targets</td><td>Transparent / Cyan glow</td></tr>
         <tr><td>5</td><td><code>shadowLayer</code></td><td>Solid-ink dark keyline shadows (offset +2.0px)</td><td>rgba(10, 15, 25, 0.95)</td></tr>
         <tr><td>6</td><td><code>strokeLayer</code></td><td>Foreground cubic Bézier splines and concave arrowhead barbs</td><td>3.2px crisp foreground stroke</td></tr>
-        <tr><td>7</td><td><code>textBadgesLayer</code></td><td>Architect's Daughter labels, 2-sided architectural frames</td><td>Strictly justified to arrow tail</td></tr>
+        <tr><td>7</td><td><code>textBadgesLayer</code></td><td>Architect's Daughter labels, 1-to-2 sided architectural frames</td><td>Strictly justified to arrow tail</td></tr>
         <tr><td>8</td><td><code>controlsLayer</code></td><td>On-curve knots, outbound tangent rays, deadzone circles</td><td>Cyan / Gold drag handles</td></tr>
       </tbody>
     </table>

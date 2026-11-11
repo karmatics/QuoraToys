@@ -46,7 +46,6 @@ class QuoraKnotManager {
         const isDeleteTarget = (idx === this._hoveredDeleteKnotIdx);
         const isCusp = Boolean(v.isCusp);
 
-        // Hit area compensated by 1/zoom so it's always easy to grab on screen
         const hitRadius = (16 * invScale).toFixed(2);
         const fatTarget = makeElement('svg:circle', {
           cx: v.point[0], cy: v.point[1], r: hitRadius, fill: 'transparent',
@@ -85,7 +84,6 @@ class QuoraKnotManager {
           });
         }
 
-        // Endpoint Hover Tangency Ray Projection (Only when idle)
         if (isEndpoint) {
           fatTarget.addEventListener('mouseenter', () => {
             if (this._isDraggingKnot || this._isDraggingRay || this.component.isInteracting()) return;
@@ -108,7 +106,6 @@ class QuoraKnotManager {
           });
         }
 
-        // Context Menu on Right-Click
         fatTarget.addEventListener('contextmenu', (e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -130,9 +127,6 @@ class QuoraKnotManager {
             ghostCurveEl.remove();
             ghostCurveEl = null;
           }
-
-          const dragGuide = document.getElementById('qa-dragging-tangent-guide');
-          if (dragGuide) dragGuide.remove();
 
           window.removeEventListener('mousemove', onDrag);
           window.removeEventListener('mouseup', onUp);
@@ -195,6 +189,8 @@ class QuoraKnotManager {
           this._isDraggingKnot = true;
 
           controlsLayer.querySelectorAll('.qa-segment-midpoint-group').forEach(el => el.remove());
+          const oldRay = document.getElementById('qa-outbound-tangent-ray');
+          if (oldRay) oldRay.remove();
 
           if (!v.isExplicitTangent && !v.isCusp) {
             v.tangentAngleOffset = 0;
@@ -264,7 +260,6 @@ class QuoraKnotManager {
             });
 
             this.component.commitCurveGeometryUpdate();
-            this.renderDraggingTangentGuide(curveRecord, idx, controlsLayer);
           };
 
           const onUp = () => {
@@ -275,9 +270,6 @@ class QuoraKnotManager {
               ghostCurveEl.remove();
               ghostCurveEl = null;
             }
-
-            const dragGuide = document.getElementById('qa-dragging-tangent-guide');
-            if (dragGuide) dragGuide.remove();
 
             window.removeEventListener('mousemove', onDrag);
             window.removeEventListener('mouseup', onUp);
