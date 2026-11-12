@@ -407,11 +407,14 @@ class QuoraStrokeManager {
         }
       }
 
-      // Exact user formula: Blend 88% towards pure white so the plasma blade is nearly white with a subtle hint of color
-      // For pure red (255, 0, 0), this produces rgb(255, 224, 224)
-      const coreR = Math.round(255 * 0.88 + r * 0.12);
-      const coreG = Math.round(255 * 0.88 + g * 0.12);
-      const coreB = Math.round(255 * 0.88 + b * 0.12);
+      // Dynamic core saturation: adjustable from pale white to vibrant punchy color
+      const p = this.component.stageState?.prefs || {};
+      const sat = (p.textCoreSaturation !== undefined) ? p.textCoreSaturation : 0.40;
+      const whiteWeight = 1.0 - sat;
+
+      const coreR = Math.round(255 * whiteWeight + r * sat);
+      const coreG = Math.round(255 * whiteWeight + g * sat);
+      const coreB = Math.round(255 * whiteWeight + b * sat);
       return `rgb(${coreR}, ${coreG}, ${coreB})`;
     }
   applyCadZoomCompensation(zoomLevel = 1.0) {

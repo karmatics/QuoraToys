@@ -44,6 +44,11 @@ class QuoraTextManager {
       const isNeon = (ann.lineStyle === 'neon');
       const coreTint = isNeon ? this.component.strokeManager.getLuminousCoreColor(col) : col;
 
+      const p = stageState.prefs || {};
+      const showBackdrop = Boolean(p.textBoxBgEnabled || (p.textBoxBgOpacity && p.textBoxBgOpacity > 0.05));
+      const bgOpacity = (p.textBoxBgOpacity !== undefined) ? p.textBoxBgOpacity : 0.0;
+      const borderW = p.borderStrokeWidth || 2.4;
+
       if (!hasText) {
         const ghostW = 120;
         const ghostH = 26;
@@ -104,7 +109,7 @@ class QuoraTextManager {
         if ((ann.boxStyle === 'bracket' || !ann.boxStyle) && dBracket) {
           shadowG.appendChild(makeElement('svg:path', {
             d: dBracket, fill: 'none', stroke: 'rgba(10, 15, 25, 0.95)',
-            'stroke-width': '4.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+            'stroke-width': String(borderW + 2.0), 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
           }));
         }
 
@@ -124,26 +129,27 @@ class QuoraTextManager {
         textElementsMap.shadow = shadowG;
       }
 
-      // 2. Glow Layer: Neon Gaussian bloom
+      // 2. Glow Layer: Saturated, rich colored neon aura
       if (isNeon) {
         const glowG = makeElement('svg:g', {
-          style: { pointerEvents: 'none', opacity: '0.92' }
+          style: { pointerEvents: 'none', opacity: String(p.textGlowOpacity || 0.95) }
         });
 
         if ((ann.boxStyle === 'bracket' || !ann.boxStyle) && dBracket) {
           glowG.appendChild(makeElement('svg:path', {
-            d: dBracket, fill: 'none', stroke: col, 'stroke-width': '10',
+            d: dBracket, fill: 'none', stroke: col, 'stroke-width': String(borderW + 6.0),
             'stroke-linecap': 'round', 'stroke-linejoin': 'round',
             style: { filter: 'url(#qa-neon-glow)' }
           }));
         }
 
+        // Saturated colored glow for text glyphs
         const txtGlow = makeElement('svg:text', {
           x: textAnchorX, y: posY + padY + fontS * 0.88, fill: col,
-          stroke: col, 'stroke-width': '3.5',
+          stroke: col, 'stroke-width': '2.8',
           'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold',
           'text-anchor': textAnchorType,
-          style: { filter: 'url(#qa-neon-glow)' }
+          style: { filter: 'url(#qa-text-glow)' }
         });
         bounds.lines.forEach((l, i) => {
           txtGlow.appendChild(makeElement('svg:tspan', {
@@ -156,7 +162,7 @@ class QuoraTextManager {
         textElementsMap.glow = glowG;
       }
 
-      // 3. Foreground Layer: Callout frame and text
+      // 3. Foreground Layer: Callout frame and text (Clean, floating, no dark background by default)
       const g = makeElement('svg:g', {
         className: 'qa-curve-attached-label',
         style: { cursor: 'move', userSelect: 'none', transition: 'opacity 0.15s ease' },
@@ -167,16 +173,19 @@ class QuoraTextManager {
         }
       });
 
-      g.appendChild(makeElement('svg:rect', {
-        x: posX, y: posY, width: boxW, height: boxH, rx: '4',
-        fill: isNeon ? 'rgba(9, 13, 22, 0.88)' : 'rgba(9, 13, 22, 0.72)', stroke: 'none',
-        style: { pointerEvents: 'none' }
-      }));
+      // Dark backdrop is now controlled by user setting (disabled by default)
+      if (showBackdrop && bgOpacity > 0.02) {
+        g.appendChild(makeElement('svg:rect', {
+          x: posX, y: posY, width: boxW, height: boxH, rx: '4',
+          fill: `rgba(9, 13, 22, ${bgOpacity})`, stroke: 'none',
+          style: { pointerEvents: 'none' }
+        }));
+      }
 
       if ((ann.boxStyle === 'bracket' || !ann.boxStyle) && dBracket) {
         g.appendChild(makeElement('svg:path', {
           d: dBracket, fill: 'none', stroke: isNeon ? coreTint : col,
-          'stroke-width': '2.4',
+          'stroke-width': String(borderW),
           'stroke-linecap': 'round', 'stroke-linejoin': 'round',
           style: isNeon ? { filter: 'url(#qa-neon-core)' } : {}
         }));
@@ -195,7 +204,7 @@ class QuoraTextManager {
       });
       g.appendChild(txt);
 
-      // Dynamic drag synchronizer
+      // Tight drag handle specifically on text and bracket
       let isDraggingBadge = false;
       let startMouseX = 0, startMouseY = 0;
 
@@ -207,7 +216,6 @@ class QuoraTextManager {
         this.component.selectItem(ann);
         this.component._activeKnotIdx = isAtTail ? (ann.vertices.length - 1) : 0;
 
-        // Remove any static tangent ray at the old position immediately
         const staleRay = document.getElementById('qa-outbound-tangent-ray');
         if (staleRay) staleRay.remove();
 
@@ -231,7 +239,6 @@ class QuoraTextManager {
           targetKnot.isExplicitTangent = false;
           targetKnot.tangentAngleOffset = 0;
 
-          // Ensure no stray ray sits frozen in space
           const ray = document.getElementById('qa-outbound-tangent-ray');
           if (ray) ray.remove();
 
@@ -256,124 +263,120 @@ class QuoraTextManager {
       textElementsMap.fg = g;
       ann._textElements = textElementsMap;
     }
+
   promptInlineTailText(curveRecord, anchorPt, forcedEdge = null, initialText = '') {
-      const existing = document.getElementById('qa-inline-tail-editor');
-      if (existing) existing.remove();
-      const existingDock = document.getElementById('qa-callout-editor-dock');
-      if (existingDock) existingDock.remove();
+        const existing = document.getElementById('qa-inline-tail-editor');
+        if (existing) existing.remove();
+        const existingDock = document.getElementById('qa-callout-editor-dock');
+        if (existingDock) existingDock.remove();
 
-      let exitVec = [1, 0];
-      if (curveRecord && curveRecord.beziers?.length > 0) {
-        const isAtTail = (curveRecord.textEnd !== 'tip');
-        const termSeg = isAtTail ? curveRecord.beziers[curveRecord.beziers.length - 1] : curveRecord.beziers[0];
-        exitVec = isAtTail
-          ? [termSeg[3][0] - termSeg[2][0], termSeg[3][1] - termSeg[2][1]]
-          : [termSeg[0][0] - termSeg[1][0], termSeg[0][1] - termSeg[1][1]];
-      }
-
-      let fontF = curveRecord?.fontFamily || this.component.stageState.fontFamily;
-      let fontS = curveRecord?.fontSize || this.component.stageState.fontSize || 20;
-      let boxStyle = curveRecord?.boxStyle || 'bracket';
-      let boxOpacity = curveRecord?.boxOpacity || 0.75;
-      const color = curveRecord?.color || this.component.stageState.currentColor;
-
-      const initialVal = (initialText !== undefined && initialText !== null && initialText !== '')
-        ? initialText
-        : (curveRecord?.text || '');
-
-      const bounds = this.measureTextBounds(initialVal || 'Type callout...', fontS, fontF);
-      const width = bounds.maxW + 20;
-      const estHeight = bounds.totalH + 12;
-
-      const effectiveEdge = curveRecord?.manualEdge ? curveRecord.connectEdge : (forcedEdge || null);
-      let placement = this.computeTextPlacement(anchorPt, exitVec, width, estHeight, effectiveEdge);
-      let connectEdge = placement.connectEdge;
-
-      const editorWrap = makeElement('div', {
-        id: 'qa-inline-tail-editor',
-        style: {
-          position: 'absolute',
-          top: `${placement.posY}px`,
-          left: `${placement.posX}px`,
-          width: `${width}px`,
-          zIndex: '70',
-          overflow: 'visible'
+        let exitVec = [1, 0];
+        if (curveRecord && curveRecord.beziers?.length > 0) {
+          const isAtTail = (curveRecord.textEnd !== 'tip');
+          const termSeg = isAtTail ? curveRecord.beziers[curveRecord.beziers.length - 1] : curveRecord.beziers[0];
+          exitVec = isAtTail
+            ? [termSeg[3][0] - termSeg[2][0], termSeg[3][1] - termSeg[2][1]]
+            : [termSeg[0][0] - termSeg[1][0], termSeg[0][1] - termSeg[1][1]];
         }
-      });
 
-      const textarea = makeElement('textarea', {
-        placeholder: 'Type callout text...',
-        value: initialVal,
-        rows: 1,
-        style: {
-          width: '100%', minHeight: '30px', maxHeight: '180px', padding: '4px 8px',
-          fontSize: `${fontS}px`, fontFamily: fontF, fontWeight: 'bold', lineHeight: '1.25',
-          color: color, background: `rgba(9, 13, 22, ${boxOpacity})`,
-          border: 'none', borderRadius: '4px', outline: 'none', resize: 'none',
-          overflow: 'hidden', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-          boxSizing: 'border-box', textAlign: placement.textAlign,
-          boxShadow: '0 8px 24px rgba(0,0,0,0.85)',
-          scrollbarWidth: 'none', msOverflowStyle: 'none'
-        }
-      });
+        let fontF = curveRecord?.fontFamily || this.component.stageState.fontFamily;
+        let fontS = curveRecord?.fontSize || this.component.stageState.fontSize || 20;
+        let boxStyle = curveRecord?.boxStyle || 'bracket';
+        let boxOpacity = curveRecord?.boxOpacity || 0.75;
+        const color = curveRecord?.color || this.component.stageState.currentColor;
 
-      const applyFrameStyles = () => {
-        textarea.style.border = 'none';
-        textarea.style.borderRadius = '4px';
-        textarea.style.background = `rgba(9, 13, 22, ${boxOpacity})`;
+        const initialVal = (initialText !== undefined && initialText !== null && initialText !== '')
+          ? initialText
+          : (curveRecord?.text || '');
 
-        if (boxStyle === 'box' || boxStyle === 'pill') {
-          textarea.style.border = `2px solid ${color}`;
-          textarea.style.borderRadius = boxStyle === 'pill' ? '24px' : '4px';
-        } else if (boxStyle === 'bracket') {
-          if (placement.showLeft) textarea.style.borderLeft = `2px solid ${color}`;
-          if (placement.showRight) textarea.style.borderRight = `2px solid ${color}`;
-          if (placement.showTop) textarea.style.borderTop = `2px solid ${color}`;
-          if (placement.showBottom) textarea.style.borderBottom = `2px solid ${color}`;
-        }
-      };
-      applyFrameStyles();
+        const bounds = this.measureTextBounds(initialVal || 'Type callout...', fontS, fontF);
+        const width = bounds.maxW + 20;
+        const estHeight = bounds.totalH + 12;
 
-      const controlsDock = makeElement('div', {
-        id: 'qa-callout-editor-dock',
-        style: {
-          position: 'absolute', display: 'inline-flex', alignItems: 'center', gap: '8px',
-          background: 'rgba(11, 17, 32, 0.98)', border: '1.5px solid rgba(0, 242, 254, 0.5)',
-          borderRadius: '24px', padding: '5px 14px', fontSize: '10.5px',
-          boxShadow: '0 14px 36px rgba(0, 0, 0, 0.9), 0 0 16px rgba(0, 242, 254, 0.25)',
-          zIndex: '85', backdropFilter: 'blur(14px)', userSelect: 'none'
-        }
-      });
+        const effectiveEdge = curveRecord?.manualEdge ? curveRecord.connectEdge : (forcedEdge || null);
+        let placement = this.computeTextPlacement(anchorPt, exitVec, width, estHeight, effectiveEdge);
+        let connectEdge = placement.connectEdge;
 
-      const updateDockPosition = () => {
-        const curH = textarea.offsetHeight || estHeight;
-        const bds = this.measureTextBounds(textarea.value || ' ', fontS, fontF);
-        const dynamicW = Math.max(80, bds.maxW + 18);
-        editorWrap.style.width = `${dynamicW}px`;
+        const editorWrap = makeElement('div', {
+          id: 'qa-inline-tail-editor',
+          style: {
+            position: 'absolute',
+            top: `${placement.posY}px`,
+            left: `${placement.posX}px`,
+            width: `${width}px`,
+            zIndex: '70',
+            overflow: 'visible'
+          }
+        });
 
-        placement = this.computeTextPlacement(anchorPt, exitVec, dynamicW, curH, connectEdge);
-        editorWrap.style.left = `${placement.posX}px`;
-        editorWrap.style.top = `${placement.posY}px`;
+        const textarea = makeElement('textarea', {
+          placeholder: 'Type callout text...',
+          value: initialVal,
+          rows: 1,
+          style: {
+            width: '100%', minHeight: '30px', maxHeight: '180px', padding: '4px 8px',
+            fontSize: `${fontS}px`, fontFamily: fontF, fontWeight: 'bold', lineHeight: '1.25',
+            color: color, background: `rgba(9, 13, 22, ${boxOpacity})`,
+            border: 'none', borderRadius: '4px', outline: 'none', resize: 'none',
+            overflow: 'hidden', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            boxSizing: 'border-box', textAlign: placement.textAlign,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.85)',
+            scrollbarWidth: 'none', msOverflowStyle: 'none'
+          }
+        });
 
-        const floatAbove = (placement.posY > 64);
-        const dockTop = floatAbove ? (placement.posY - 44) : (placement.posY + curH + 28);
-        controlsDock.style.top = `${dockTop}px`;
-        controlsDock.style.left = `${placement.posX}px`;
-      };
+        const applyFrameStyles = () => {
+          textarea.style.border = 'none';
+          textarea.style.borderRadius = '4px';
+          textarea.style.background = `rgba(9, 13, 22, ${boxOpacity})`;
 
-      const autoGrow = () => {
-        textarea.style.height = 'auto';
-        const curH = Math.max(30, textarea.scrollHeight);
-        textarea.style.height = `${curH}px`;
-        updateDockPosition();
-      };
+          if (boxStyle === 'box' || boxStyle === 'pill') {
+            textarea.style.border = `2px solid ${color}`;
+            textarea.style.borderRadius = boxStyle === 'pill' ? '24px' : '4px';
+          } else if (boxStyle === 'bracket') {
+            if (placement.showLeft) textarea.style.borderLeft = `2px solid ${color}`;
+            if (placement.showRight) textarea.style.borderRight = `2px solid ${color}`;
+            if (placement.showTop) textarea.style.borderTop = `2px solid ${color}`;
+            if (placement.showBottom) textarea.style.borderBottom = `2px solid ${color}`;
+          }
+        };
+        applyFrameStyles();
 
-      const edgeCycleBtn = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '2px 8px', fontSize: '10px', color: '#00f2fe', borderColor: 'rgba(0, 242, 254, 0.4)' },
-        title: 'Cycle Connection Edge: Left -> Right -> Bottom -> Top -> Auto',
-        onclick: (e) => {
-          e.stopPropagation();
+        const controlsDock = makeElement('div', {
+          id: 'qa-callout-editor-dock',
+          style: {
+            position: 'absolute', display: 'inline-flex', alignItems: 'center', gap: '8px',
+            background: 'rgba(11, 17, 32, 0.98)', border: '1.5px solid rgba(0, 242, 254, 0.5)',
+            borderRadius: '24px', padding: '5px 14px', fontSize: '10.5px',
+            boxShadow: '0 14px 36px rgba(0, 0, 0, 0.9), 0 0 16px rgba(0, 242, 254, 0.25)',
+            zIndex: '85', backdropFilter: 'blur(14px)', userSelect: 'none'
+          }
+        });
+
+        const updateDockPosition = () => {
+          const curH = textarea.offsetHeight || estHeight;
+          const bds = this.measureTextBounds(textarea.value || ' ', fontS, fontF);
+          const dynamicW = Math.max(80, bds.maxW + 18);
+          editorWrap.style.width = `${dynamicW}px`;
+
+          placement = this.computeTextPlacement(anchorPt, exitVec, dynamicW, curH, connectEdge);
+          editorWrap.style.left = `${placement.posX}px`;
+          editorWrap.style.top = `${placement.posY}px`;
+
+          const floatAbove = (placement.posY > 64);
+          const dockTop = floatAbove ? (placement.posY - 44) : (placement.posY + curH + 28);
+          controlsDock.style.top = `${dockTop}px`;
+          controlsDock.style.left = `${placement.posX}px`;
+        };
+
+        const autoGrow = () => {
+          textarea.style.height = 'auto';
+          const curH = Math.max(30, textarea.scrollHeight);
+          textarea.style.height = `${curH}px`;
+          updateDockPosition();
+        };
+
+        const cycleDockEdge = () => {
           const cycle = ['left', 'right', 'bottom', 'top', 'auto'];
           const nextEdge = cycle[(cycle.indexOf(connectEdge) + 1) % cycle.length];
           connectEdge = nextEdge;
@@ -389,98 +392,129 @@ class QuoraTextManager {
           autoGrow();
           edgeCycleBtn.textContent = `Dock: ${connectEdge.toUpperCase()}${isManual ? ' 🔒' : ''}`;
           if (curveRecord) this.component.renderStage();
-        }
-      }, `Dock: ${connectEdge.toUpperCase()}${curveRecord?.manualEdge ? ' 🔒' : ''}`);
+          this.component.showKnotToast(`Callout Dock: ${connectEdge.toUpperCase()} (Tab)`);
+        };
 
-      const styleBtn = makeElement('button', {
-        className: 'dr-nav-btn primary',
-        style: { padding: '2px 6px', fontSize: '10px' },
-        title: 'Cycle Frame: Bracket -> Rounded Box -> Pill -> Plain',
-        onclick: (e) => {
-          e.stopPropagation();
+        const cycleFrameStyle = () => {
           const styles = ['bracket', 'box', 'pill', 'none'];
           boxStyle = styles[(styles.indexOf(boxStyle) + 1) % styles.length];
           if (curveRecord) curveRecord.boxStyle = boxStyle;
           styleBtn.textContent = boxStyle === 'bracket' ? '◺ Bracket' : (boxStyle === 'box' ? '◻ Box' : (boxStyle === 'pill' ? '💊 Pill' : 'Plain'));
           applyFrameStyles();
           if (curveRecord) this.component.renderStage();
-        }
-      }, boxStyle === 'bracket' ? '◺ Bracket' : (boxStyle === 'box' ? '◻ Box' : (boxStyle === 'pill' ? '💊 Pill' : 'Plain')));
+          this.component.showKnotToast(`Frame Style: ${boxStyle.toUpperCase()} (Shift+Tab)`);
+        };
 
-      let committed = false;
-      let onOutClick = null;
+        const edgeCycleBtn = makeElement('button', {
+          className: 'dr-nav-btn',
+          style: { padding: '2px 8px', fontSize: '10px', color: '#00f2fe', borderColor: 'rgba(0, 242, 254, 0.4)' },
+          title: 'Cycle Connection Edge [Tab]: Left -> Right -> Bottom -> Top -> Auto',
+          onclick: (e) => { e.stopPropagation(); cycleDockEdge(); }
+        }, `Dock: ${connectEdge.toUpperCase()}${curveRecord?.manualEdge ? ' 🔒' : ''}`);
 
-      const commit = () => {
-        if (committed) return;
-        committed = true;
-        if (onOutClick) window.removeEventListener('mousedown', onOutClick);
+        const styleBtn = makeElement('button', {
+          className: 'dr-nav-btn primary',
+          style: { padding: '2px 6px', fontSize: '10px' },
+          title: 'Cycle Frame [Shift+Tab]: Bracket -> Box -> Pill -> Plain',
+          onclick: (e) => { e.stopPropagation(); cycleFrameStyle(); }
+        }, boxStyle === 'bracket' ? '◺ Bracket' : (boxStyle === 'box' ? '◻ Box' : (boxStyle === 'pill' ? '💊 Pill' : 'Plain')));
 
-        const textVal = textarea.value.trim();
-        if (curveRecord) {
-          curveRecord.text = textVal;
-          curveRecord.connectEdge = connectEdge;
-          curveRecord.fontSize = fontS;
-          curveRecord.fontFamily = fontF;
-          curveRecord.boxStyle = boxStyle;
-          curveRecord.boxOpacity = boxOpacity;
-        } else if (textVal) {
-          this.component.stageState.annotations.push({
-            id: 'text_' + Date.now(),
-            type: 'text_badge',
-            x: anchorPt[0],
-            y: anchorPt[1],
-            text: textVal,
-            fontSize: fontS,
-            fontFamily: fontF,
-            boxStyle: boxStyle,
-            boxOpacity: boxOpacity,
-            connectEdge: connectEdge,
-            color: color
-          });
-        }
+        let committed = false;
+        let onOutClick = null;
 
-        editorWrap.remove();
-        controlsDock.remove();
-        this.component.renderStage();
-      };
+        const commit = () => {
+          if (committed) return;
+          committed = true;
+          if (onOutClick) window.removeEventListener('mousedown', onOutClick);
 
-      const okBtn = makeElement('button', {
-        className: 'dr-nav-btn primary',
-        style: { padding: '2px 10px', fontSize: '10px', background: '#238636', borderColor: '#2ea043' },
-        onclick: (e) => { e.stopPropagation(); commit(); }
-      }, '✓ Done');
+          const textVal = textarea.value.trim();
+          if (curveRecord) {
+            curveRecord.text = textVal;
+            curveRecord.connectEdge = connectEdge;
+            curveRecord.fontSize = fontS;
+            curveRecord.fontFamily = fontF;
+            curveRecord.boxStyle = boxStyle;
+            curveRecord.boxOpacity = boxOpacity;
+          } else if (textVal) {
+            this.component.stageState.annotations.push({
+              id: 'text_' + Date.now(),
+              type: 'text_badge',
+              x: anchorPt[0],
+              y: anchorPt[1],
+              text: textVal,
+              fontSize: fontS,
+              fontFamily: fontF,
+              boxStyle: boxStyle,
+              boxOpacity: boxOpacity,
+              connectEdge: connectEdge,
+              color: color
+            });
+          }
 
-      controlsDock.append(
-        makeElement('span', { style: { color: '#00f2fe', fontWeight: 'bold', fontSize: '11px', marginRight: '2px' } }, '✎ Callout:'),
-        edgeCycleBtn, styleBtn, okBtn
-      );
+          editorWrap.remove();
+          controlsDock.remove();
+          this.component.renderStage();
+        };
 
-      editorWrap.appendChild(textarea);
-      this.component.stageBox.appendChild(editorWrap);
-      this.component.stageBox.appendChild(controlsDock);
+        const okBtn = makeElement('button', {
+          className: 'dr-nav-btn primary',
+          style: { padding: '2px 10px', fontSize: '10px', background: '#238636', borderColor: '#2ea043' },
+          onclick: (e) => { e.stopPropagation(); commit(); }
+        }, '✓ Done');
 
-      textarea.addEventListener('input', autoGrow);
-      textarea.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey) {
-          e.preventDefault(); commit();
-        } else if (e.key === 'Escape') {
-          e.preventDefault(); textarea.value = ''; commit();
-        }
-      });
+        controlsDock.append(
+          makeElement('span', { style: { color: '#00f2fe', fontWeight: 'bold', fontSize: '11px', marginRight: '2px' } }, '✎ Callout:'),
+          edgeCycleBtn, styleBtn, okBtn
+        );
 
-      onOutClick = (ev) => {
-        if (!editorWrap.contains(ev.target) && !controlsDock.contains(ev.target)) commit();
-      };
+        editorWrap.appendChild(textarea);
+        this.component.stageBox.appendChild(editorWrap);
+        this.component.stageBox.appendChild(controlsDock);
 
-      setTimeout(() => {
-        textarea.focus();
-        if (textarea.value.length > 0) {
-          textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
-        }
-        autoGrow();
-        window.addEventListener('mousedown', onOutClick);
-      }, 40);
-    }
+        textarea.addEventListener('input', autoGrow);
+
+        // Keyboard acceleration inside the callout textarea
+        textarea.addEventListener('keydown', (e) => {
+          // Tab: cycle docking edge on arrow (or Shift+Tab: cycle frame style)
+          if (e.key === 'Tab') {
+            e.preventDefault();
+            if (e.shiftKey) {
+              cycleFrameStyle();
+            } else {
+              cycleDockEdge();
+            }
+            return;
+          }
+
+          // Enter (without Shift): commit immediately
+          if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey) {
+            e.preventDefault();
+            commit();
+            return;
+          }
+
+          // Escape: cancel if empty or commit text
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            textarea.value = '';
+            commit();
+            return;
+          }
+        });
+
+        onOutClick = (ev) => {
+          if (!editorWrap.contains(ev.target) && !controlsDock.contains(ev.target)) commit();
+        };
+
+        setTimeout(() => {
+          textarea.focus();
+          if (textarea.value.length > 0) {
+            textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+          }
+          autoGrow();
+          window.addEventListener('mousedown', onOutClick);
+        }, 40);
+      }
   wrapTextLines(text, maxCharsPerLine) {
       if (!text) return [];
       const paragraphs = String(text).split('\n');
@@ -514,7 +548,6 @@ class QuoraTextManager {
       const fontS = ann.fontSize || 20;
       const fontF = ann.fontFamily || "'Architects Daughter', cursive, sans-serif";
 
-      // Compact typography bounds measurement via canvas metrics
       const bounds = this.measureTextBounds(ann.text || '', fontS, fontF);
       const padX = ann.boxStyle !== 'none' ? 8 : 4;
       const padY = ann.boxStyle !== 'none' ? 4 : 2;
@@ -527,7 +560,11 @@ class QuoraTextManager {
       const isNeon = (ann.lineStyle === 'neon');
       const coreTint = isNeon ? this.component.strokeManager.getLuminousCoreColor(col) : col;
 
-      // Clean up prior decoupled elements across layers
+      const p = stageState.prefs || {};
+      const showBackdrop = Boolean(p.textBoxBgEnabled || (p.textBoxBgOpacity && p.textBoxBgOpacity > 0.05));
+      const bgOpacity = (p.textBoxBgOpacity !== undefined) ? p.textBoxBgOpacity : 0.0;
+      const borderW = p.borderStrokeWidth || 2.4;
+
       if (ann._badgeElements) {
         Object.values(ann._badgeElements).forEach(el => { if (el && el.remove) el.remove(); });
         ann._badgeElements = null;
@@ -536,14 +573,14 @@ class QuoraTextManager {
       const bD = `M ${ann.x} ${ann.y} L ${ann.x} ${ann.y + boxH} L ${ann.x + boxW} ${ann.y + boxH}`;
       const badgeElementsMap = {};
 
-      // 1. SHADOW LAYER: All keyline shadows down together (Classic mode only)
+      // 1. Shadow Layer: Classic drop shadow
       if (!isNeon) {
         const shadowG = makeElement('svg:g', {
           transform: 'translate(2, 2)',
           style: { pointerEvents: 'none' }
         });
         shadowG.appendChild(makeElement('svg:path', {
-          d: bD, fill: 'none', stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': '4.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+          d: bD, fill: 'none', stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': String(borderW + 2.0), 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
         }));
         const txtShadow = makeElement('svg:text', {
           x: ann.x + padX, y: ann.y + padY + fontS * 0.88, fill: 'rgba(10, 15, 25, 0.95)',
@@ -560,19 +597,19 @@ class QuoraTextManager {
         badgeElementsMap.shadow = shadowG;
       }
 
-      // 2. GLOW LAYER: Luminous Gaussian bloom around bracket & letters (Neon mode)
+      // 2. Glow Layer: Neon Gaussian glow
       if (isNeon) {
         const glowG = makeElement('svg:g', {
-          style: { pointerEvents: 'none', opacity: '0.92' }
+          style: { pointerEvents: 'none', opacity: String(p.textGlowOpacity || 0.95) }
         });
         glowG.appendChild(makeElement('svg:path', {
-          d: bD, fill: 'none', stroke: col, 'stroke-width': '10', 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+          d: bD, fill: 'none', stroke: col, 'stroke-width': String(borderW + 6.0), 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
           style: { filter: 'url(#qa-neon-glow)' }
         }));
         const txtGlow = makeElement('svg:text', {
-          x: ann.x + padX, y: ann.y + padY + fontS * 0.88, fill: col, stroke: col, 'stroke-width': '3.5',
+          x: ann.x + padX, y: ann.y + padY + fontS * 0.88, fill: col, stroke: col, 'stroke-width': '2.8',
           'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold',
-          style: { filter: 'url(#qa-neon-glow)' }
+          style: { filter: 'url(#qa-text-glow)' }
         });
         bounds.lines.forEach((l, i) => {
           txtGlow.appendChild(makeElement('svg:tspan', {
@@ -585,7 +622,7 @@ class QuoraTextManager {
         badgeElementsMap.glow = glowG;
       }
 
-      // 3. FOREGROUND LAYER
+      // 3. Foreground Layer
       const g = makeElement('svg:g', {
         id: `badge-${ann.id}`,
         className: 'qa-movable-text-badge',
@@ -604,21 +641,20 @@ class QuoraTextManager {
         }));
       }
 
-      // Backdrop
-      g.appendChild(makeElement('svg:rect', {
-        x: ann.x, y: ann.y, width: boxW, height: boxH, rx: '4',
-        fill: isNeon ? 'rgba(9, 13, 22, 0.88)' : 'rgba(9, 13, 22, 0.72)', stroke: 'none',
-        style: { pointerEvents: 'none' }
-      }));
+      if (showBackdrop && bgOpacity > 0.02) {
+        g.appendChild(makeElement('svg:rect', {
+          x: ann.x, y: ann.y, width: boxW, height: boxH, rx: '4',
+          fill: `rgba(9, 13, 22, ${bgOpacity})`, stroke: 'none',
+          style: { pointerEvents: 'none' }
+        }));
+      }
 
-      // Foreground bracket
       g.appendChild(makeElement('svg:path', {
-        d: bD, fill: 'none', stroke: isNeon ? coreTint : col, 'stroke-width': '2.4',
+        d: bD, fill: 'none', stroke: isNeon ? coreTint : col, 'stroke-width': String(borderW),
         'stroke-linecap': 'round', 'stroke-linejoin': 'round',
         style: isNeon ? { filter: 'url(#qa-neon-core)' } : {}
       }));
 
-      // Foreground text
       const txt = makeElement('svg:text', {
         x: ann.x + padX, y: ann.y + padY + fontS * 0.88, fill: isNeon ? coreTint : col,
         'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold',
@@ -669,7 +705,6 @@ class QuoraTextManager {
       badgeElementsMap.fg = g;
       ann._badgeElements = badgeElementsMap;
     }
-
   computeTextPlacement(anchorPt, exitVec, boxW, boxH, forcedEdge = null) {
       const ax = anchorPt[0];
       const ay = anchorPt[1];
@@ -683,7 +718,6 @@ class QuoraTextManager {
         vy = 0;
       }
 
-      // Arrival angle in degrees: 0° is pure right, +90° is pure down (+y), -90° is pure up (-y), ±180° is pure left (-x)
       const angleDeg = Math.atan2(vy, vx) * (180 / Math.PI);
 
       let showLeft = false;
@@ -693,6 +727,12 @@ class QuoraTextManager {
 
       let cx = 0;
       let cy = 0;
+
+      // Live adjustable threshold: defaults to 15° (dual-edge corner zone is wide: 15° to 75°)
+      const p = this.component?.stageState?.prefs || {};
+      const threshold = p.axisThreshold !== undefined ? p.axisThreshold : 15;
+      const cornerLow = threshold;
+      const cornerHigh = 90 - threshold;
 
       if (forcedEdge && forcedEdge !== 'auto') {
         if (forcedEdge === 'left') {
@@ -713,17 +753,17 @@ class QuoraTextManager {
           cy = boxH;
         }
       } else {
-        // Continuous 360° mapping across the 4 quadrants
+        // 360° Continuous Dynamic Mapping with widened dual-edge corner zone
         if (angleDeg >= 0 && angleDeg < 90) {
           // Sector 1: Down-Right (0° to 90°)
-          if (angleDeg <= 30) {
-            // Within 30° of horizontal: ONLY Left vertical edge
+          if (angleDeg <= cornerLow) {
+            // Within threshold of horizontal: ONLY Left vertical edge
             showLeft = true;
             const t = angleDeg / 45;
             cx = 0;
             cy = Math.round((boxH / 2) * (1 - t));
-          } else if (angleDeg < 60) {
-            // Corner zone (30° to 60°): Left + Top meeting at (0, 0)
+          } else if (angleDeg < cornerHigh) {
+            // Widened Dual-Edge Corner Zone (e.g. 15° to 75°): Left + Top meeting at (0, 0)
             showLeft = true;
             showTop = true;
             if (angleDeg <= 45) {
@@ -736,7 +776,7 @@ class QuoraTextManager {
               cy = 0;
             }
           } else {
-            // Within 30° of vertical: ONLY Top horizontal edge
+            // Within threshold of vertical: ONLY Top horizontal edge
             showTop = true;
             const s = (angleDeg - 45) / 45;
             cx = Math.round(s * (boxW / 2));
@@ -745,14 +785,13 @@ class QuoraTextManager {
         } else if (angleDeg >= 90 && angleDeg <= 180) {
           // Sector 2: Down-Left (90° to 180°)
           const gamma = 180 - angleDeg;
-          if (gamma <= 30) {
-            // Within 30° of horizontal: ONLY Right vertical edge
+          if (gamma <= cornerLow) {
             showRight = true;
             const t = gamma / 45;
             cx = boxW;
             cy = Math.round((boxH / 2) * (1 - t));
-          } else if (gamma < 60) {
-            // Corner zone (120° to 150°): Right + Top meeting at (boxW, 0)
+          } else if (gamma < cornerHigh) {
+            // Widened Corner Zone: Right + Top meeting at (boxW, 0)
             showRight = true;
             showTop = true;
             if (gamma <= 45) {
@@ -765,7 +804,6 @@ class QuoraTextManager {
               cy = 0;
             }
           } else {
-            // Within 30° of vertical: ONLY Top horizontal edge
             showTop = true;
             const s = (gamma - 45) / 45;
             cx = Math.round(boxW - s * (boxW / 2));
@@ -774,14 +812,13 @@ class QuoraTextManager {
         } else if (angleDeg < 0 && angleDeg >= -90) {
           // Sector 3: Up-Right (-90° to 0°)
           const beta = -angleDeg;
-          if (beta <= 30) {
-            // Within 30° of horizontal: ONLY Left vertical edge
+          if (beta <= cornerLow) {
             showLeft = true;
             const t = beta / 45;
             cx = 0;
             cy = Math.round((boxH / 2) * (1 + t));
-          } else if (beta < 60) {
-            // Corner zone (-30° to -60°): Left + Bottom meeting at (0, boxH)
+          } else if (beta < cornerHigh) {
+            // Widened Corner Zone: Left + Bottom meeting at (0, boxH)
             showLeft = true;
             showBottom = true;
             if (beta <= 45) {
@@ -794,7 +831,6 @@ class QuoraTextManager {
               cy = boxH;
             }
           } else {
-            // Within 30° of vertical: ONLY Bottom horizontal edge
             showBottom = true;
             const s = (beta - 45) / 45;
             cx = Math.round(s * (boxW / 2));
@@ -803,14 +839,13 @@ class QuoraTextManager {
         } else {
           // Sector 4: Up-Left (-180° to -90°)
           const delta = 180 + angleDeg;
-          if (delta <= 30) {
-            // Within 30° of horizontal: ONLY Right vertical edge
+          if (delta <= cornerLow) {
             showRight = true;
             const t = delta / 45;
             cx = boxW;
             cy = Math.round((boxH / 2) * (1 + t));
-          } else if (delta < 60) {
-            // Corner zone (-120° to -150°): Right + Bottom meeting at (boxW, boxH)
+          } else if (delta < cornerHigh) {
+            // Widened Corner Zone: Right + Bottom meeting at (boxW, boxH)
             showRight = true;
             showBottom = true;
             if (delta <= 45) {
@@ -823,7 +858,6 @@ class QuoraTextManager {
               cy = boxH;
             }
           } else {
-            // Within 30° of vertical: ONLY Bottom horizontal edge
             showBottom = true;
             const s = (delta - 45) / 45;
             cx = Math.round(boxW - s * (boxW / 2));
@@ -855,7 +889,7 @@ class QuoraTextManager {
       else if (showTop) connectEdge = 'top';
       else if (showBottom) connectEdge = 'bottom';
 
-      // Construct contiguous SVG path: exactly 1 or 2 perpendicular edges, never 2 parallel edges
+      // Contiguous SVG bracket stroke
       let dBracket = '';
       if (showLeft && showTop) {
         dBracket = `M ${posX} ${posY + boxH} L ${posX} ${posY} L ${posX + boxW} ${posY}`;

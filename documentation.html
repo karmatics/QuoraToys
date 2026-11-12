@@ -47,61 +47,34 @@
 
   <div class="doc-container" style="margin-top: 40px;">
     <h1>QuoraToys &amp; Studio: Comprehensive Architecture &amp; Living Specification</h1>
-    <p><em>Version 2.6.0 • Living Architecture &amp; Engineering Dossier</em></p>
+    <p><em>Version 2.7.0 • Living Architecture &amp; Engineering Dossier</em></p>
 
     <div class="card cyan">
-      <strong>Core Purpose:</strong> Universal Graphic Studio for instantaneous visual analysis and annotations. Delivers mathematical curve smoothing, drawstring-tether tremor reduction, target-first directional arrowheads, continuous 360° callout frames, and clean retina exports.
+      <strong>Core Purpose:</strong> Universal Graphic Studio for instantaneous visual analysis and annotations. Delivers mathematical curve smoothing, drawstring-tether tremor reduction, target-first directional arrowheads, widened 360° callout frames, live optics tuning sliders, and clean retina exports.
     </div>
 
-    <h2>1. Continuous 360° Callout Frame &amp; Angular Connection Specification</h2>
+    <h2>1. Continuous 360° Callout Frame &amp; Wide Corner Geometry</h2>
     <div class="card success">
-      <h4>Strict Frame Invariant (One or Two Edges Only):</h4>
-      <p>The callout bracket never displays two parallel edges (e.g., top and bottom together). It displays either a single vertical edge, a single horizontal edge, or two perpendicular edges meeting at the arrival corner.</p>
+      <h4>Widened Dual-Edge Invariant ($15^\circ \to 75^\circ$):</h4>
+      <p>The callout bracket never displays two parallel edges. It displays either a single vertical edge, a single horizontal edge, or both perpendicular edges meeting at the arrival corner across a generous angular sector.</p>
       <ul>
         <li><strong>Trajectory Vector:</strong> $\mathbf{v} = P_{\text{end}} - P_{\text{cp}}$, $\alpha = \operatorname{atan2}(v_y, v_x)$.</li>
-        <li><strong>$\pm 30^\circ$ of Cardinal Horizontal:</strong> Displays <em>only</em> the arrival vertical edge (Left or Right). The contact point sits at the dead center ($H/2$) for pure horizontal, sliding smoothly toward the corner as $\alpha$ tilts.</li>
-        <li><strong>$\pm 30^\circ$ of Cardinal Vertical:</strong> Displays <em>only</em> the arrival horizontal edge (Top or Bottom). The contact point sits at the dead center ($W/2$) for pure vertical, sliding toward the corner as $\alpha$ tilts.</li>
-        <li><strong>$30^\circ \text{ to } 60^\circ$ Corner Zone:</strong> Both perpendicular edges turn on, meeting at the corner point $(0, 0)$, $(W, 0)$, $(0, H)$, or $(W, H)$ at exactly $\pm 45^\circ$ or $\pm 135^\circ$.</li>
-        <li><strong>Zero Gap Guarantee:</strong> $(p_x + c_x, p_y + c_y) = P_{\text{end}}$ everywhere along the full 360° range.</li>
+        <li><strong>Near Horizontal ($0^\circ \to 15^\circ$):</strong> Displays <em>only</em> the arrival vertical edge (Left or Right), connecting at $H/2$ for pure horizontal.</li>
+        <li><strong>Near Vertical ($75^\circ \to 90^\circ$):</strong> Displays <em>only</em> the arrival horizontal edge (Top or Bottom), connecting at $W/2$ for pure vertical.</li>
+        <li><strong>Wide Dual-Edge Zone ($15^\circ \to 75^\circ$):</strong> Both perpendicular edges display simultaneously as an L-bracket, meeting seamlessly at the corner with zero gap.</li>
+        <li><strong>Zero Gap Guarantee:</strong> $(p_x + c_x, p_y + c_y) = P_{\text{end}}$ holds everywhere along 360°.</li>
       </ul>
     </div>
 
-    <h2>2. Unified Hybrid Pen Architecture &amp; Gesture Machine</h2>
+    <h2>2. Vibrant Saturated Glow &amp; Independent Optics</h2>
     <div class="card purple">
-      <h4>Eliminating Modal Switching Between "Click" and "Drag":</h4>
+      <h4>Decoupling Text Glow from Curve Glow:</h4>
       <ul>
-        <li>A pale deadzone circle of radius $R$ ($32\text{px}$) appears with a fat white point indicator at $P_0$.</li>
-        <li><strong>Click Release Inside $R$:</strong> Registers as a discrete knot insertion, entering point-by-point mode with live rubber-banding.</li>
-        <li><strong>Drag Exceeding $R$:</strong> Automatically engages the solid white drawstring tether. The pen tip trails at $P_{\text{pen}} = \text{Cursor} - \mathbf{u} \cdot R$.</li>
+        <li><strong>Rich Saturated Text Glow:</strong> Text glyphs maintain vibrant, authentic color instead of washing out to 88% pale white.</li>
+        <li><strong>Independent Filter Controls:</strong> Curve glow blur/width and text glow blur/saturation are adjustable independently.</li>
+        <li><strong>Floating Background Option:</strong> By default, callout text floats transparently with no dark bounding box. A backdrop opacity slider allows custom darkening when needed.</li>
       </ul>
     </div>
-
-    <h2>3. Tangency Ray Synchronization Protocol</h2>
-    <div class="card warning">
-      <h4>Zero-Artifact Drag Synchronization:</h4>
-      <ul>
-        <li>Dragging an attached callout text box moves the endpoint knot of the curve directly under the cursor.</li>
-        <li>Any stale outbound tangent ray (<code>#qa-outbound-tangent-ray</code>) is destroyed at the start of drag, preventing it from being left behind in mid-air.</li>
-        <li>On drag release, <code>exposeBezierHandles()</code> regenerates the knot marker and outbound ray at the new coordinates.</li>
-      </ul>
-    </div>
-
-    <h2>4. The 8-Layer Composition Hierarchy</h2>
-    <table>
-      <thead>
-        <tr><th>Z-Index</th><th>Layer Name</th><th>Elements Included</th><th>Styling Mandate</th></tr>
-      </thead>
-      <tbody>
-        <tr><td>1</td><td><code>backdropLayer</code></td><td>Canvas matte (#090d16) and base puzzle image plates</td><td>Opaque base surface</td></tr>
-        <tr><td>2</td><td><code>diffSvgLayer</code></td><td>Superimposition tangent lines, anchor circles, twin lenses</td><td>2px dashed color</td></tr>
-        <tr><td>3</td><td><code>paintLayer</code></td><td>Hard and feathered blockout mask shapes</td><td>Solid / feGaussianBlur</td></tr>
-        <tr><td>4</td><td><code>glowLayer</code></td><td>Selection auras and 28px transparent hover pick targets</td><td>Transparent / Cyan glow</td></tr>
-        <tr><td>5</td><td><code>shadowLayer</code></td><td>Solid-ink dark keyline shadows (offset +2.0px)</td><td>rgba(10, 15, 25, 0.95)</td></tr>
-        <tr><td>6</td><td><code>strokeLayer</code></td><td>Foreground cubic Bézier splines and concave arrowhead barbs</td><td>3.2px crisp foreground stroke</td></tr>
-        <tr><td>7</td><td><code>textBadgesLayer</code></td><td>Architect's Daughter labels, 1-to-2 sided architectural frames</td><td>Strictly justified to arrow tail</td></tr>
-        <tr><td>8</td><td><code>controlsLayer</code></td><td>On-curve knots, outbound tangent rays, deadzone circles</td><td>Cyan / Gold drag handles</td></tr>
-      </tbody>
-    </table>
   </div>
 </body>
 </html>

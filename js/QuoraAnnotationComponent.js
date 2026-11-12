@@ -129,361 +129,331 @@ class QuoraAnnotationComponent {
   }
 
   build(container) {
-      this.initPreferences();
-      this.ensureFontLoaded(this.stageState.fontFamily);
+        this.initPreferences();
+        this.ensureFontLoaded(this.stageState.fontFamily);
 
-      const availableH = Math.max(560, window.innerHeight - 84);
+        const availableH = Math.max(560, window.innerHeight - 84);
 
-      const wrap = makeElement('div', {
-        style: {
-          background: '#070a13', border: '1px solid #1e293b', borderRadius: '8px',
-          overflow: 'hidden', boxShadow: '0 16px 40px rgba(0,0,0,0.65)', display: 'flex',
-          flexDirection: 'column', fontFamily: 'monospace', width: '100%', height: '100%',
-          margin: '0', boxSizing: 'border-box'
-        }
-      });
-
-      const localFileInput = makeElement('input', {
-        type: 'file', accept: 'image/*', style: { display: 'none' },
-        onchange: (e) => {
-          if (e.target.files && e.target.files[0]) {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-              const img = new Image();
-              img.onload = () => this.addNewImagePlate(img, 60, 60);
-              img.src = ev.target.result;
-            };
-            reader.readAsDataURL(e.target.files[0]);
-          }
-        }
-      });
-      wrap.appendChild(localFileInput);
-
-      // Primary Header: Compact, high-density toolbar
-      const header = makeElement('div', {
-        style: {
-          padding: '6px 12px', background: 'rgba(15, 23, 42, 0.95)', borderBottom: '1px solid #21262d',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px'
-        }
-      }, [
-        makeElement('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, [
-          makeElement('span', { style: { fontSize: '17px' } }, '🎨'),
-          makeElement('strong', { style: { fontSize: '13px', color: '#00f2fe' } }, 'Universal Graphic Studio'),
-          makeElement('span', { id: 'qa-status-pill', style: { fontSize: '10px', background: 'rgba(0, 242, 254, 0.15)', color: '#00f2fe', padding: '2px 8px', borderRadius: '12px', fontWeight: 'bold' } }, 'Draw curve & type • Pull wire to bend • Shift for straight line')
-        ]),
-        makeElement('div', { style: { display: 'flex', gap: '6px' } }, [
-          makeElement('button', {
-            className: 'dr-nav-btn',
-            style: { padding: '4px 8px', fontSize: '11px', color: '#00e676', borderColor: 'rgba(0, 230, 118, 0.45)' },
-            title: 'Open full canvas layer manager and Z-order stack',
-            onclick: () => this.openLayerHierarchyDialog()
-          }, '📑 Layers'),
-          makeElement('button', {
-            className: 'dr-nav-btn',
-            style: { padding: '4px 8px', fontSize: '11px', color: '#ffd700', borderColor: 'rgba(255, 215, 0, 0.45)' },
-            title: 'Open comprehensive optics and tool preferences',
-            onclick: () => this.openPreferencesDialog()
-          }, '⚙️ Prefs'),
-          makeElement('button', {
-            className: 'dr-nav-btn',
-            style: { padding: '4px 8px', fontSize: '11px', color: '#ffd700', borderColor: 'rgba(255, 215, 0, 0.45)' },
-            title: 'Open diagnostic telemetry log with adjustable levels and filters',
-            onclick: () => QuoraLogger.getInstance().openDialog(this)
-          }, '🐞 Debug Log'),
-          makeElement('button', {
-            className: 'dr-nav-btn primary',
-            style: { padding: '4px 10px', fontSize: '11px', background: '#0284c7', borderColor: '#38bdf8' },
-            onclick: () => this.openSpotDiffWorkflow()
-          }, '🧩 Spot Difference'),
-          makeElement('button', {
-            className: 'dr-nav-btn',
-            style: { padding: '4px 9px', fontSize: '11px', color: '#00f2fe', borderColor: '#00f2fe66' },
-            title: 'Add image from clipboard or browse file system (Drag & Drop also supported)',
-            onclick: () => this.imageManager.promptAddImageWorkflow(this.stageState, localFileInput)
-          }, '📁 Add Image'),
-          makeElement('button', {
-            className: 'dr-nav-btn primary',
-            style: { padding: '4px 12px', fontSize: '11px', fontWeight: 'bold', background: '#238636', borderColor: '#2ea043' },
-            onclick: (e) => this.copyCompositeToClipboard(e.currentTarget)
-          }, '📋 Copy 2x PNG')
-        ])
-      ]);
-      wrap.appendChild(header);
-
-      // Unified Ribbon
-      const ribbon = makeElement('div', {
-        style: {
-          padding: '5px 10px', background: 'rgba(11, 17, 32, 0.98)', borderBottom: '1px solid #1e293b',
-          display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', fontSize: '11px', color: '#cbd5e1'
-        }
-      });
-
-      this.toolBtns = {};
-      const setTool = (mode) => {
-        this.stageState.activeTool = mode;
-        this.toolBtns.curve?.classList.toggle('primary', mode === 'curve');
-        this.toolBtns.paint?.classList.toggle('primary', mode === 'paint');
-        this.brushControlsRibbon.style.display = (mode === 'paint') ? 'flex' : 'none';
-        this.updateDynamicKeyInHUD();
-        this.showKnotToast(mode === 'curve' ? '🪢 Curve Tool Active' : '🖌️ Blockout Paint Active');
-        QuoraLogger.getInstance().log('gestures', 2, `Active tool switched to ${mode}`);
-      };
-
-      // Tools
-      this.toolBtns.curve = makeElement('button', {
-        className: 'dr-nav-btn primary',
-        style: { padding: '4px 10px', fontSize: '11px', fontWeight: 'bold' },
-        title: 'Unified Curve Studio: Drag to draw arrows or curves; click to place precision knots',
-        onclick: () => setTool('curve')
-      }, '🪢 Curve');
-
-      this.toolBtns.paint = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '4px 8px', fontSize: '11px', color: '#f59e0b', borderColor: '#f59e0b66' },
-        title: 'Blockout Paint & Image Alpha Eraser Brush',
-        onclick: () => setTool('paint')
-      }, '🖌️ Paint');
-
-      // Curve Modifiers
-      this.arrowBtn = makeElement('button', {
-        className: `dr-nav-btn ${this.stageState.hasArrow ? 'primary' : ''}`,
-        style: { padding: '4px 8px', fontSize: '11px', color: this.stageState.hasArrow ? '#ffffff' : '#94a3b8' },
-        title: 'Toggle Arrowhead [Hotkey: A] — Cycles: Tip ➔ Tail ➔ Both ➔ Off',
-        onclick: () => this.toggleArrowhead()
-      }, '🏹 Arrow: TIP');
-
-      const addTextBtn = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '4px 8px', fontSize: '11px' },
-        title: 'Attach or Edit Text Callout [Hotkey: T or start typing]',
-        onclick: () => this.triggerTextOnActiveOrCanvas()
-      }, '💬 Text');
-
-      this.loopBtn = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '4px 8px', fontSize: '11px', color: '#00f2fe' },
-        title: 'Toggle Loop Mode [Hotkey: L] — Closes curve into a continuous highlight loop',
-        onclick: () => this.toggleLoopMode()
-      }, '🔄 Loop: OPEN');
-
-      const straightenBtn = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '4px 8px', fontSize: '10.5px', color: '#38bdf8' },
-        title: 'Straighten Curve: Collapse intermediate knots to make a straight arrow/line [Hotkey: S]',
-        onclick: () => this.executeKeyInCommand('straighten')
-      }, '📏 Line (S)');
-
-      const swapEndsBtn = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '4px 8px', fontSize: '10.5px', color: '#ffd700', borderColor: 'rgba(255, 215, 0, 0.4)' },
-        title: 'Swap Terminals: Reverse arrowhead and text placement [Hotkey: X]',
-        onclick: () => this.swapActiveCurveTerminals()
-      }, '⇄ Flip (X)');
-
-      // Appearance & Style
-      this.widthBtn = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '4px 8px', fontSize: '10.5px', color: '#f8fafc', borderColor: '#334155' },
-        title: 'Stroke Width [Hotkey: [ / ]] — Click to cycle presets',
-        onclick: () => this.cycleStrokeWidth()
-      }, `Width: ${this.stageState.curveStrokeWidth || 3.2}px`);
-
-      this.lineStyleBtn = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '4px 8px', fontSize: '10.5px', color: '#ffd700', borderColor: 'rgba(255, 215, 0, 0.45)' },
-        title: 'Toggle Line Style: Classic Keyline Shadow ➔ Luminous Neon Beam',
-        onclick: () => this.toggleLineStyle()
-      }, '🖋️ Classic');
-
-      // CAD Zoom Stroke Toggle
-      this.cadStrokeBtn = makeElement('button', {
-        className: `dr-nav-btn ${this.stageState.cadStrokeMode ? 'primary' : ''}`,
-        style: { padding: '4px 8px', fontSize: '10.5px', color: this.stageState.cadStrokeMode ? '#ffffff' : '#94a3b8' },
-        title: 'CAD Zoom Stroke: Lines maintain constant screen-pixel thickness across all zoom levels',
-        onclick: () => this.toggleCadStrokeMode()
-      }, '📐 CAD Stroke: ON');
-
-      // Clean Single Swatch + Color Wheel Picker
-      this.colorPickerBtn = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: {
-          padding: '3px 9px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '7px',
-          borderColor: 'rgba(0, 242, 254, 0.45)', background: 'rgba(15, 23, 42, 0.95)'
-        },
-        title: 'Open Smart Color Wheel & Triangle Picker',
-        onclick: (e) => this.launchColorPicker('curve', e.currentTarget)
-      }, [
-        (this.colorIndicatorDot = makeElement('span', {
+        const wrap = makeElement('div', {
           style: {
-            width: '14px', height: '14px', borderRadius: '4px',
-            background: this.stageState.currentColor || '#00e676', display: 'inline-block',
-            border: '1.5px solid rgba(255,255,255,0.85)',
-            boxShadow: `0 0 6px ${this.stageState.currentColor || '#00e676'}`,
-            transition: 'background-color 0.2s ease, transform 0.2s ease'
+            background: '#070a13', border: '1px solid #1e293b', borderRadius: '8px',
+            overflow: 'hidden', boxShadow: '0 16px 40px rgba(0,0,0,0.65)', display: 'flex',
+            flexDirection: 'column', fontFamily: 'monospace', width: '100%', height: '100%',
+            margin: '0', boxSizing: 'border-box'
           }
-        })),
-        makeElement('span', { style: { fontWeight: '700' } }, 'Color')
-      ]);
+        });
 
-      // Fast Radial Menu Trigger
-      const dialTriggerBtn = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '4px 8px', fontSize: '11px', color: '#00f2fe', borderColor: 'rgba(0, 242, 254, 0.4)' },
-        title: 'Open Radial Heads-Up Tool Dial [Hotkey: Q]',
-        onclick: () => {
-          const curCurve = this.getActiveCurve();
-          const pt = curCurve?.vertices?.[this._activeKnotIdx || 0]?.point || [window.innerWidth / 2 - 200, 220];
-          this.inSituHud.openDialAt(pt, curCurve);
-        }
-      }, '🎛️ Dial');
+        const localFileInput = makeElement('input', {
+          type: 'file', accept: 'image/*', style: { display: 'none' },
+          onchange: (e) => {
+            if (e.target.files && e.target.files[0]) {
+              const reader = new FileReader();
+              reader.onload = (ev) => {
+                const img = new Image();
+                img.onload = () => this.addNewImagePlate(img, 60, 60);
+                img.src = ev.target.result;
+              };
+              reader.readAsDataURL(e.target.files[0]);
+            }
+          }
+        });
+        wrap.appendChild(localFileInput);
 
-      const hudToggleBtn = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '4px 8px', fontSize: '11px', color: '#00f2fe', borderColor: 'rgba(0, 242, 254, 0.4)' },
-        onclick: () => {
-          const h = document.getElementById('qa-keyin-matrix-hud');
-          if (h) h.style.display = (h.style.display === 'none') ? 'flex' : 'none';
-          else this.setupKeyInMatrixHud();
-        }
-      }, '⌨️ HUD');
+        const header = makeElement('div', {
+          style: {
+            padding: '6px 12px', background: 'rgba(15, 23, 42, 0.95)', borderBottom: '1px solid #21262d',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px'
+          }
+        }, [
+          makeElement('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, [
+            makeElement('span', { style: { fontSize: '17px' } }, '🎨'),
+            makeElement('strong', { style: { fontSize: '13px', color: '#00f2fe' } }, 'Universal Graphic Studio'),
+            makeElement('span', { id: 'qa-status-pill', style: { fontSize: '10px', background: 'rgba(0, 242, 254, 0.15)', color: '#00f2fe', padding: '2px 8px', borderRadius: '12px', fontWeight: 'bold' } }, 'Draw curve & type • Pull wire to bend • Shift for straight line')
+          ]),
+          makeElement('div', { style: { display: 'flex', gap: '6px' } }, [
+            makeElement('button', {
+              className: 'dr-nav-btn',
+              style: { padding: '4px 8px', fontSize: '11px', color: '#00f2fe', borderColor: 'rgba(0, 242, 254, 0.45)' },
+              title: 'Live Optics Tuner: Adjust glow blur, text color saturation, bracket angles, and backdrop',
+              onclick: () => this.openAestheticTunerDialog()
+            }, '✨ Glow & Style'),
+            makeElement('button', {
+              className: 'dr-nav-btn',
+              style: { padding: '4px 8px', fontSize: '11px', color: '#00e676', borderColor: 'rgba(0, 230, 118, 0.45)' },
+              title: 'Open full canvas layer manager and Z-order stack',
+              onclick: () => this.openLayerHierarchyDialog()
+            }, '📑 Layers'),
+            makeElement('button', {
+              className: 'dr-nav-btn',
+              style: { padding: '4px 8px', fontSize: '11px', color: '#ffd700', borderColor: 'rgba(255, 215, 0, 0.45)' },
+              title: 'Open comprehensive optics and tool preferences',
+              onclick: () => this.openPreferencesDialog()
+            }, '⚙️ Prefs'),
+            makeElement('button', {
+              className: 'dr-nav-btn primary',
+              style: { padding: '4px 10px', fontSize: '11px', background: '#0284c7', borderColor: '#38bdf8' },
+              onclick: () => this.openSpotDiffWorkflow()
+            }, '🧩 Spot Difference'),
+            makeElement('button', {
+              className: 'dr-nav-btn',
+              style: { padding: '4px 9px', fontSize: '11px', color: '#00f2fe', borderColor: '#00f2fe66' },
+              title: 'Add image from clipboard or browse file system',
+              onclick: () => this.imageManager.promptAddImageWorkflow(this.stageState, localFileInput)
+            }, '📁 Add Image'),
+            makeElement('button', {
+              className: 'dr-nav-btn primary',
+              style: { padding: '4px 12px', fontSize: '11px', fontWeight: 'bold', background: '#238636', borderColor: '#2ea043' },
+              onclick: (e) => this.copyCompositeToClipboard(e.currentTarget)
+            }, '📋 Copy 2x PNG')
+          ])
+        ]);
+        wrap.appendChild(header);
 
-      const undoBtn = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '4px 8px', fontSize: '11px', color: '#f59e0b', marginLeft: 'auto' },
-        onclick: () => this.undoLastAnnotation()
-      }, '↺ Undo');
+        const ribbon = makeElement('div', {
+          style: {
+            padding: '5px 10px', background: 'rgba(11, 17, 32, 0.98)', borderBottom: '1px solid #1e293b',
+            display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', fontSize: '11px', color: '#cbd5e1'
+          }
+        });
 
-      const makeDiv = () => makeElement('div', { className: 'qa-ribbon-divider' });
+        this.toolBtns = {};
+        const setTool = (mode) => {
+          this.stageState.activeTool = mode;
+          this.toolBtns.curve?.classList.toggle('primary', mode === 'curve');
+          this.toolBtns.paint?.classList.toggle('primary', mode === 'paint');
+          this.brushControlsRibbon.style.display = (mode === 'paint') ? 'flex' : 'none';
+          this.updateDynamicKeyInHUD();
+          this.showKnotToast(mode === 'curve' ? '🪢 Curve Tool Active' : '🖌️ Blockout Paint Active');
+        };
 
-      ribbon.append(
-        this.toolBtns.curve, this.toolBtns.paint,
-        makeDiv(),
-        this.arrowBtn, addTextBtn, this.loopBtn, straightenBtn, swapEndsBtn,
-        makeDiv(),
-        this.widthBtn, this.lineStyleBtn, this.cadStrokeBtn, this.colorPickerBtn,
-        makeDiv(),
-        dialTriggerBtn, hudToggleBtn, undoBtn
-      );
-      wrap.appendChild(ribbon);
+        this.toolBtns.curve = makeElement('button', {
+          className: 'dr-nav-btn primary',
+          style: { padding: '4px 10px', fontSize: '11px', fontWeight: 'bold' },
+          onclick: () => setTool('curve')
+        }, '🪢 Curve');
 
-      // Brush Controls Ribbon
-      this.brushControlsRibbon = makeElement('div', {
-        style: {
-          padding: '6px 14px', background: 'rgba(24, 15, 30, 0.94)', borderBottom: '1px solid rgba(245, 158, 11, 0.25)',
-          display: 'none', alignItems: 'center', gap: '10px', fontSize: '11px', color: '#f8fafc', flexWrap: 'wrap'
-        }
-      });
+        this.toolBtns.paint = makeElement('button', {
+          className: 'dr-nav-btn',
+          style: { padding: '4px 8px', fontSize: '11px', color: '#f59e0b', borderColor: '#f59e0b66' },
+          onclick: () => setTool('paint')
+        }, '🖌️ Paint');
 
-      const brushModeSelect = makeElement('select', {
-        style: {
-          background: '#0d1117', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.4)',
-          borderRadius: '4px', padding: '2px 6px', fontSize: '10.5px', fontFamily: 'monospace', outline: 'none'
-        },
-        onchange: (e) => {
-          this.stageState.brushMode = e.target.value;
-        }
-      }, [
-        makeElement('option', { value: 'freehand' }, '🖌️ Freehand Mask'),
-        makeElement('option', { value: 'erase' }, '🧹 Erase Image Alpha (Background)'),
-        makeElement('option', { value: 'rect' }, '◻ Rect Mask'),
-        makeElement('option', { value: 'oval' }, '⭕ Oval Mask')
-      ]);
+        this.arrowBtn = makeElement('button', {
+          className: `dr-nav-btn ${this.stageState.hasArrow ? 'primary' : ''}`,
+          style: { padding: '4px 8px', fontSize: '11px', color: this.stageState.hasArrow ? '#ffffff' : '#94a3b8' },
+          onclick: () => this.toggleArrowhead()
+        }, '🏹 Arrow: TIP');
 
-      const brushSizeLabel = makeElement('span', {}, `Size: ${this.stageState.brushSize}px`);
-      const brushSizeSlider = makeElement('input', {
-        type: 'range', min: '8', max: '140', value: String(this.stageState.brushSize),
-        style: { width: '80px', accentColor: '#f59e0b', cursor: 'pointer' },
-        oninput: (e) => {
-          this.stageState.brushSize = parseInt(e.target.value, 10);
-          brushSizeLabel.textContent = `Size: ${this.stageState.brushSize}px`;
-        }
-      });
+        const addTextBtn = makeElement('button', {
+          className: 'dr-nav-btn',
+          style: { padding: '4px 8px', fontSize: '11px' },
+          title: 'Add text callout at curve terminus (T or Enter)',
+          onclick: () => this.triggerTextOnActiveOrCanvas()
+        }, '💬 Text (T)');
 
-      const softnessLabel = makeElement('span', {}, `Feather: ${this.stageState.brushSoftness}px`);
-      const softnessSlider = makeElement('input', {
-        type: 'range', min: '0', max: '25', value: String(this.stageState.brushSoftness),
-        style: { width: '80px', accentColor: '#00f2fe', cursor: 'pointer' },
-        oninput: (e) => {
-          this.stageState.brushSoftness = parseInt(e.target.value, 10);
-          softnessLabel.textContent = `Feather: ${this.stageState.brushSoftness}px`;
-          this.updateSvgBlurFilter();
-        }
-      });
+        this.loopBtn = makeElement('button', {
+          className: 'dr-nav-btn',
+          style: { padding: '4px 8px', fontSize: '11px', color: '#00f2fe' },
+          title: 'Toggle closed loop highlight ring (L)',
+          onclick: () => this.toggleLoopMode()
+        }, '🔄 Loop: OPEN');
 
-      this.brushControlsRibbon.append(
-        makeElement('strong', { style: { color: '#f59e0b' } }, 'Tool:'),
-        brushModeSelect,
-        brushSizeSlider, brushSizeLabel,
-        softnessSlider, softnessLabel
-      );
-      wrap.appendChild(this.brushControlsRibbon);
+        const straightenBtn = makeElement('button', {
+          className: 'dr-nav-btn',
+          style: { padding: '4px 8px', fontSize: '10.5px', color: '#38bdf8' },
+          title: 'Collapse curve into straight arrow (S)',
+          onclick: () => this.executeKeyInCommand('straighten')
+        }, '📏 Line (S)');
 
-      // Full-Bleed Studio Viewport
-      this.viewport = makeElement('div', {
-        style: {
-          position: 'relative', width: '100%', height: `${availableH}px`, overflow: 'hidden',
-          background: 'radial-gradient(circle at 50% 25%, #151e33 0%, #0b0f19 100%)',
-          display: 'block', padding: '0', boxSizing: 'border-box'
-        }
-      });
+        const swapEndsBtn = makeElement('button', {
+          className: 'dr-nav-btn',
+          style: { padding: '4px 8px', fontSize: '10.5px', color: '#ffd700', borderColor: 'rgba(255, 215, 0, 0.4)' },
+          title: 'Swap arrow and text ends (X)',
+          onclick: () => this.swapActiveCurveTerminals()
+        }, '⇄ Flip (X)');
 
-      this.zoomScaffold = makeElement('div', {
-        style: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', transformOrigin: '0 0' }
-      });
+        this.widthBtn = makeElement('button', {
+          className: 'dr-nav-btn',
+          style: { padding: '4px 8px', fontSize: '10.5px', color: '#f8fafc', borderColor: '#334155' },
+          title: 'Cycle thickness (or Scroll Wheel mid-drawing)',
+          onclick: () => this.cycleStrokeWidth()
+        }, `Width: ${this.stageState.curveStrokeWidth || 3.2}px`);
 
-      this.stageBox = makeElement('div', {
-        id: 'quora-composite-stage',
-        style: {
-          position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-          background: 'transparent', overflow: 'visible'
-        }
-      });
+        this.lineStyleBtn = makeElement('button', {
+          className: 'dr-nav-btn',
+          style: { padding: '4px 8px', fontSize: '10.5px', color: '#ffd700', borderColor: 'rgba(255, 215, 0, 0.45)' },
+          onclick: () => this.toggleLineStyle()
+        }, (this.stageState.lineStyle === 'neon') ? '💡 Neon' : '🖋️ Classic');
 
-      this.sceneCanvas = document.createElement('canvas');
-      this.sceneCanvas.style.cssText = 'position: absolute; top: 0; left: 0; display: block; border-radius: 4px;';
-      this.stageBox.appendChild(this.sceneCanvas);
+        this.cadStrokeBtn = makeElement('button', {
+          className: `dr-nav-btn ${this.stageState.cadStrokeMode ? 'primary' : ''}`,
+          style: { padding: '4px 8px', fontSize: '10.5px', color: this.stageState.cadStrokeMode ? '#ffffff' : '#94a3b8' },
+          onclick: () => this.toggleCadStrokeMode()
+        }, '📐 CAD Stroke: ON');
 
-      this.svgSurface = makeElement('svg:svg', {
-        id: 'quora-vector-svg',
-        style: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', overflow: 'visible', pointerEvents: 'auto' }
-      });
+        this.colorPickerBtn = makeElement('button', {
+          className: 'dr-nav-btn',
+          style: {
+            padding: '3px 9px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '7px',
+            borderColor: 'rgba(0, 242, 254, 0.45)', background: 'rgba(15, 23, 42, 0.95)'
+          },
+          title: 'Color Palette (Keys 1-6 while drawing)',
+          onclick: (e) => this.launchColorPicker('curve', e.currentTarget)
+        }, [
+          (this.colorIndicatorDot = makeElement('span', {
+            style: {
+              width: '14px', height: '14px', borderRadius: '4px',
+              background: this.stageState.currentColor || '#00e676', display: 'inline-block',
+              border: '1.5px solid rgba(255,255,255,0.85)',
+              boxShadow: `0 0 6px ${this.stageState.currentColor || '#00e676'}`
+            }
+          })),
+          makeElement('span', { style: { fontWeight: '700' } }, 'Color')
+        ]);
 
-      this.svgDefs = makeElement('svg:defs');
-      this.svgSurface.appendChild(this.svgDefs);
-      this.updateSvgBlurFilter();
+        const hudToggleBtn = makeElement('button', {
+          className: 'dr-nav-btn',
+          style: { padding: '4px 8px', fontSize: '11px', color: '#00f2fe', borderColor: 'rgba(0, 242, 254, 0.4)' },
+          title: 'Toggle Key-In Matrix Shortcut Guide',
+          onclick: () => {
+            const h = document.getElementById('qa-keyin-matrix-hud');
+            if (h) h.style.display = (h.style.display === 'none') ? 'flex' : 'none';
+            else this.setupKeyInMatrixHud();
+          }
+        }, '⌨️ Keys');
 
-      this.diffSvgLayer = makeElement('svg:g', { className: 'qa-diff-tangents', style: { pointerEvents: 'none' } });
-      this.paintLayer = makeElement('svg:g', { className: 'qa-blockout-paint-layer', style: { pointerEvents: 'none' } });
-      this.glowLayer = makeElement('svg:g', { className: 'qa-glow-hover-layer', style: { pointerEvents: 'none' } });
-      this.shadowLayer = makeElement('svg:g', { className: 'qa-crisp-shadows', style: { pointerEvents: 'none' } });
-      this.strokeLayer = makeElement('svg:g', { className: 'qa-crisp-strokes', style: { pointerEvents: 'none' } });
-      this.textBadgesLayer = makeElement('svg:g', { className: 'qa-curve-attached-text' });
-      this.controlsLayer = makeElement('svg:g', { className: 'qa-interactive-controls' });
+        const undoBtn = makeElement('button', {
+          className: 'dr-nav-btn',
+          style: { padding: '4px 8px', fontSize: '11px', color: '#f59e0b', marginLeft: 'auto' },
+          onclick: () => this.undoLastAnnotation()
+        }, '↺ Undo');
 
-      // DEDICATED DIAL LAYER: Insulated from controlsLayer DOM wipes
-      this.hudDialLayer = makeElement('svg:g', { className: 'qa-heads-up-dial-layer', style: { pointerEvents: 'auto' } });
+        const makeDiv = () => makeElement('div', { className: 'qa-ribbon-divider' });
 
-      this.svgSurface.append(
-        this.diffSvgLayer, this.paintLayer, this.glowLayer, this.shadowLayer,
-        this.strokeLayer, this.textBadgesLayer, this.controlsLayer, this.hudDialLayer
-      );
-      this.stageBox.appendChild(this.svgSurface);
+        ribbon.append(
+          this.toolBtns.curve, this.toolBtns.paint,
+          makeDiv(),
+          this.arrowBtn, addTextBtn, this.loopBtn, straightenBtn, swapEndsBtn,
+          makeDiv(),
+          this.widthBtn, this.lineStyleBtn, this.cadStrokeBtn, this.colorPickerBtn,
+          makeDiv(),
+          hudToggleBtn, undoBtn
+        );
+        wrap.appendChild(ribbon);
 
-      this.setupEdgePullHandles();
+        this.brushControlsRibbon = makeElement('div', {
+          style: {
+            padding: '6px 14px', background: 'rgba(24, 15, 30, 0.94)', borderBottom: '1px solid rgba(245, 158, 11, 0.25)',
+            display: 'none', alignItems: 'center', gap: '10px', fontSize: '11px', color: '#f8fafc', flexWrap: 'wrap'
+          }
+        });
 
-      this.zoomScaffold.appendChild(this.stageBox);
-      this.viewport.appendChild(this.zoomScaffold);
-      wrap.appendChild(this.viewport);
+        const brushModeSelect = makeElement('select', {
+          style: {
+            background: '#0d1117', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.4)',
+            borderRadius: '4px', padding: '2px 6px', fontSize: '10.5px', fontFamily: 'monospace', outline: 'none'
+          },
+          onchange: (e) => { this.stageState.brushMode = e.target.value; }
+        }, [
+          makeElement('option', { value: 'freehand' }, '🖌️ Freehand Mask'),
+          makeElement('option', { value: 'erase' }, '🧹 Erase Image Alpha'),
+          makeElement('option', { value: 'rect' }, '◻ Rect Mask'),
+          makeElement('option', { value: 'oval' }, '⭕ Oval Mask')
+        ]);
 
-      this.setupInteractions();
-      this.setupZoomWheel();
-      this.setupPasteAndDropListener();
-      this.renderStage();
+        const brushSizeLabel = makeElement('span', {}, `Size: ${this.stageState.brushSize}px`);
+        const brushSizeSlider = makeElement('input', {
+          type: 'range', min: '8', max: '140', value: String(this.stageState.brushSize),
+          style: { width: '80px', accentColor: '#f59e0b', cursor: 'pointer' },
+          oninput: (e) => {
+            this.stageState.brushSize = parseInt(e.target.value, 10);
+            brushSizeLabel.textContent = `Size: ${this.stageState.brushSize}px`;
+          }
+        });
 
-      container.appendChild(wrap);
-    }
+        const softnessLabel = makeElement('span', {}, `Feather: ${this.stageState.brushSoftness}px`);
+        const softnessSlider = makeElement('input', {
+          type: 'range', min: '0', max: '25', value: String(this.stageState.brushSoftness),
+          style: { width: '80px', accentColor: '#00f2fe', cursor: 'pointer' },
+          oninput: (e) => {
+            this.stageState.brushSoftness = parseInt(e.target.value, 10);
+            softnessLabel.textContent = `Feather: ${this.stageState.brushSoftness}px`;
+            this.updateSvgBlurFilter();
+          }
+        });
+
+        this.brushControlsRibbon.append(
+          makeElement('strong', { style: { color: '#f59e0b' } }, 'Tool:'),
+          brushModeSelect,
+          brushSizeSlider, brushSizeLabel,
+          softnessSlider, softnessLabel
+        );
+        wrap.appendChild(this.brushControlsRibbon);
+
+        this.viewport = makeElement('div', {
+          style: {
+            position: 'relative', width: '100%', height: `${availableH}px`, overflow: 'hidden',
+            background: 'radial-gradient(circle at 50% 25%, #151e33 0%, #0b0f19 100%)',
+            display: 'block', padding: '0', boxSizing: 'border-box'
+          }
+        });
+
+        this.zoomScaffold = makeElement('div', {
+          style: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', transformOrigin: '0 0' }
+        });
+
+        this.stageBox = makeElement('div', {
+          id: 'quora-composite-stage',
+          style: {
+            position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+            background: 'transparent', overflow: 'visible'
+          }
+        });
+
+        this.sceneCanvas = document.createElement('canvas');
+        this.sceneCanvas.style.cssText = 'position: absolute; top: 0; left: 0; display: block; border-radius: 4px;';
+        this.stageBox.appendChild(this.sceneCanvas);
+
+        this.svgSurface = makeElement('svg:svg', {
+          id: 'quora-vector-svg',
+          style: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', overflow: 'visible', pointerEvents: 'auto' }
+        });
+
+        this.svgDefs = makeElement('svg:defs');
+        this.svgSurface.appendChild(this.svgDefs);
+        this.updateSvgBlurFilter();
+
+        this.diffSvgLayer = makeElement('svg:g', { className: 'qa-diff-tangents', style: { pointerEvents: 'none' } });
+        this.paintLayer = makeElement('svg:g', { className: 'qa-blockout-paint-layer', style: { pointerEvents: 'none' } });
+        this.glowLayer = makeElement('svg:g', { className: 'qa-glow-hover-layer', style: { pointerEvents: 'none' } });
+        this.shadowLayer = makeElement('svg:g', { className: 'qa-crisp-shadows', style: { pointerEvents: 'none' } });
+        this.strokeLayer = makeElement('svg:g', { className: 'qa-crisp-strokes', style: { pointerEvents: 'none' } });
+        this.textBadgesLayer = makeElement('svg:g', { className: 'qa-curve-attached-text' });
+        this.controlsLayer = makeElement('svg:g', { className: 'qa-interactive-controls' });
+        this.hudDialLayer = makeElement('svg:g', { className: 'qa-heads-up-dial-layer', style: { pointerEvents: 'auto' } });
+
+        this.svgSurface.append(
+          this.diffSvgLayer, this.paintLayer, this.glowLayer, this.shadowLayer,
+          this.strokeLayer, this.textBadgesLayer, this.controlsLayer, this.hudDialLayer
+        );
+        this.stageBox.appendChild(this.svgSurface);
+
+        this.setupEdgePullHandles();
+
+        this.zoomScaffold.appendChild(this.stageBox);
+        this.viewport.appendChild(this.zoomScaffold);
+        wrap.appendChild(this.viewport);
+
+        this.setupInteractions();
+        this.setupZoomWheel();
+        this.setupPasteAndDropListener();
+        this.renderStage();
+
+        container.appendChild(wrap);
+      }
   updateSvgBlurFilter() {
       if (!this.svgDefs) return;
+      const p = this.stageState.prefs || {};
 
       // 1. Inpainting Brush Filter
       let brushFilter = this.svgDefs.querySelector('#qa-brush-blur');
@@ -495,7 +465,8 @@ class QuoraAnnotationComponent {
       }
       brushFilter.innerHTML = `<feGaussianBlur stdDeviation="${this.stageState.brushSoftness || 0}" />`;
 
-      // 2. Pure Gaussian Neon Bloom Filter (Zero hard edge - no SourceGraphic merge)
+      // 2. Pure Gaussian Neon Bloom Filter for Curves & Splines
+      const curveGlowStd = p.curveGlowBlur !== undefined ? p.curveGlowBlur : 6.0;
       let neonGlowFilter = this.svgDefs.querySelector('#qa-neon-glow');
       if (!neonGlowFilter) {
         neonGlowFilter = makeElement('svg:filter', {
@@ -503,9 +474,20 @@ class QuoraAnnotationComponent {
         });
         this.svgDefs.appendChild(neonGlowFilter);
       }
-      neonGlowFilter.innerHTML = `<feGaussianBlur in="SourceGraphic" stdDeviation="5.0" />`;
+      neonGlowFilter.innerHTML = `<feGaussianBlur in="SourceGraphic" stdDeviation="${curveGlowStd}" />`;
 
-      // 3. Ultra-Bright Plasma Core Filter (Gentle 0.8px softening)
+      // 3. Dedicated Luminous Text Glow Filter (Deeply saturated aura for letter glyphs)
+      const textGlowStd = p.textGlowBlur !== undefined ? p.textGlowBlur : 4.0;
+      let textGlowFilter = this.svgDefs.querySelector('#qa-text-glow');
+      if (!textGlowFilter) {
+        textGlowFilter = makeElement('svg:filter', {
+          id: 'qa-text-glow', x: '-50%', y: '-50%', width: '200%', height: '200%'
+        });
+        this.svgDefs.appendChild(textGlowFilter);
+      }
+      textGlowFilter.innerHTML = `<feGaussianBlur in="SourceGraphic" stdDeviation="${textGlowStd}" />`;
+
+      // 4. Ultra-Bright Plasma Core Filter (Subtle 0.6px sharpening)
       let neonCoreFilter = this.svgDefs.querySelector('#qa-neon-core');
       if (!neonCoreFilter) {
         neonCoreFilter = makeElement('svg:filter', {
@@ -513,7 +495,7 @@ class QuoraAnnotationComponent {
         });
         this.svgDefs.appendChild(neonCoreFilter);
       }
-      neonCoreFilter.innerHTML = `<feGaussianBlur in="SourceGraphic" stdDeviation="0.8" />`;
+      neonCoreFilter.innerHTML = `<feGaussianBlur in="SourceGraphic" stdDeviation="0.6" />`;
     }
   openSpotDiffWorkflow() {
     const overlayHost = document.createElement('div');
@@ -839,11 +821,10 @@ class QuoraAnnotationComponent {
     this._promptInlineTailText(null, [x, y], 'left');
   }
 
-  _promptInlineTailText(curveRecord, anchorPt, forcedEdge = null) {
-      if (!this.textManager) this.textManager = new QuoraTextManager(this);
-      return this.textManager.promptInlineTailText(curveRecord, anchorPt, forcedEdge);
-  }
-
+  _promptInlineTailText(curveRecord, anchorPt, forcedEdge = null, initialText = '') {
+        if (!this.textManager) this.textManager = new QuoraTextManager(this);
+        return this.textManager.promptInlineTailText(curveRecord, anchorPt, forcedEdge, initialText);
+    }
   previewBlockoutRect(p1, p2) {
     this.paintManager.previewRect(this.paintLayer, p1, p2, this.stageState.brushColor, this.stageState.brushSoftness);
   }
@@ -927,74 +908,77 @@ class QuoraAnnotationComponent {
   }
 
   deleteSelectedEntity() {
-      const logger = QuoraLogger.getInstance();
-      const sel = this.stageState.selectedItem;
+        const logger = QuoraLogger.getInstance();
+        const sel = this.stageState.selectedItem;
 
-      // 1. Delete Selected Image Plate
-      if (this.stageState.activeImage) {
-        const idx = this.stageState.placedImages.indexOf(this.stageState.activeImage);
-        if (idx !== -1) {
-          this.stageState.placedImages.splice(idx, 1);
-          this.stageState.activeImage = null;
+        // 1. Delete Selected Image Plate
+        if (this.stageState.activeImage) {
+          const idx = this.stageState.placedImages.indexOf(this.stageState.activeImage);
+          if (idx !== -1) {
+            this.stageState.placedImages.splice(idx, 1);
+            this.stageState.activeImage = null;
+            this.renderStage();
+            this.showKnotToast('🗑️ Deleted image plate');
+            logger.log('gestures', 2, 'Deleted active image plate');
+            return;
+          }
+        }
+
+        // 2. Delete Selected Text Badge
+        if (sel && sel.type === 'text_badge') {
+          const idx = this.stageState.annotations.indexOf(sel);
+          if (idx !== -1) this.stageState.annotations.splice(idx, 1);
+          const el = document.getElementById(`badge-${sel.id}`);
+          if (el) el.remove();
+          this.stageState.selectedItem = null;
           this.renderStage();
-          this.showKnotToast('🗑️ Deleted image plate');
-          logger.log('gestures', 2, 'Deleted active image plate');
+          this.showKnotToast('🗑️ Deleted text callout');
+          logger.log('gestures', 2, 'Deleted text badge', { id: sel.id });
           return;
         }
-      }
 
-      // 2. Delete Selected Text Badge
-      if (sel && sel.type === 'text_badge') {
-        const idx = this.stageState.annotations.indexOf(sel);
-        if (idx !== -1) this.stageState.annotations.splice(idx, 1);
-        const el = document.getElementById(`badge-${sel.id}`);
-        if (el) el.remove();
-        this.stageState.selectedItem = null;
-        this.renderStage();
-        this.showKnotToast('🗑️ Deleted text callout');
-        logger.log('gestures', 2, 'Deleted text badge', { id: sel.id });
-        return;
-      }
-
-      // 3. Delete Selected Callout Ring or Box
-      if (sel && (sel.type === 'circle_callout' || sel.type === 'box_callout')) {
-        const idx = this.stageState.annotations.indexOf(sel);
-        if (idx !== -1) this.stageState.annotations.splice(idx, 1);
-        if (sel.elements) sel.elements.forEach(el => el.remove());
-        this.stageState.selectedItem = null;
-        this.renderStage();
-        this.showKnotToast(`🗑️ Deleted ${sel.type.replace('_', ' ')}`);
-        logger.log('gestures', 2, `Deleted ${sel.type}`, { id: sel.id });
-        return;
-      }
-
-      // 4. Delete Knot from Active Curve
-      const curve = this.getActiveCurve();
-      if (curve && this._lastStageMousePt && this.knotManager) {
-        if (curve.vertices && curve.vertices.length > 2) {
-          this.knotManager.deleteClosestKnot(curve, this._lastStageMousePt);
+        // 3. Delete Selected Callout Ring or Box
+        if (sel && (sel.type === 'circle_callout' || sel.type === 'box_callout')) {
+          const idx = this.stageState.annotations.indexOf(sel);
+          if (idx !== -1) this.stageState.annotations.splice(idx, 1);
+          if (sel.elements) sel.elements.forEach(el => el.remove());
+          this.stageState.selectedItem = null;
+          this.renderStage();
+          this.showKnotToast(`🗑️ Deleted ${sel.type.replace('_', ' ')}`);
+          logger.log('gestures', 2, `Deleted ${sel.type}`, { id: sel.id });
           return;
         }
-      }
 
-      // 5. Fallback: Delete entire curve entity
-      if (curve) {
-        const cIdx = this.stageState.annotations.indexOf(curve);
-        if (cIdx !== -1) this.stageState.annotations.splice(cIdx, 1);
-        if (curve.elements) curve.elements.forEach(el => el.remove());
-        if (curve._arrowFg) curve._arrowFg.remove();
-        if (curve._arrowSh) curve._arrowSh.remove();
-        if (curve._arrowFgTail) curve._arrowFgTail.remove();
-        if (curve._arrowShTail) curve._arrowShTail.remove();
-        this.controlsLayer.innerHTML = '';
-        this.stageState.selectedItem = null;
-        this._activeKnotIdx = null;
-        this.renderStage();
-        this.showKnotToast('🗑️ Deleted curve');
-        this.updateDynamicKeyInHUD();
-        logger.log('gestures', 2, 'Deleted curve', { id: curve.id });
+        // 4. Deterministic Knot Deletion: prioritize explicitly selected knot index
+        const curve = this.getActiveCurve();
+        if (curve && curve.vertices && curve.vertices.length > 2) {
+          if (this._activeKnotIdx !== null && this._activeKnotIdx !== undefined && this.knotManager) {
+            this.knotManager.deleteKnotAtIndex(curve, this._activeKnotIdx, this.controlsLayer, this.stageState);
+            return;
+          } else if (this._lastStageMousePt && this.knotManager) {
+            this.knotManager.deleteClosestKnot(curve, this._lastStageMousePt);
+            return;
+          }
+        }
+
+        // 5. Fallback: Delete entire curve entity once <= 2 knots remain
+        if (curve) {
+          const cIdx = this.stageState.annotations.indexOf(curve);
+          if (cIdx !== -1) this.stageState.annotations.splice(cIdx, 1);
+          if (curve.elements) curve.elements.forEach(el => el.remove());
+          if (curve._arrowFg) curve._arrowFg.remove();
+          if (curve._arrowSh) curve._arrowSh.remove();
+          if (curve._arrowFgTail) curve._arrowFgTail.remove();
+          if (curve._arrowShTail) curve._arrowShTail.remove();
+          this.controlsLayer.innerHTML = '';
+          this.stageState.selectedItem = null;
+          this._activeKnotIdx = null;
+          this.renderStage();
+          this.showKnotToast('🗑️ Deleted curve');
+          this.updateDynamicKeyInHUD();
+          logger.log('gestures', 2, 'Deleted curve', { id: curve.id });
+        }
       }
-    }
   updateDynamicKeyInHUD() {
     const delPill = document.querySelector('.qa-keyin-row[data-action="delete_curve"]');
     if (!delPill) return;
@@ -1019,221 +1003,198 @@ class QuoraAnnotationComponent {
   }
 
   setupInteractions() {
-      this.setupKeyInMatrixHud();
-      this.curveAnalyzer = new QuoraCurveAnalyzer(this);
+        this.curveAnalyzer = new QuoraCurveAnalyzer(this);
 
-      if (!this._hasBoundGlobalKeys) {
-        this._hasBoundGlobalKeys = true;
+        if (!this._hasBoundGlobalKeys) {
+          this._hasBoundGlobalKeys = true;
 
-        window.addEventListener('keydown', (e) => {
-          if (e.target.closest('input, textarea, [contenteditable="true"]')) return;
+          window.addEventListener('keydown', (e) => {
+            if (e.target.closest('input, textarea, [contenteditable="true"]')) return;
 
-          // Number Keys 1–6: Instant Palette Switching
-          if (['1', '2', '3', '4', '5', '6'].includes(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
-            const paletteMap = {
-              '1': '#00f2fe', '2': '#00e676', '3': '#ffd700',
-              '4': '#ff2d55', '5': '#c084fc', '6': '#ffffff'
-            };
-            const chosen = paletteMap[e.key];
-            if (chosen) {
+            // Global Cmd+C / Ctrl+C: Instant 2x PNG Retina Export to Clipboard
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
               e.preventDefault();
-              this.stageState.currentColor = chosen;
-              if (this.colorIndicatorDot) this.colorIndicatorDot.style.background = chosen;
+              this.copyCompositeToClipboard(null, 'native');
+              return;
+            }
+
+            // 1. Enter or 'T': Immediately focus callout note on the active curve
+            if (e.key === 'Enter' || e.key === 't' || e.key === 'T') {
               const curve = this.getActiveCurve();
               if (curve) {
-                curve.color = chosen;
+                e.preventDefault();
+                this.triggerTextOnActiveOrCanvas();
+                return;
+              }
+            }
+
+            // 2. Palette 1–6: Instant color switching
+            if (['1', '2', '3', '4', '5', '6'].includes(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+              const paletteMap = {
+                '1': '#00f2fe', '2': '#00e676', '3': '#ffd700',
+                '4': '#ff2d55', '5': '#c084fc', '6': '#ffffff'
+              };
+              const chosen = paletteMap[e.key];
+              if (chosen) {
+                e.preventDefault();
+                this.stageState.currentColor = chosen;
+                if (this.colorIndicatorDot) this.colorIndicatorDot.style.background = chosen;
+                const curve = this.getActiveCurve();
+                if (curve) {
+                  curve.color = chosen;
+                  this.commitCurveGeometryUpdate();
+                }
+                this.renderStage();
+                this.showKnotToast(`Color: ${chosen} (Key ${e.key})`);
+                return;
+              }
+            }
+
+            // 3. Radial Dial with 'Q'
+            if ((e.key === 'q' || e.key === 'Q') && !e.ctrlKey && !e.metaKey) {
+              e.preventDefault();
+              const curCurve = this.getActiveCurve();
+              const knotPt = curCurve?.vertices?.[this._activeKnotIdx || 0]?.point;
+              const pt = knotPt || this._lastStageMousePt || [window.innerWidth / 2 - 200, 220];
+              this.inSituHud.openDialAt(pt, curCurve);
+              return;
+            }
+
+            // 4. Sub-Pixel Arrow Key Nudging for Selected Knot
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+              const step = e.shiftKey ? 10 : 1;
+              let dx = 0, dy = 0;
+              if (e.key === 'ArrowUp') dy = -step;
+              if (e.key === 'ArrowDown') dy = step;
+              if (e.key === 'ArrowLeft') dx = -step;
+              if (e.key === 'ArrowRight') dx = step;
+
+              if (this.nudgeActiveKnot(dx, dy)) {
+                e.preventDefault();
+                return;
+              }
+            }
+
+            // 5. Diagnostics with Shift+A
+            if ((e.key === 'a' || e.key === 'A') && e.shiftKey) {
+              e.preventDefault();
+              this.curveAnalyzer.toggle();
+              return;
+            }
+
+            // 6. Cycle Arrowhead with 'A'
+            if ((e.key === 'a' || e.key === 'A') && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+              e.preventDefault();
+              this.toggleArrowhead();
+              return;
+            }
+
+            // 7. Toggle Closed Loop Ring with 'L'
+            if ((e.key === 'l' || e.key === 'L') && !e.ctrlKey && !e.metaKey) {
+              e.preventDefault();
+              this.toggleLoopMode();
+              return;
+            }
+
+            // 8. Step Tangent Angle or Stroke Width with '[' and ']'
+            if (e.key === '[' || e.key === ']') {
+              const knot = this.getActiveKnot();
+              const curve = this.getActiveCurve();
+              if (knot && curve && this._activeKnotIdx !== null) {
+                e.preventDefault();
+                const delta = (e.key === ']') ? 0.0872 : -0.0872;
+                knot.tangentAngleOffset = (knot.tangentAngleOffset || 0) + delta;
+                while (knot.tangentAngleOffset > Math.PI) knot.tangentAngleOffset -= Math.PI * 2;
+                while (knot.tangentAngleOffset < -Math.PI) knot.tangentAngleOffset += Math.PI * 2;
+
+                if (Math.abs(knot.tangentAngleOffset) < 0.0436) {
+                  knot.tangentAngleOffset = 0;
+                  knot.isExplicitTangent = false;
+                } else {
+                  knot.isExplicitTangent = true;
+                }
+
                 this.commitCurveGeometryUpdate();
-              }
-              this.renderStage();
-              this.showKnotToast(`Color: ${chosen} (Key ${e.key})`);
-              return;
-            }
-          }
-
-          // Q Key: Instant Radial Heads-Up Tool Dial
-          if ((e.key === 'q' || e.key === 'Q') && !e.ctrlKey && !e.metaKey) {
-            e.preventDefault();
-            const curCurve = this.getActiveCurve();
-            const knotPt = curCurve?.vertices?.[this._activeKnotIdx || 0]?.point;
-            const pt = knotPt || this._lastStageMousePt || [window.innerWidth / 2 - 200, 220];
-            this.inSituHud.openDialAt(pt, curCurve);
-            return;
-          }
-
-          // Sub-Pixel Arrow Key Nudging for Active Knot
-          if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-            const step = e.shiftKey ? 10 : 1;
-            let dx = 0, dy = 0;
-            if (e.key === 'ArrowUp') dy = -step;
-            if (e.key === 'ArrowDown') dy = step;
-            if (e.key === 'ArrowLeft') dx = -step;
-            if (e.key === 'ArrowRight') dx = step;
-
-            if (this.nudgeActiveKnot(dx, dy)) {
-              e.preventDefault();
-              if (this.inSituHud) this.inSituHud.flashKeyCommand('nudge_knot');
-              return;
-            }
-          }
-
-          // Diagnostics Overlay with Shift+A
-          if ((e.key === 'a' || e.key === 'A') && e.shiftKey) {
-            e.preventDefault();
-            this.curveAnalyzer.toggle();
-            return;
-          }
-
-          // Cycle Arrowhead with 'A'
-          if ((e.key === 'a' || e.key === 'A') && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
-            e.preventDefault();
-            this.toggleArrowhead();
-            if (this.inSituHud) this.inSituHud.flashKeyCommand('toggle_arrow');
-            return;
-          }
-
-          // Toggle Closed Curve Loop Mode with 'L'
-          if ((e.key === 'l' || e.key === 'L') && !e.ctrlKey && !e.metaKey) {
-            e.preventDefault();
-            this.toggleLoopMode();
-            return;
-          }
-
-          // Duplicate Active Image Plate with 'D'
-          if ((e.key === 'd' || e.key === 'D') && this.stageState.activeImage && !e.ctrlKey && !e.metaKey) {
-            e.preventDefault();
-            if (this.imageManager) {
-              this.imageManager.duplicateActivePlate(this.stageState);
-            }
-            return;
-          }
-
-          // Step Tangent Angle OR Stroke Width with '[' and ']'
-          if (e.key === '[' || e.key === ']') {
-            const knot = this.getActiveKnot();
-            const curve = this.getActiveCurve();
-            if (knot && curve && this._activeKnotIdx !== null) {
-              e.preventDefault();
-              const delta = (e.key === ']') ? 0.0872 : -0.0872;
-              knot.tangentAngleOffset = (knot.tangentAngleOffset || 0) + delta;
-              while (knot.tangentAngleOffset > Math.PI) knot.tangentAngleOffset -= Math.PI * 2;
-              while (knot.tangentAngleOffset < -Math.PI) knot.tangentAngleOffset += Math.PI * 2;
-
-              if (Math.abs(knot.tangentAngleOffset) < 0.0436) {
-                knot.tangentAngleOffset = 0;
-                knot.isExplicitTangent = false;
+                this.renderOutboundTangentRay(curve, this._activeKnotIdx);
+                const deg = Math.round(knot.tangentAngleOffset * (180 / Math.PI));
+                this.showKnotToast(`Tangent Angle: ${deg > 0 ? '+' : ''}${deg}°`);
+                return;
               } else {
-                knot.isExplicitTangent = true;
+                e.preventDefault();
+                this.cycleStrokeWidth(e.key === ']' ? 0.5 : -0.5);
+                return;
               }
+            }
 
-              this.commitCurveGeometryUpdate();
-              this.renderOutboundTangentRay(curve, this._activeKnotIdx);
-              const deg = Math.round(knot.tangentAngleOffset * (180 / Math.PI));
-              this.showKnotToast(`Tangent Angle: ${deg > 0 ? '+' : ''}${deg}° [Knot #${this._activeKnotIdx + 1}${knot.isExplicitTangent ? ' 🔒' : ''}]`);
-              return;
-            } else {
+            // 9. Swap Terminals with 'X'
+            if ((e.key === 'x' || e.key === 'X') && !e.ctrlKey && !e.metaKey && !e.altKey) {
               e.preventDefault();
-              this.cycleStrokeWidth(e.key === ']' ? 0.5 : -0.5);
+              this.swapActiveCurveTerminals();
               return;
             }
-          }
 
-          // Text Callout with 'T'
-          if ((e.key === 't' || e.key === 'T') && !e.ctrlKey && !e.metaKey && !e.altKey) {
-            e.preventDefault();
-            this.triggerTextOnActiveOrCanvas();
-            if (this.inSituHud) this.inSituHud.flashKeyCommand('edit_text');
-            return;
-          }
-
-          // Swap Terminals with 'X'
-          if ((e.key === 'x' || e.key === 'X') && !e.ctrlKey && !e.metaKey && !e.altKey) {
-            e.preventDefault();
-            this.swapActiveCurveTerminals();
-            if (this.inSituHud) this.inSituHud.flashKeyCommand('swap_ends');
-            return;
-          }
-
-          // Next Knot with Tab
-          if (e.key === 'Tab') {
-            e.preventDefault();
-            this.executeKeyInCommand('next_knot', e);
-            if (this.inSituHud) this.inSituHud.flashKeyCommand('next_knot');
-            return;
-          }
-
-          // Toggle Cusp with 'C'
-          if ((e.key === 'c' || e.key === 'C') && !e.ctrlKey && !e.metaKey && !e.altKey) {
-            e.preventDefault();
-            this.executeKeyInCommand('toggle_cusp', e);
-            if (this.inSituHud) this.inSituHud.flashKeyCommand('toggle_cusp');
-            return;
-          }
-
-          // Straighten with 'S'
-          if ((e.key === 's' || e.key === 'S') && !e.ctrlKey && !e.metaKey && !e.altKey) {
-            e.preventDefault();
-            this.executeKeyInCommand('straighten', e);
-            if (this.inSituHud) this.inSituHud.flashKeyCommand('straighten');
-            return;
-          }
-
-          // Reset with 'R'
-          if ((e.key === 'r' || e.key === 'R') && !e.ctrlKey && !e.metaKey && !e.altKey) {
-            e.preventDefault();
-            this.executeKeyInCommand('reset_knot', e);
-            if (this.inSituHud) this.inSituHud.flashKeyCommand('reset_knot');
-            return;
-          }
-
-          // Add Point with '+'
-          if ((e.key === '+' || e.key === '=') && !e.ctrlKey && !e.metaKey && !e.altKey) {
-            e.preventDefault();
-            this.addKnotToActiveCurve();
-            if (this.inSituHud) this.inSituHud.flashKeyCommand('add_point');
-            return;
-          }
-
-          // Delete with Del / Backspace
-          if (e.key === 'Delete' || e.key === 'Backspace') {
-            e.preventDefault();
-            this.deleteSelectedEntity();
-            if (this.inSituHud) this.inSituHud.flashKeyCommand('delete_curve');
-            return;
-          }
-
-          // Cancel / Deselect with Escape
-          if (e.key === 'Escape') {
-            const menu = document.getElementById('qa-knot-context-menu');
-            if (menu) menu.remove();
-            this.inSituHud.hideTransientCursorDial();
-            if (this.stageState.selectedItem || this.stageState.activeImage) {
-              this.deselectAll();
-            }
-          }
-
-          // Instant Alphanumeric Key-Capture for Callouts
-          if (
-            !e.ctrlKey && !e.metaKey && !e.altKey &&
-            e.key.length === 1 &&
-            /[a-zA-Z0-9.,!?'" -]/.test(e.key)
-          ) {
-            const curve = this.getActiveCurve();
-            if (curve) {
+            // 10. Next Knot with Tab
+            if (e.key === 'Tab') {
               e.preventDefault();
-              this.triggerTextOnActiveOrCanvas(e.key);
+              this.executeKeyInCommand('next_knot', e);
+              return;
             }
-          }
+
+            // 11. Toggle Cusp with 'C'
+            if ((e.key === 'c' || e.key === 'C') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+              e.preventDefault();
+              this.executeKeyInCommand('toggle_cusp', e);
+              return;
+            }
+
+            // 12. Straighten with 'S'
+            if ((e.key === 's' || e.key === 'S') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+              e.preventDefault();
+              this.executeKeyInCommand('straighten', e);
+              return;
+            }
+
+            // 13. Reset with 'R'
+            if ((e.key === 'r' || e.key === 'R') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+              e.preventDefault();
+              this.executeKeyInCommand('reset_knot', e);
+              return;
+            }
+
+            // 14. Add Point with '+'
+            if ((e.key === '+' || e.key === '=') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+              e.preventDefault();
+              this.addKnotToActiveCurve();
+              return;
+            }
+
+            // 15. Delete with Del / Backspace
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+              e.preventDefault();
+              this.deleteSelectedEntity();
+              return;
+            }
+
+            // 16. Deselect with Escape
+            if (e.key === 'Escape') {
+              const menu = document.getElementById('qa-knot-context-menu');
+              if (menu) menu.remove();
+              this.inSituHud.hideTransientCursorDial();
+              if (this.stageState.selectedItem || this.stageState.activeImage) {
+                this.deselectAll();
+              }
+            }
+          });
+        }
+
+        this.svgSurface.addEventListener('dblclick', (e) => {
+          if (e.target.closest('.qa-on-curve-knot-handle, .qa-tangent-handle-group, .qa-segment-midpoint-group, .qa-movable-label-group, .qa-image-plate-control, .qa-selectable-callout, .qa-movable-text-badge')) return;
+          const pt = this.gestureMachine.getStagePt(e);
+          this.promptDirectTextBadge(pt[0], pt[1]);
         });
+
+        this.gestureMachine.init(this.svgSurface, this.stageBox);
       }
-
-      this.svgSurface.addEventListener('dblclick', (e) => {
-        if (e.target.closest('.qa-on-curve-knot-handle, .qa-tangent-handle-group, .qa-segment-midpoint-group, .qa-movable-label-group, .qa-image-plate-control, .qa-selectable-callout, .qa-movable-text-badge')) return;
-        const pt = this.gestureMachine.getStagePt(e);
-        this.promptDirectTextBadge(pt[0], pt[1]);
-      });
-
-      this.gestureMachine.init(this.svgSurface, this.stageBox);
-    }
   setupPasteAndDropListener() {
     window.addEventListener('paste', (e) => {
       if (e.target.closest('input, textarea, [contenteditable="true"]')) return;
@@ -2341,13 +2302,25 @@ class QuoraAnnotationComponent {
       const defaults = {
         textGlow: true,
         textGlowSpread: 3.5,
-        neonGlowBloom: 5.0,
+        neonGlowBloom: 6.0,
         cadStrokeMode: true,
         rayLength: 68,
         tetherLength: 32,
         deadzoneRadius: 6,
         exportMultiplier: 2,
-        curveSmoothingTolerance: 4.0
+        curveSmoothingTolerance: 4.0,
+        // Aesthetics & Live Tuner Defaults
+        axisThreshold: 15,          // Widen dual-edge corner zone: 15° to 75°
+        curveGlowBlur: 6.0,
+        curveGlowWidth: 12.0,
+        curveGlowOpacity: 0.92,
+        textGlowBlur: 4.0,
+        textGlowOpacity: 0.95,
+        textCoreSaturation: 0.40,   // Blend 40% saturated color into core (not pale washed-out)
+        borderGlowBlur: 5.0,
+        borderStrokeWidth: 2.4,
+        textBoxBgEnabled: false,    // No dark background behind letters by default
+        textBoxBgOpacity: 0.0       // 0% transparent background default
       };
 
       try {
@@ -2360,7 +2333,6 @@ class QuoraAnnotationComponent {
       this.stageState.cadStrokeMode = this.stageState.prefs.cadStrokeMode;
       this.stageState.tetherLength = this.stageState.prefs.tetherLength;
     }
-
   openPreferencesDialog() {
       if (this._prefsDialog) {
         this._prefsDialog.bringToFront?.();
@@ -2608,6 +2580,105 @@ class QuoraAnnotationComponent {
         position: [Math.max(20, window.innerWidth - 380), 90],
         contentElement: content,
         onClose: () => { this._layersDialog = null; }
+      });
+    }
+
+  openAestheticTunerDialog() {
+      if (this._tunerDialog) {
+        this._tunerDialog.bringToFront?.();
+        return;
+      }
+
+      const p = this.stageState.prefs;
+      const content = makeElement('div', {
+        style: {
+          display: 'flex', flexDirection: 'column', gap: '10px', padding: '12px',
+          color: '#f8fafc', fontFamily: 'monospace', fontSize: '11px', background: '#070a13'
+        }
+      });
+
+      const makeSliderRow = (label, min, max, step, currentVal, unit, onChange) => {
+        const valDisplay = makeElement('span', {
+          style: { color: '#00f2fe', fontWeight: 'bold', minWidth: '46px', textAlign: 'right' }
+        }, `${currentVal}${unit}`);
+
+        const slider = makeElement('input', {
+          type: 'range', min: String(min), max: String(max), step: String(step), value: String(currentVal),
+          style: { width: '100px', accentColor: '#00f2fe', cursor: 'pointer' },
+          oninput: (e) => {
+            const val = parseFloat(e.target.value);
+            valDisplay.textContent = `${val}${unit}`;
+            onChange(val);
+            this.savePreferences();
+            this.updateSvgBlurFilter();
+            this.renderStage();
+          }
+        });
+
+        return makeElement('div', {
+          style: {
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            paddingBottom: '6px', borderBottom: '1px solid rgba(255,255,255,0.06)'
+          }
+        }, [
+          makeElement('span', { style: { color: '#cbd5e1' } }, label),
+          makeElement('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, [slider, valDisplay])
+        ]);
+      };
+
+      const makeCheckboxRow = (label, currentVal, onChange) => {
+        const cb = makeElement('input', {
+          type: 'checkbox', checked: !!currentVal,
+          style: { accentColor: '#00e676', cursor: 'pointer' },
+          onchange: (e) => {
+            onChange(e.target.checked);
+            this.savePreferences();
+            this.renderStage();
+          }
+        });
+
+        return makeElement('div', {
+          style: {
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            paddingBottom: '6px', borderBottom: '1px solid rgba(255,255,255,0.06)'
+          }
+        }, [
+          makeElement('span', { style: { color: '#cbd5e1' } }, label),
+          cb
+        ]);
+      };
+
+      // Section 1: Bracket & Angle Geometry
+      content.appendChild(makeElement('strong', { style: { color: '#ffd700', fontSize: '11.5px', marginTop: '2px' } }, '📐 Bracket Corner Geometry'));
+      content.appendChild(makeSliderRow('Dual-Edge Zone Threshold', 5, 35, 1, p.axisThreshold || 15, '°', (v) => { p.axisThreshold = v; }));
+
+      // Section 2: Text Callout Glow & Core
+      content.appendChild(makeElement('strong', { style: { color: '#00f2fe', fontSize: '11.5px', marginTop: '6px' } }, '💬 Text Callout Glow & Color'));
+      content.appendChild(makeSliderRow('Text Glow Radius', 1, 12, 0.5, p.textGlowBlur || 4.0, 'px', (v) => { p.textGlowBlur = v; }));
+      content.appendChild(makeSliderRow('Text Glow Opacity', 0.1, 1.0, 0.05, p.textGlowOpacity || 0.95, '', (v) => { p.textGlowOpacity = v; }));
+      content.appendChild(makeSliderRow('Text Core Saturation', 0.0, 1.0, 0.05, p.textCoreSaturation !== undefined ? p.textCoreSaturation : 0.40, '', (v) => { p.textCoreSaturation = v; }));
+      content.appendChild(makeCheckboxRow('Dark Backdrop behind Text', p.textBoxBgEnabled, (v) => { p.textBoxBgEnabled = v; }));
+      content.appendChild(makeSliderRow('Backdrop Opacity', 0.0, 1.0, 0.05, p.textBoxBgOpacity || 0.0, '', (v) => {
+        p.textBoxBgOpacity = v;
+        if (v > 0) p.textBoxBgEnabled = true;
+      }));
+
+      // Section 3: Curve Splines & Border Frames
+      content.appendChild(makeElement('strong', { style: { color: '#00e676', fontSize: '11.5px', marginTop: '6px' } }, '🪢 Spline & Frame Optics'));
+      content.appendChild(makeSliderRow('Curve Glow Bloom', 2, 20, 0.5, p.curveGlowBlur || 6.0, 'px', (v) => { p.curveGlowBlur = v; }));
+      content.appendChild(makeSliderRow('Curve Glow Width', 4, 24, 1, p.curveGlowWidth || 12.0, 'px', (v) => { p.curveGlowWidth = v; }));
+      content.appendChild(makeSliderRow('Border Frame Thickness', 1.0, 6.0, 0.2, p.borderStrokeWidth || 2.4, 'px', (v) => { p.borderStrokeWidth = v; }));
+
+      const dialogMaker = (typeof UITools !== 'undefined' && typeof UITools.makeDialog === 'function')
+        ? UITools.makeDialog
+        : (opts => new DialogBox(opts));
+
+      this._tunerDialog = dialogMaker({
+        title: '✨ Live Glow, Optics & Frame Tuner',
+        size: [440, 480],
+        position: [Math.max(20, window.innerWidth - 470), 80],
+        contentElement: content,
+        onClose: () => { this._tunerDialog = null; }
       });
     }
 }
