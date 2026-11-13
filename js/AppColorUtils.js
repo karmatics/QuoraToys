@@ -36,17 +36,29 @@ class AppColorUtils {
     return { h: h * 360, s: s, v: v };
   }
 
-  static rgbStringToRgbArray(rgbString) {
-    const match = rgbString.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
-    if (match) {
-      return [
-        parseInt(match[1], 10),
-        parseInt(match[2], 10),
-        parseInt(match[3], 10),
-      ];
+  static rgbStringToRgbArray(colorStr) {
+      if (!colorStr) return null;
+      const str = String(colorStr).trim();
+      const match = str.match(/rgb\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/i);
+      if (match) {
+        return [
+          parseInt(match[1], 10),
+          parseInt(match[2], 10),
+          parseInt(match[3], 10),
+        ];
+      }
+      if (str.startsWith('#')) {
+        let hex = str.slice(1);
+        if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+        if (hex.length === 6) {
+          const r = parseInt(hex.slice(0, 2), 16);
+          const g = parseInt(hex.slice(2, 4), 16);
+          const b = parseInt(hex.slice(4, 6), 16);
+          if (!isNaN(r) && !isNaN(g) && !isNaN(b)) return [r, g, b];
+        }
+      }
+      return null;
     }
-    return null;
-  }
 }
 
 globalThis.AppColorUtils = AppColorUtils;

@@ -571,50 +571,61 @@ class QuoraImageManager {
         appendTo: document.body
       });
     }
-  eraseImagePlatePixels(plate, worldX, worldY, brushRadius = 24, softness = 0) {
-    if (!plate || !plate.img) return;
 
-    let canvas = plate._eraseCanvas;
-    if (!canvas) {
-      canvas = document.createElement('canvas');
-      canvas.width = plate.img.naturalWidth || plate.img.width;
-      canvas.height = plate.img.naturalHeight || plate.img.height;
+  eraseImagePlatePixels(plate, worldX, worldY, brushRadius = 16, softness = 0, prevWorldX = null, prevWorldY = null) {
+      if (!plate || !plate.img) return;
+
+      let canvas = plate._eraseCanvas;
+      if (!canvas) {
+        canvas = document.createElement('canvas');
+        canvas.width = plate.img.naturalWidth || plate.img.width;
+        canvas.height = plate.img.naturalHeight || plate.img.height;
+        const initCtx = canvas.getContext('2d');
+        initCtx.drawImage(plate.img, 0, 0);
+        plate._eraseCanvas = canvas;
+      }
+
+      plate._hasAlphaEdits = true;
       const ctx = canvas.getContext('2d');
-      ctx.drawImage(plate.img, 0, 0);
-      plate._eraseCanvas = canvas;
+      ctx.save();
+      ctx.globalCompositeOperation = 'destination-out';
+
+      const scaleX = canvas.width / plate.width;
+      const scaleY = canvas.height / plate.height;
+      const r = Math.max(2, brushRadius * scaleX);
+
+      const x1 = (worldX - plate.x) * scaleX;
+      const y1 = (worldY - plate.y) * scaleY;
+      const x0 = (prevWorldX !== null) ? (prevWorldX - plate.x) * scaleX : x1;
+      const y0 = (prevWorldY !== null) ? (prevWorldY - plate.y) * scaleY : y1;
+
+      const dist = Math.hypot(x1 - x0, y1 - y0);
+      const steps = Math.max(1, Math.ceil(dist / Math.max(2, r * 0.3)));
+
+      for (let s = 0; s <= steps; s++) {
+        const t = s / steps;
+        const lx = x0 + (x1 - x0) * t;
+        const ly = y0 + (y1 - y0) * t;
+
+        if (softness > 0) {
+          const innerR = Math.max(0, r * Math.max(0.05, 1 - softness / 28));
+          const grad = ctx.createRadialGradient(lx, ly, innerR, lx, ly, r);
+          grad.addColorStop(0, 'rgba(0,0,0,1)');
+          grad.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = grad;
+        } else {
+          ctx.fillStyle = 'rgba(0,0,0,1)';
+        }
+
+        ctx.beginPath();
+        ctx.arc(lx, ly, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      plate.img = canvas;
+      this.component.renderStage();
     }
-
-    const ctx = canvas.getContext('2d');
-    ctx.save();
-    ctx.globalCompositeOperation = 'destination-out';
-
-    const scaleX = canvas.width / plate.width;
-    const scaleY = canvas.height / plate.height;
-    const localX = (worldX - plate.x) * scaleX;
-    const localY = (worldY - plate.y) * scaleY;
-    const r = brushRadius * scaleX;
-
-    if (softness > 0) {
-      const grad = ctx.createRadialGradient(localX, localY, Math.max(0, r * 0.3), localX, localY, r);
-      grad.addColorStop(0, 'rgba(0,0,0,1)');
-      grad.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(localX, localY, r, 0, Math.PI * 2);
-      ctx.fill();
-    } else {
-      ctx.fillStyle = 'rgba(0,0,0,1)';
-      ctx.beginPath();
-      ctx.arc(localX, localY, r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
-
-    // Refresh plate texture directly from memory canvas
-    plate.img = canvas;
-    this.component.renderStage();
-  }
-
   applyZoomScale(zoomLevel) {
       const z = Math.max(0.1, zoomLevel || 1.0);
       const invScale = (1 / z).toFixed(3);
@@ -761,6 +772,224 @@ class QuoraImageManager {
       window.addEventListener('keydown', onKey);
 
       this.component.stageBox.appendChild(overlay);
+    }
+
+  computeExportBounds(stageState) {
+      if (stageState.exportRect && stageState.exportRect.width > 10 && stageState.exportRect.height > 10) {
+        return {
+          x: Math.round(stageState.exportRect.x),
+          y: Math.round(stageState.exportRect.y),
+          width: Math.round(stageState.exportRect.width),
+          height: Math.round(stageState.exportRect.height),
+          isCustom: true
+        };
+      }
+
+      let hasContent = false;
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+      const expand = (x1, y1, x2, y2) => {
+        hasContent = true;
+        minX = Math.min(minX, x1, x2);
+        minY = Math.min(minY, y1, y2);
+        maxX = Math.max(maxX, x1, x2);
+        maxY = Math.max(maxY, y1, y2);
+      };
+
+      (stageState.placedImages || []).forEach(plate => {
+        expand(plate.x, plate.y, plate.x + plate.width, plate.y + plate.height);
+      });
+
+      (stageState.diffCallouts || []).forEach(diff => {
+        const r = (diff.radius || 16) + 16;
+        expand(diff.cropX - r, diff.cropY - r, diff.cropX + r, diff.cropY + r);
+      });
+
+      (stageState.annotations || []).forEach(ann => {
+        if (ann.type === 'curve' && ann.beziers) {
+          const pad = (ann.strokeWidth || 4) + 18;
+          ann.beziers.forEach(seg => {
+            for (let t = 0; t <= 1.0; t += 0.1) {
+              const pt = CurveFitter.bezier_q(seg, t);
+              expand(pt[0] - pad, pt[1] - pad, pt[0] + pad, pt[1] + pad);
+            }
+          });
+          if (ann.text && ann.text.trim() && ann.beziers.length > 0 && this.component.textManager) {
+            const isAtTail = (ann.textEnd !== 'tip');
+            const termSeg = isAtTail ? ann.beziers[ann.beziers.length - 1] : ann.beziers[0];
+            const anchor = isAtTail ? termSeg[3] : termSeg[0];
+            const exitVec = isAtTail
+              ? [termSeg[3][0] - termSeg[2][0], termSeg[3][1] - termSeg[2][1]]
+              : [termSeg[0][0] - termSeg[1][0], termSeg[0][1] - termSeg[1][1]];
+            const fontS = ann.fontSize || stageState.fontSize || 20;
+            const fontF = ann.fontFamily || stageState.fontFamily;
+            const bounds = this.component.textManager.measureTextBounds(ann.text, fontS, fontF);
+            const placement = this.component.textManager.computeTextPlacement(
+              anchor, exitVec, bounds.maxW + 16, bounds.totalH + 8, ann.manualEdge ? ann.connectEdge : null
+            );
+            expand(placement.posX - 12, placement.posY - 12, placement.posX + bounds.maxW + 28, placement.posY + bounds.totalH + 20);
+          }
+        } else if (ann.type === 'text_badge') {
+          const fontS = ann.fontSize || stageState.fontSize || 20;
+          const fontF = ann.fontFamily || stageState.fontFamily;
+          const bounds = this.component.textManager
+            ? this.component.textManager.measureTextBounds(ann.text || '', fontS, fontF)
+            : { maxW: 120, totalH: 30 };
+          expand(ann.x - 10, ann.y - 10, ann.x + bounds.maxW + 26, ann.y + bounds.totalH + 18);
+        } else if (ann.type === 'circle_callout') {
+          expand(ann.cx - ann.rx - 14, ann.cy - ann.ry - 14, ann.cx + ann.rx + 14, ann.cy + ann.ry + 14);
+        } else if (ann.type === 'box_callout') {
+          expand(ann.x - 14, ann.y - 14, ann.x + ann.w + 14, ann.y + ann.h + 14);
+        }
+      });
+
+      if (!hasContent) return { x: 0, y: 0, width: 800, height: 500, isCustom: false };
+
+      const margin = 14;
+      const x = Math.max(0, Math.floor(minX - margin));
+      const y = Math.max(0, Math.floor(minY - margin));
+      const width = Math.max(120, Math.ceil(maxX + margin) - x);
+      const height = Math.max(80, Math.ceil(maxY + margin) - y);
+      return { x, y, width, height, isCustom: false };
+    }
+
+  renderExportBoundsOverlay(targetLayer, stageState) {
+      const existing = document.getElementById('qa-export-bounds-overlay');
+      if (existing) existing.remove();
+
+      const rect = stageState.exportRect;
+      if (!rect || rect.width < 10 || rect.height < 10) return;
+
+      const z = stageState.zoom || 1.0;
+      const invScale = 1 / z;
+      const g = makeElement('svg:g', { id: 'qa-export-bounds-overlay' });
+
+      const big = 10000;
+      const maskPath = `M -${big} -${big} H ${big} V ${big} H -${big} Z M ${rect.x} ${rect.y} V ${rect.y + rect.height} H ${rect.x + rect.width} V ${rect.y} Z`;
+      g.appendChild(makeElement('svg:path', {
+        d: maskPath,
+        fill: 'rgba(0, 0, 0, 0.42)',
+        'fill-rule': 'evenodd',
+        style: { pointerEvents: 'none' }
+      }));
+
+      const borderRect = makeElement('svg:rect', {
+        x: rect.x, y: rect.y, width: rect.width, height: rect.height,
+        fill: 'none', stroke: '#ffd700', 'stroke-width': String(2 * invScale),
+        'stroke-dasharray': `${7 * invScale},${4 * invScale}`,
+        style: { cursor: 'move', pointerEvents: 'stroke' }
+      });
+
+      let isDraggingRect = false;
+      let sX = 0, sY = 0, origX = rect.x, origY = rect.y;
+
+      borderRect.addEventListener('mousedown', (e) => {
+        if (e.button === 2) return;
+        e.stopPropagation();
+        isDraggingRect = true;
+        sX = e.clientX; sY = e.clientY;
+        origX = rect.x; origY = rect.y;
+
+        const onM = (ev) => {
+          if (!isDraggingRect) return;
+          const curZ = stageState.zoom || 1.0;
+          rect.x = Math.max(0, Math.round(origX + (ev.clientX - sX) / curZ));
+          rect.y = Math.max(0, Math.round(origY + (ev.clientY - sY) / curZ));
+          this.renderExportBoundsOverlay(targetLayer, stageState);
+        };
+        const onU = () => {
+          isDraggingRect = false;
+          window.removeEventListener('mousemove', onM);
+          window.removeEventListener('mouseup', onU);
+        };
+        window.addEventListener('mousemove', onM);
+        window.addEventListener('mouseup', onU);
+      });
+
+      g.appendChild(borderRect);
+
+      const gripSize = 10 * invScale;
+      const half = gripSize / 2;
+      const corners = [
+        { id: 'nw', x: rect.x, y: rect.y, cursor: 'nwse-resize' },
+        { id: 'ne', x: rect.x + rect.width, y: rect.y, cursor: 'nesw-resize' },
+        { id: 'se', x: rect.x + rect.width, y: rect.y + rect.height, cursor: 'nwse-resize' },
+        { id: 'sw', x: rect.x, y: rect.y + rect.height, cursor: 'nesw-resize' }
+      ];
+
+      corners.forEach(c => {
+        const handle = makeElement('svg:rect', {
+          x: c.x - half, y: c.y - half, width: gripSize, height: gripSize,
+          fill: '#ffd700', stroke: '#070a13', 'stroke-width': String(1.5 * invScale), rx: String(2 * invScale),
+          style: { cursor: c.cursor, pointerEvents: 'all' }
+        });
+
+        handle.addEventListener('mousedown', (e) => {
+          e.stopPropagation();
+          const startX = e.clientX, startY = e.clientY;
+          const stRect = { ...rect };
+
+          const onMove = (ev) => {
+            const curZ = stageState.zoom || 1.0;
+            const dx = (ev.clientX - startX) / curZ;
+            const dy = (ev.clientY - startY) / curZ;
+
+            if (c.id.includes('e')) rect.width = Math.max(40, Math.round(stRect.width + dx));
+            if (c.id.includes('s')) rect.height = Math.max(40, Math.round(stRect.height + dy));
+            if (c.id.includes('w')) {
+              const newW = Math.max(40, Math.round(stRect.width - dx));
+              rect.x = Math.round(stRect.x + (stRect.width - newW));
+              rect.width = newW;
+            }
+            if (c.id.includes('n')) {
+              const newH = Math.max(40, Math.round(stRect.height - dy));
+              rect.y = Math.round(stRect.y + (stRect.height - newH));
+              rect.height = newH;
+            }
+            this.renderExportBoundsOverlay(targetLayer, stageState);
+          };
+
+          const onUp = () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+          };
+          window.addEventListener('mousemove', onMove);
+          window.addEventListener('mouseup', onUp);
+        });
+
+        g.appendChild(handle);
+      });
+
+      const pillFo = makeElement('svg:foreignObject', {
+        x: rect.x, y: Math.max(0, rect.y - 28 * invScale), width: '240', height: '26',
+        style: { overflow: 'visible', transformOrigin: '0 100%', transform: `scale(${invScale})` }
+      });
+
+      const pill = makeElement('div', {
+        style: {
+          display: 'inline-flex', alignItems: 'center', gap: '6px',
+          background: 'rgba(9, 13, 22, 0.96)', border: '1px solid #ffd700',
+          borderRadius: '14px', padding: '2px 8px', fontSize: '10px', fontFamily: 'monospace',
+          color: '#ffd700', boxShadow: '0 4px 12px rgba(0,0,0,0.8)', whiteSpace: 'nowrap'
+        }
+      }, [
+        makeElement('span', { style: { fontWeight: 'bold' } }, `📐 Export: ${Math.round(rect.width)}×${Math.round(rect.height)}`),
+        makeElement('button', {
+          className: 'dr-nav-btn',
+          style: { padding: '1px 6px', fontSize: '9.5px', color: '#ff7b72', borderColor: 'rgba(255,123,114,0.4)' },
+          title: 'Reset to automatic export bounds',
+          onclick: (e) => {
+            e.stopPropagation();
+            stageState.exportRect = null;
+            this.component.renderStage();
+            this.component.showKnotToast('📐 Export bounds reset to Auto');
+          }
+        }, '✕ Auto')
+      ]);
+
+      pillFo.appendChild(pill);
+      g.appendChild(pillFo);
+      targetLayer.appendChild(g);
     }
 }
 

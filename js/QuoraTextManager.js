@@ -7,212 +7,277 @@ class QuoraTextManager {
       const beziers = ann.beziers;
       if (!beziers || beziers.length === 0) return;
 
-      const isActiveCurve = (ann === this.component.getActiveCurve());
-      const hasText = Boolean(ann.text && ann.text.trim() !== '');
-
-      if (!hasText && !isActiveCurve) return;
-
       if (ann._textElements) {
         Object.values(ann._textElements).forEach(el => { if (el && el.remove) el.remove(); });
         ann._textElements = null;
       }
 
+      const isActiveCurve = (ann === this.component.getActiveCurve());
+      const hasText = Boolean(ann.text && ann.text.trim() !== '');
+      const isEditing = Boolean(ann._isEditingText);
+
+      if (!hasText && !isActiveCurve && !isEditing) return;
+
       const isAtTail = (ann.textEnd !== 'tip');
       const termSeg = isAtTail ? beziers[beziers.length - 1] : beziers[0];
       const anchorPt = isAtTail ? termSeg[3] : termSeg[0];
-
       const exitVec = isAtTail
         ? [termSeg[3][0] - termSeg[2][0], termSeg[3][1] - termSeg[2][1]]
         : [termSeg[0][0] - termSeg[1][0], termSeg[0][1] - termSeg[1][1]];
 
-      const fontS = ann.fontSize || 20;
-      const fontF = ann.fontFamily || "'Architects Daughter', cursive, sans-serif";
-
-      const bounds = this.measureTextBounds(ann.text || '', fontS, fontF);
-      const padX = ann.boxStyle !== 'none' ? 8 : 4;
-      const padY = ann.boxStyle !== 'none' ? 4 : 2;
-
-      const boxW = bounds.maxW + padX * 2;
-      const boxH = bounds.totalH + padY * 2;
-
-      const effectiveEdge = ann.manualEdge ? ann.connectEdge : null;
-      const placement = this.computeTextPlacement(anchorPt, exitVec, boxW, boxH, effectiveEdge);
-      ann.connectEdge = placement.connectEdge;
-
-      const { posX, posY, textAnchorType, dBracket } = placement;
+      const p = stageState.prefs || {};
+      const fontS = ann.fontSize || stageState.fontSize || p.fontSize || 20;
+      const fontF = ann.fontFamily || stageState.fontFamily || p.fontFamily || "'Architects Daughter', cursive, sans-serif";
+      const boxStyle = ann.boxStyle || stageState.boxStyle || p.boxStyle || 'bracket';
       const col = ann.color || '#00e676';
       const isNeon = (ann.lineStyle === 'neon');
       const coreTint = isNeon ? this.component.strokeManager.getLuminousCoreColor(col) : col;
+      const manualCardinal = (ann.manualEdge && ['left', 'right', 'top', 'bottom'].includes(ann.connectEdge)) ? ann.connectEdge : null;
 
-      const p = stageState.prefs || {};
-      const showBackdrop = Boolean(p.textBoxBgEnabled || (p.textBoxBgOpacity && p.textBoxBgOpacity > 0.05));
-      const bgOpacity = (p.textBoxBgOpacity !== undefined) ? p.textBoxBgOpacity : 0.0;
-      const borderW = p.borderStrokeWidth || 2.4;
-
-      if (!hasText) {
-        const ghostW = 120;
-        const ghostH = 26;
-        const ghostPlacement = this.computeTextPlacement(anchorPt, exitVec, ghostW, ghostH, effectiveEdge);
+      if (!hasText && !isEditing) {
+        const ghostSize = Math.min(14, Math.max(11, Math.round(fontS * 0.65)));
+        const ghostBounds = this.measureTextBounds('Note…', ghostSize, fontF);
+        const ghostW = Math.max(64, ghostBounds.maxW + 16);
+        const ghostH = Math.max(24, ghostBounds.lineHeight + 8);
+        const ghostPlacement = this.computeTextPlacement(anchorPt, exitVec, ghostW, ghostH, manualCardinal);
 
         const ghostG = makeElement('svg:g', {
           className: 'qa-curve-attached-label qa-ghost-text-placeholder',
-          style: { cursor: 'text', userSelect: 'none', opacity: '0.45', transition: 'opacity 0.15s ease' },
-          title: 'Click or start typing on keyboard to add callout text',
-          onclick: (e) => {
-            e.stopPropagation();
-            this.promptInlineTailText(ann, anchorPt, ghostPlacement.connectEdge);
-          }
+          style: { cursor: 'text', userSelect: 'none', opacity: '0.68', transition: 'opacity 0.15s ease' },
+          title: 'Click to type note • Drag to move curve end'
         });
 
-        ghostG.addEventListener('mouseenter', () => { ghostG.style.opacity = '0.95'; });
-        ghostG.addEventListener('mouseleave', () => { ghostG.style.opacity = '0.45'; });
+        ghostG.addEventListener('mouseenter', () => { ghostG.style.opacity = '1'; });
+        ghostG.addEventListener('mouseleave', () => { ghostG.style.opacity = '0.68'; });
+
+        ghostG.appendChild(makeElement('svg:rect', {
+          x: ghostPlacement.posX, y: ghostPlacement.posY, width: ghostW, height: ghostH, rx: '5',
+          fill: 'rgba(248, 250, 252, 0.07)', stroke: 'rgba(255, 255, 255, 0.22)',
+          'stroke-width': '1', 'stroke-dasharray': '3,2'
+        }));
 
         if (ghostPlacement.dBracket) {
           ghostG.appendChild(makeElement('svg:path', {
-            d: ghostPlacement.dBracket,
-            fill: 'none', stroke: col, 'stroke-width': '1.6', 'stroke-dasharray': '3,3',
-            'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+            d: ghostPlacement.dBracket, fill: 'none', stroke: col, 'stroke-width': '1.6',
+            'stroke-opacity': '0.7', 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
           }));
         }
 
-        const textX = ghostPlacement.textAnchorType === 'end'
-          ? (ghostPlacement.posX + ghostW - 6)
-          : (ghostPlacement.textAnchorType === 'middle' ? (ghostPlacement.posX + ghostW / 2) : (ghostPlacement.posX + 6));
+        const gx = ghostPlacement.textAnchorType === 'end'
+          ? (ghostPlacement.posX + ghostW - 8)
+          : (ghostPlacement.textAnchorType === 'middle' ? (ghostPlacement.posX + ghostW / 2) : (ghostPlacement.posX + 8));
 
         ghostG.appendChild(makeElement('svg:text', {
-          x: textX, y: ghostPlacement.posY + 18, fill: col,
-          'font-family': fontF, 'font-size': '13px', 'font-style': 'italic', 'font-weight': 'bold',
+          x: gx, y: ghostPlacement.posY + 4 + ghostSize * 0.88, fill: 'rgba(248, 250, 252, 0.58)',
+          'font-family': fontF, 'font-size': `${ghostSize}px`, 'font-style': 'italic', 'font-weight': '600',
           'text-anchor': ghostPlacement.textAnchorType
-        }, '✎ Type note...'));
+        }, 'Note…'));
+
+        let draggingGhost = false;
+        let didDragGhost = false;
+        let gStartX = 0, gStartY = 0;
+
+        ghostG.addEventListener('mousedown', (e) => {
+          if (e.button === 2) return;
+          e.preventDefault();
+          e.stopPropagation();
+          draggingGhost = true;
+          didDragGhost = false;
+          gStartX = e.clientX;
+          gStartY = e.clientY;
+          const targetKnot = isAtTail ? ann.vertices[ann.vertices.length - 1] : ann.vertices[0];
+          const origX = targetKnot.point[0];
+          const origY = targetKnot.point[1];
+
+          const onMove = (ev) => {
+            if (!draggingGhost) return;
+            if (Math.hypot(ev.clientX - gStartX, ev.clientY - gStartY) > 4) {
+              didDragGhost = true;
+              window.getSelection()?.removeAllRanges();
+              const z = stageState.zoom || 1.0;
+              targetKnot.point[0] = Math.round(origX + (ev.clientX - gStartX) / z);
+              targetKnot.point[1] = Math.round(origY + (ev.clientY - gStartY) / z);
+              targetKnot.isExplicitTangent = false;
+              targetKnot.tangentAngleOffset = 0;
+              this.component.commitCurveGeometryUpdate();
+            }
+          };
+
+          const onUp = () => {
+            draggingGhost = false;
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+            if (!didDragGhost) this.promptInlineTailText(ann, anchorPt, manualCardinal);
+            else {
+              this.component.commitCurveGeometryUpdate();
+              this.component.exposeBezierHandles(ann);
+            }
+          };
+
+          window.addEventListener('mousemove', onMove);
+          window.addEventListener('mouseup', onUp);
+        });
 
         textBadgesLayer.appendChild(ghostG);
         ann._textElements = { ghost: ghostG };
         return;
       }
 
+      const bounds = this.measureTextBounds(ann.text || '', fontS, fontF);
+      const padX = boxStyle !== 'none' ? 8 : 4;
+      const padY = boxStyle !== 'none' ? 4 : 2;
+      const boxW = (isEditing && ann._liveEditSize) ? ann._liveEditSize.width : (bounds.maxW + padX * 2);
+      const boxH = (isEditing && ann._liveEditSize) ? ann._liveEditSize.height : (bounds.totalH + padY * 2);
+
+      const placement = this.computeTextPlacement(anchorPt, exitVec, boxW, boxH, manualCardinal);
+      ann.connectEdge = placement.connectEdge;
+
+      const { posX, posY, textAnchorType, dBracket } = placement;
       let textAnchorX = posX + padX;
-      if (textAnchorType === 'end') {
-        textAnchorX = posX + boxW - padX;
-      } else if (textAnchorType === 'middle') {
-        textAnchorX = posX + boxW / 2;
-      }
+      if (textAnchorType === 'end') textAnchorX = posX + boxW - padX;
+      else if (textAnchorType === 'middle') textAnchorX = posX + boxW / 2;
+
+      const showBackdrop = Boolean(p.textBoxBgEnabled && (p.textBoxBgOpacity === undefined || p.textBoxBgOpacity > 0.02));
+      const bgColor = p.textBoxBgColor || '#090d16';
+      const bgOpacity = p.textBoxBgOpacity !== undefined ? p.textBoxBgOpacity : 0.55;
+      const bgBlur = p.textBoxBgBlur !== undefined ? p.textBoxBgBlur : 4.0;
+      const borderW = p.borderStrokeWidth || 2.4;
+
+      const glowMode = p.textGlowMode || 'match';
+      const useNeonText = (glowMode === 'neon') || (glowMode === 'match' && isNeon);
+      const useShadowText = (glowMode === 'shadow') || (glowMode === 'match' && !isNeon);
+      const useHalo = Boolean((p.textReadabilityHalo === true) || glowMode === 'halo');
+      const glowSpread = p.textGlowSpread !== undefined ? p.textGlowSpread : 3.5;
+      const glowOpacity = p.textGlowOpacity !== undefined ? p.textGlowOpacity : 0.92;
+      const textFill = useNeonText ? coreTint : col;
+      const curveGlowPad = p.curveGlowWidth !== undefined ? p.curveGlowWidth : 10.0;
 
       const textElementsMap = {};
 
-      // 1. Shadow Layer: Classic drop shadow
-      if (!isNeon) {
-        const shadowG = makeElement('svg:g', {
-          transform: 'translate(2, 2)',
-          style: { pointerEvents: 'none' }
-        });
-
-        if ((ann.boxStyle === 'bracket' || !ann.boxStyle) && dBracket) {
+      if (useShadowText) {
+        const shadowG = makeElement('svg:g', { transform: 'translate(2, 2)', style: { pointerEvents: 'none' } });
+        if (boxStyle === 'bracket' && dBracket) {
           shadowG.appendChild(makeElement('svg:path', {
             d: dBracket, fill: 'none', stroke: 'rgba(10, 15, 25, 0.95)',
             'stroke-width': String(borderW + 2.0), 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
           }));
+        } else if (boxStyle === 'box' || boxStyle === 'pill') {
+          shadowG.appendChild(makeElement('svg:rect', {
+            x: posX, y: posY, width: boxW, height: boxH, rx: boxStyle === 'pill' ? '18' : '5',
+            fill: 'none', stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': String(borderW + 2.0)
+          }));
         }
-
-        const txtShadow = makeElement('svg:text', {
-          x: textAnchorX, y: posY + padY + fontS * 0.88, fill: 'rgba(10, 15, 25, 0.95)',
-          'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold',
-          'text-anchor': textAnchorType
-        });
-        bounds.lines.forEach((l, i) => {
-          txtShadow.appendChild(makeElement('svg:tspan', {
-            x: textAnchorX, dy: i === 0 ? '0' : `${bounds.lineHeight}px`
-          }, l));
-        });
-        shadowG.appendChild(txtShadow);
-
+        if (!isEditing) {
+          const txtShadow = makeElement('svg:text', {
+            x: textAnchorX, y: posY + padY + fontS * 0.88, fill: 'rgba(10, 15, 25, 0.92)',
+            'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold', 'text-anchor': textAnchorType
+          });
+          bounds.lines.forEach((l, i) => {
+            txtShadow.appendChild(makeElement('svg:tspan', { x: textAnchorX, dy: i === 0 ? '0' : `${bounds.lineHeight}px` }, l));
+          });
+          shadowG.appendChild(txtShadow);
+        }
         this.component.shadowLayer.appendChild(shadowG);
         textElementsMap.shadow = shadowG;
       }
 
-      // 2. Glow Layer: Saturated, rich colored neon aura
-      if (isNeon) {
-        const glowG = makeElement('svg:g', {
-          style: { pointerEvents: 'none', opacity: String(p.textGlowOpacity || 0.95) }
-        });
-
-        if ((ann.boxStyle === 'bracket' || !ann.boxStyle) && dBracket) {
+      if (useNeonText) {
+        const glowG = makeElement('svg:g', { style: { pointerEvents: 'none', opacity: String(glowOpacity) } });
+        if (boxStyle === 'bracket' && dBracket) {
           glowG.appendChild(makeElement('svg:path', {
-            d: dBracket, fill: 'none', stroke: col, 'stroke-width': String(borderW + 6.0),
-            'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-            style: { filter: 'url(#qa-neon-glow)' }
+            d: dBracket, fill: 'none', stroke: col, 'stroke-width': String(borderW + curveGlowPad),
+            'stroke-linecap': 'round', 'stroke-linejoin': 'round', style: { filter: 'url(#qa-neon-glow)' }
+          }));
+        } else if (boxStyle === 'box' || boxStyle === 'pill') {
+          glowG.appendChild(makeElement('svg:rect', {
+            x: posX, y: posY, width: boxW, height: boxH, rx: boxStyle === 'pill' ? '18' : '5',
+            fill: 'none', stroke: col, 'stroke-width': String(borderW + curveGlowPad), style: { filter: 'url(#qa-neon-glow)' }
           }));
         }
-
-        // Saturated colored glow for text glyphs
-        const txtGlow = makeElement('svg:text', {
-          x: textAnchorX, y: posY + padY + fontS * 0.88, fill: col,
-          stroke: col, 'stroke-width': '2.8',
-          'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold',
-          'text-anchor': textAnchorType,
-          style: { filter: 'url(#qa-text-glow)' }
-        });
-        bounds.lines.forEach((l, i) => {
-          txtGlow.appendChild(makeElement('svg:tspan', {
-            x: textAnchorX, dy: i === 0 ? '0' : `${bounds.lineHeight}px`
-          }, l));
-        });
-        glowG.appendChild(txtGlow);
-
+        if (!isEditing) {
+          const txtGlow = makeElement('svg:text', {
+            x: textAnchorX, y: posY + padY + fontS * 0.88, fill: col,
+            stroke: glowSpread > 0 ? col : 'none', 'stroke-width': String(glowSpread), 'stroke-linejoin': 'round',
+            'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold', 'text-anchor': textAnchorType,
+            style: { filter: 'url(#qa-text-glow)' }
+          });
+          bounds.lines.forEach((l, i) => {
+            txtGlow.appendChild(makeElement('svg:tspan', { x: textAnchorX, dy: i === 0 ? '0' : `${bounds.lineHeight}px` }, l));
+          });
+          glowG.appendChild(txtGlow);
+        }
         this.component.glowLayer.appendChild(glowG);
         textElementsMap.glow = glowG;
       }
 
-      // 3. Foreground Layer: Callout frame and text (Clean, floating, no dark background by default)
       const g = makeElement('svg:g', {
         className: 'qa-curve-attached-label',
-        style: { cursor: 'move', userSelect: 'none', transition: 'opacity 0.15s ease' },
-        title: 'Double-click to edit text • Drag to reposition callout and curve tail',
-        ondblclick: (e) => {
-          e.stopPropagation();
-          this.promptInlineTailText(ann, anchorPt, placement.connectEdge);
-        }
+        style: { cursor: 'move', userSelect: 'none' },
+        title: 'Click to edit text • Drag to reposition'
       });
 
-      // Dark backdrop is now controlled by user setting (disabled by default)
-      if (showBackdrop && bgOpacity > 0.02) {
+      if (showBackdrop) {
         g.appendChild(makeElement('svg:rect', {
-          x: posX, y: posY, width: boxW, height: boxH, rx: '4',
-          fill: `rgba(9, 13, 22, ${bgOpacity})`, stroke: 'none',
-          style: { pointerEvents: 'none' }
+          x: posX - 3, y: posY - 2, width: boxW + 6, height: boxH + 4, rx: boxStyle === 'pill' ? '20' : '8',
+          fill: bgColor, 'fill-opacity': String(bgOpacity), stroke: 'none',
+          ...(bgBlur > 0 ? { style: { filter: 'url(#qa-text-bg-blur)', pointerEvents: 'none' } } : { style: { pointerEvents: 'none' } })
         }));
       }
 
-      if ((ann.boxStyle === 'bracket' || !ann.boxStyle) && dBracket) {
+      g.appendChild(makeElement('svg:rect', {
+        x: posX, y: posY, width: boxW, height: boxH, rx: boxStyle === 'pill' ? '18' : '5',
+        fill: 'rgba(255, 255, 255, 0.001)', stroke: 'none'
+      }));
+
+      if (boxStyle === 'bracket' && dBracket) {
         g.appendChild(makeElement('svg:path', {
-          d: dBracket, fill: 'none', stroke: isNeon ? coreTint : col,
-          'stroke-width': String(borderW),
+          d: dBracket, fill: 'none', stroke: textFill, 'stroke-width': String(borderW),
           'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-          style: isNeon ? { filter: 'url(#qa-neon-core)' } : {}
+          ...(useNeonText ? { style: { filter: 'url(#qa-neon-core)' } } : {})
+        }));
+      } else if (boxStyle === 'box' || boxStyle === 'pill') {
+        g.appendChild(makeElement('svg:rect', {
+          x: posX, y: posY, width: boxW, height: boxH, rx: boxStyle === 'pill' ? '18' : '5',
+          fill: 'none', stroke: textFill, 'stroke-width': String(borderW),
+          ...(useNeonText ? { style: { filter: 'url(#qa-neon-core)' } } : {})
         }));
       }
 
-      const txt = makeElement('svg:text', {
-        x: textAnchorX, y: posY + padY + fontS * 0.88, fill: isNeon ? coreTint : col,
-        'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold',
-        'text-anchor': textAnchorType,
-        style: isNeon ? { filter: 'url(#qa-neon-core)' } : { filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.85))' }
-      });
-      bounds.lines.forEach((l, i) => {
-        txt.appendChild(makeElement('svg:tspan', {
-          x: textAnchorX, dy: i === 0 ? '0' : `${bounds.lineHeight}px`
-        }, l));
-      });
-      g.appendChild(txt);
+      if (!isEditing) {
+        if (useHalo) {
+          const txtHalo = makeElement('svg:text', {
+            x: textAnchorX, y: posY + padY + fontS * 0.88,
+            fill: 'rgba(7, 10, 19, 0.90)', stroke: 'rgba(7, 10, 19, 0.90)', 'stroke-width': '2.8',
+            'stroke-linejoin': 'round', 'font-family': fontF, 'font-size': `${fontS}px`,
+            'font-weight': 'bold', 'text-anchor': textAnchorType, style: { pointerEvents: 'none' }
+          });
+          bounds.lines.forEach((l, i) => {
+            txtHalo.appendChild(makeElement('svg:tspan', { x: textAnchorX, dy: i === 0 ? '0' : `${bounds.lineHeight}px` }, l));
+          });
+          g.appendChild(txtHalo);
+        }
 
-      // Tight drag handle specifically on text and bracket
+        const txt = makeElement('svg:text', {
+          x: textAnchorX, y: posY + padY + fontS * 0.88, fill: textFill,
+          'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold', 'text-anchor': textAnchorType,
+          ...(useNeonText ? { style: { filter: 'url(#qa-neon-core)' } } : {})
+        });
+        bounds.lines.forEach((l, i) => {
+          txt.appendChild(makeElement('svg:tspan', { x: textAnchorX, dy: i === 0 ? '0' : `${bounds.lineHeight}px` }, l));
+        });
+        g.appendChild(txt);
+      }
+
       let isDraggingBadge = false;
+      let didDragBadge = false;
       let startMouseX = 0, startMouseY = 0;
 
       g.addEventListener('mousedown', (e) => {
         if (e.button === 2) return;
+        e.preventDefault();
         e.stopPropagation();
         isDraggingBadge = true;
-
+        didDragBadge = false;
         this.component.selectItem(ann);
         this.component._activeKnotIdx = isAtTail ? (ann.vertices.length - 1) : 0;
 
@@ -221,38 +286,34 @@ class QuoraTextManager {
 
         startMouseX = e.clientX;
         startMouseY = e.clientY;
-
-        const targetKnot = isAtTail
-          ? ann.vertices[ann.vertices.length - 1]
-          : ann.vertices[0];
+        const targetKnot = isAtTail ? ann.vertices[ann.vertices.length - 1] : ann.vertices[0];
         const origX = targetKnot.point[0];
         const origY = targetKnot.point[1];
 
         const onBadgeDragMove = (ev) => {
           if (!isDraggingBadge) return;
-          const z = stageState.zoom || 1.0;
-          const dx = (ev.clientX - startMouseX) / z;
-          const dy = (ev.clientY - startMouseY) / z;
-
-          targetKnot.point[0] = Math.round(origX + dx);
-          targetKnot.point[1] = Math.round(origY + dy);
-          targetKnot.isExplicitTangent = false;
-          targetKnot.tangentAngleOffset = 0;
-
-          const ray = document.getElementById('qa-outbound-tangent-ray');
-          if (ray) ray.remove();
-
-          this.component.commitCurveGeometryUpdate();
+          if (Math.hypot(ev.clientX - startMouseX, ev.clientY - startMouseY) > 4) {
+            didDragBadge = true;
+            window.getSelection()?.removeAllRanges();
+            const z = stageState.zoom || 1.0;
+            targetKnot.point[0] = Math.round(origX + (ev.clientX - startMouseX) / z);
+            targetKnot.point[1] = Math.round(origY + (ev.clientY - startMouseY) / z);
+            targetKnot.isExplicitTangent = false;
+            targetKnot.tangentAngleOffset = 0;
+            this.component.commitCurveGeometryUpdate();
+          }
         };
 
         const onBadgeDragUp = () => {
           isDraggingBadge = false;
           window.removeEventListener('mousemove', onBadgeDragMove);
           window.removeEventListener('mouseup', onBadgeDragUp);
-
-          this.component.commitCurveGeometryUpdate();
-          this.component.exposeBezierHandles(ann);
-          this.component.renderStage();
+          if (!didDragBadge) this.promptInlineTailText(ann, anchorPt, manualCardinal);
+          else {
+            this.component.commitCurveGeometryUpdate();
+            this.component.exposeBezierHandles(ann);
+            this.component.renderStage();
+          }
         };
 
         window.addEventListener('mousemove', onBadgeDragMove);
@@ -263,258 +324,318 @@ class QuoraTextManager {
       textElementsMap.fg = g;
       ann._textElements = textElementsMap;
     }
-
   promptInlineTailText(curveRecord, anchorPt, forcedEdge = null, initialText = '') {
-        const existing = document.getElementById('qa-inline-tail-editor');
-        if (existing) existing.remove();
-        const existingDock = document.getElementById('qa-callout-editor-dock');
-        if (existingDock) existingDock.remove();
+      if (this.component._commitActiveInlineEditor) {
+        this.component._commitActiveInlineEditor();
+      }
 
-        let exitVec = [1, 0];
-        if (curveRecord && curveRecord.beziers?.length > 0) {
-          const isAtTail = (curveRecord.textEnd !== 'tip');
-          const termSeg = isAtTail ? curveRecord.beziers[curveRecord.beziers.length - 1] : curveRecord.beziers[0];
-          exitVec = isAtTail
-            ? [termSeg[3][0] - termSeg[2][0], termSeg[3][1] - termSeg[2][1]]
-            : [termSeg[0][0] - termSeg[1][0], termSeg[0][1] - termSeg[1][1]];
+      const isValidCardinal = (edge) => ['left', 'right', 'top', 'bottom'].includes(edge);
+
+      let exitVec = [1, 0];
+      if (curveRecord && curveRecord.beziers?.length > 0) {
+        const isAtTail = (curveRecord.textEnd !== 'tip');
+        const termSeg = isAtTail ? curveRecord.beziers[curveRecord.beziers.length - 1] : curveRecord.beziers[0];
+        exitVec = isAtTail
+          ? [termSeg[3][0] - termSeg[2][0], termSeg[3][1] - termSeg[2][1]]
+          : [termSeg[0][0] - termSeg[1][0], termSeg[0][1] - termSeg[1][1]];
+      }
+
+      const p = this.component.stageState.prefs || {};
+      let fontF = curveRecord?.fontFamily || this.component.stageState.fontFamily || p.fontFamily || "'Architects Daughter', cursive, sans-serif";
+      let fontS = curveRecord?.fontSize || this.component.stageState.fontSize || p.fontSize || 20;
+      let boxStyle = curveRecord?.boxStyle || this.component.stageState.boxStyle || p.boxStyle || 'bracket';
+      const color = curveRecord?.color || this.component.stageState.currentColor || '#00e676';
+      const initialVal = (initialText !== undefined && initialText !== null && initialText !== '')
+        ? initialText
+        : (curveRecord?.text || '');
+
+      const padX = boxStyle !== 'none' ? 8 : 4;
+      const padY = boxStyle !== 'none' ? 4 : 2;
+      const lineH = Math.round(fontS * 1.25);
+
+      const bounds = this.measureTextBounds(initialVal || 'Note…', fontS, fontF);
+      const initW = Math.max(initialVal ? 24 : 64, bounds.maxW + padX * 2);
+      const initH = Math.max(lineH + padY * 2, bounds.totalH + padY * 2);
+
+      const manualEdge = (curveRecord?.manualEdge && isValidCardinal(curveRecord.connectEdge))
+        ? curveRecord.connectEdge
+        : (isValidCardinal(forcedEdge) ? forcedEdge : null);
+
+      let placement = this.computeTextPlacement(anchorPt, exitVec, initW, initH, manualEdge);
+      let connectEdge = manualEdge || placement.connectEdge;
+
+      if (curveRecord) {
+        curveRecord._isEditingText = true;
+        curveRecord._liveEditSize = { width: initW, height: initH };
+        this.component.renderStage();
+      }
+
+      const editorWrap = makeElement('div', {
+        id: 'qa-inline-tail-editor',
+        style: {
+          position: 'absolute',
+          top: `${curveRecord?.type === 'text_badge' ? anchorPt[1] : placement.posY}px`,
+          left: `${curveRecord?.type === 'text_badge' ? anchorPt[0] : placement.posX}px`,
+          zIndex: '75',
+          overflow: 'visible'
         }
+      });
 
-        let fontF = curveRecord?.fontFamily || this.component.stageState.fontFamily;
-        let fontS = curveRecord?.fontSize || this.component.stageState.fontSize || 20;
-        let boxStyle = curveRecord?.boxStyle || 'bracket';
-        let boxOpacity = curveRecord?.boxOpacity || 0.75;
-        const color = curveRecord?.color || this.component.stageState.currentColor;
+      const isNeon = (curveRecord?.lineStyle === 'neon' || (!curveRecord && this.component.stageState.lineStyle === 'neon'));
+      const glowMode = p.textGlowMode || 'match';
+      const useNeonText = (glowMode === 'neon') || (glowMode === 'match' && isNeon);
+      const displayColor = useNeonText ? this.component.strokeManager.getLuminousCoreColor(color) : color;
 
-        const initialVal = (initialText !== undefined && initialText !== null && initialText !== '')
-          ? initialText
-          : (curveRecord?.text || '');
+      const editorEl = makeElement('div', {
+        className: 'qa-inline-ce',
+        contentEditable: 'true',
+        'data-placeholder': 'Note…',
+        style: {
+          display: 'inline-block',
+          minWidth: initialVal ? '20px' : '64px',
+          maxWidth: `${260 + padX * 2}px`,
+          minHeight: `${lineH + padY * 2}px`,
+          padding: `${padY}px ${padX}px`,
+          fontSize: `${fontS}px`,
+          fontFamily: fontF,
+          fontWeight: 'bold',
+          lineHeight: `${lineH}px`,
+          color: displayColor,
+          background: initialVal ? 'transparent' : 'rgba(248, 250, 252, 0.06)',
+          border: curveRecord ? 'none' : `1px dashed ${color}`,
+          borderRadius: boxStyle === 'pill' ? '18px' : '4px',
+          outline: 'none',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          boxSizing: 'border-box',
+          textAlign: placement.textAlign,
+          textShadow: useNeonText
+            ? `0 0 6px ${color}, 0 1px 2px rgba(7, 10, 19, 0.95)`
+            : '2px 2px 0 rgba(10, 15, 25, 0.95)',
+          cursor: 'text'
+        }
+      });
+      editorEl.textContent = initialVal;
 
-        const bounds = this.measureTextBounds(initialVal || 'Type callout...', fontS, fontF);
-        const width = bounds.maxW + 20;
-        const estHeight = bounds.totalH + 12;
+      const controlsDock = makeElement('div', {
+        id: 'qa-callout-editor-dock',
+        style: {
+          position: 'absolute', display: 'inline-flex', alignItems: 'center', gap: '5px',
+          background: 'rgba(11, 17, 32, 0.94)', border: '1px solid rgba(0, 242, 254, 0.4)',
+          borderRadius: '18px', padding: '3px 10px', fontSize: '10px',
+          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.85)',
+          zIndex: '85', backdropFilter: 'blur(10px)', userSelect: 'none', whiteSpace: 'nowrap'
+        }
+      });
 
-        const effectiveEdge = curveRecord?.manualEdge ? curveRecord.connectEdge : (forcedEdge || null);
-        let placement = this.computeTextPlacement(anchorPt, exitVec, width, estHeight, effectiveEdge);
-        let connectEdge = placement.connectEdge;
+      const getCleanText = () => (editorEl.innerText || '').replace(/\r\n/g, '\n').replace(/\n$/, '').trim();
 
-        const editorWrap = makeElement('div', {
-          id: 'qa-inline-tail-editor',
-          style: {
-            position: 'absolute',
-            top: `${placement.posY}px`,
-            left: `${placement.posX}px`,
-            width: `${width}px`,
-            zIndex: '70',
-            overflow: 'visible'
-          }
-        });
+      const syncLiveLayout = () => {
+        const curLH = Math.round(fontS * 1.25);
+        const curPadX = boxStyle !== 'none' ? 8 : 4;
+        const curPadY = boxStyle !== 'none' ? 4 : 2;
+        const curText = getCleanText();
 
-        const textarea = makeElement('textarea', {
-          placeholder: 'Type callout text...',
-          value: initialVal,
-          rows: 1,
-          style: {
-            width: '100%', minHeight: '30px', maxHeight: '180px', padding: '4px 8px',
-            fontSize: `${fontS}px`, fontFamily: fontF, fontWeight: 'bold', lineHeight: '1.25',
-            color: color, background: `rgba(9, 13, 22, ${boxOpacity})`,
-            border: 'none', borderRadius: '4px', outline: 'none', resize: 'none',
-            overflow: 'hidden', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-            boxSizing: 'border-box', textAlign: placement.textAlign,
-            boxShadow: '0 8px 24px rgba(0,0,0,0.85)',
-            scrollbarWidth: 'none', msOverflowStyle: 'none'
-          }
-        });
+        editorEl.style.fontSize = `${fontS}px`;
+        editorEl.style.fontFamily = fontF;
+        editorEl.style.lineHeight = `${curLH}px`;
+        editorEl.style.padding = `${curPadY}px ${curPadX}px`;
+        editorEl.style.minWidth = curText ? '20px' : '64px';
+        editorEl.style.maxWidth = `${260 + curPadX * 2}px`;
+        editorEl.style.background = curText ? 'transparent' : 'rgba(248, 250, 252, 0.06)';
 
-        const applyFrameStyles = () => {
-          textarea.style.border = 'none';
-          textarea.style.borderRadius = '4px';
-          textarea.style.background = `rgba(9, 13, 22, ${boxOpacity})`;
+        const curW = Math.max(curText ? 20 : 64, editorEl.offsetWidth || initW);
+        const curH = Math.max(curLH + curPadY * 2, editorEl.offsetHeight || initH);
 
-          if (boxStyle === 'box' || boxStyle === 'pill') {
-            textarea.style.border = `2px solid ${color}`;
-            textarea.style.borderRadius = boxStyle === 'pill' ? '24px' : '4px';
-          } else if (boxStyle === 'bracket') {
-            if (placement.showLeft) textarea.style.borderLeft = `2px solid ${color}`;
-            if (placement.showRight) textarea.style.borderRight = `2px solid ${color}`;
-            if (placement.showTop) textarea.style.borderTop = `2px solid ${color}`;
-            if (placement.showBottom) textarea.style.borderBottom = `2px solid ${color}`;
-          }
-        };
-        applyFrameStyles();
-
-        const controlsDock = makeElement('div', {
-          id: 'qa-callout-editor-dock',
-          style: {
-            position: 'absolute', display: 'inline-flex', alignItems: 'center', gap: '8px',
-            background: 'rgba(11, 17, 32, 0.98)', border: '1.5px solid rgba(0, 242, 254, 0.5)',
-            borderRadius: '24px', padding: '5px 14px', fontSize: '10.5px',
-            boxShadow: '0 14px 36px rgba(0, 0, 0, 0.9), 0 0 16px rgba(0, 242, 254, 0.25)',
-            zIndex: '85', backdropFilter: 'blur(14px)', userSelect: 'none'
-          }
-        });
-
-        const updateDockPosition = () => {
-          const curH = textarea.offsetHeight || estHeight;
-          const bds = this.measureTextBounds(textarea.value || ' ', fontS, fontF);
-          const dynamicW = Math.max(80, bds.maxW + 18);
-          editorWrap.style.width = `${dynamicW}px`;
-
-          placement = this.computeTextPlacement(anchorPt, exitVec, dynamicW, curH, connectEdge);
+        if (curveRecord && curveRecord.type === 'text_badge') {
+          curveRecord._liveEditSize = { width: curW, height: curH };
+          curveRecord.text = curText;
+          curveRecord.fontSize = fontS;
+          curveRecord.boxStyle = boxStyle;
+          editorWrap.style.left = `${anchorPt[0]}px`;
+          editorWrap.style.top = `${anchorPt[1]}px`;
+          controlsDock.style.left = `${anchorPt[0]}px`;
+          controlsDock.style.top = `${anchorPt[1] > 48 ? (anchorPt[1] - 32) : (anchorPt[1] + curH + 10)}px`;
+          this.component.renderStage();
+        } else {
+          const curEdge = (curveRecord?.manualEdge && isValidCardinal(connectEdge)) ? connectEdge : null;
+          placement = this.computeTextPlacement(anchorPt, exitVec, curW, curH, curEdge);
           editorWrap.style.left = `${placement.posX}px`;
           editorWrap.style.top = `${placement.posY}px`;
+          editorEl.style.textAlign = placement.textAlign;
 
-          const floatAbove = (placement.posY > 64);
-          const dockTop = floatAbove ? (placement.posY - 44) : (placement.posY + curH + 28);
-          controlsDock.style.top = `${dockTop}px`;
-          controlsDock.style.left = `${placement.posX}px`;
-        };
-
-        const autoGrow = () => {
-          textarea.style.height = 'auto';
-          const curH = Math.max(30, textarea.scrollHeight);
-          textarea.style.height = `${curH}px`;
-          updateDockPosition();
-        };
-
-        const cycleDockEdge = () => {
-          const cycle = ['left', 'right', 'bottom', 'top', 'auto'];
-          const nextEdge = cycle[(cycle.indexOf(connectEdge) + 1) % cycle.length];
-          connectEdge = nextEdge;
-          const isManual = (nextEdge !== 'auto');
           if (curveRecord) {
-            curveRecord.connectEdge = nextEdge;
-            curveRecord.manualEdge = isManual;
-          }
-          placement = this.computeTextPlacement(anchorPt, exitVec, width, textarea.offsetHeight || estHeight, nextEdge === 'auto' ? null : nextEdge);
-          connectEdge = placement.connectEdge;
-          textarea.style.textAlign = placement.textAlign;
-          applyFrameStyles();
-          autoGrow();
-          edgeCycleBtn.textContent = `Dock: ${connectEdge.toUpperCase()}${isManual ? ' 🔒' : ''}`;
-          if (curveRecord) this.component.renderStage();
-          this.component.showKnotToast(`Callout Dock: ${connectEdge.toUpperCase()} (Tab)`);
-        };
-
-        const cycleFrameStyle = () => {
-          const styles = ['bracket', 'box', 'pill', 'none'];
-          boxStyle = styles[(styles.indexOf(boxStyle) + 1) % styles.length];
-          if (curveRecord) curveRecord.boxStyle = boxStyle;
-          styleBtn.textContent = boxStyle === 'bracket' ? '◺ Bracket' : (boxStyle === 'box' ? '◻ Box' : (boxStyle === 'pill' ? '💊 Pill' : 'Plain'));
-          applyFrameStyles();
-          if (curveRecord) this.component.renderStage();
-          this.component.showKnotToast(`Frame Style: ${boxStyle.toUpperCase()} (Shift+Tab)`);
-        };
-
-        const edgeCycleBtn = makeElement('button', {
-          className: 'dr-nav-btn',
-          style: { padding: '2px 8px', fontSize: '10px', color: '#00f2fe', borderColor: 'rgba(0, 242, 254, 0.4)' },
-          title: 'Cycle Connection Edge [Tab]: Left -> Right -> Bottom -> Top -> Auto',
-          onclick: (e) => { e.stopPropagation(); cycleDockEdge(); }
-        }, `Dock: ${connectEdge.toUpperCase()}${curveRecord?.manualEdge ? ' 🔒' : ''}`);
-
-        const styleBtn = makeElement('button', {
-          className: 'dr-nav-btn primary',
-          style: { padding: '2px 6px', fontSize: '10px' },
-          title: 'Cycle Frame [Shift+Tab]: Bracket -> Box -> Pill -> Plain',
-          onclick: (e) => { e.stopPropagation(); cycleFrameStyle(); }
-        }, boxStyle === 'bracket' ? '◺ Bracket' : (boxStyle === 'box' ? '◻ Box' : (boxStyle === 'pill' ? '💊 Pill' : 'Plain')));
-
-        let committed = false;
-        let onOutClick = null;
-
-        const commit = () => {
-          if (committed) return;
-          committed = true;
-          if (onOutClick) window.removeEventListener('mousedown', onOutClick);
-
-          const textVal = textarea.value.trim();
-          if (curveRecord) {
-            curveRecord.text = textVal;
-            curveRecord.connectEdge = connectEdge;
+            curveRecord._liveEditSize = { width: curW, height: curH };
+            curveRecord.text = curText;
             curveRecord.fontSize = fontS;
-            curveRecord.fontFamily = fontF;
             curveRecord.boxStyle = boxStyle;
-            curveRecord.boxOpacity = boxOpacity;
-          } else if (textVal) {
-            this.component.stageState.annotations.push({
-              id: 'text_' + Date.now(),
-              type: 'text_badge',
-              x: anchorPt[0],
-              y: anchorPt[1],
-              text: textVal,
-              fontSize: fontS,
-              fontFamily: fontF,
-              boxStyle: boxStyle,
-              boxOpacity: boxOpacity,
-              connectEdge: connectEdge,
-              color: color
-            });
+            this.component.renderStage();
           }
 
-          editorWrap.remove();
-          controlsDock.remove();
-          this.component.renderStage();
-        };
+          const dockAbove = placement.posY > 56 && !(placement.showTop && !placement.showBottom);
+          controlsDock.style.top = `${dockAbove ? (placement.posY - 32) : (placement.posY + curH + 10)}px`;
+          controlsDock.style.left = `${placement.posX}px`;
+        }
+      };
 
-        const okBtn = makeElement('button', {
-          className: 'dr-nav-btn primary',
-          style: { padding: '2px 10px', fontSize: '10px', background: '#238636', borderColor: '#2ea043' },
-          onclick: (e) => { e.stopPropagation(); commit(); }
-        }, '✓ Done');
+      const cycleDockEdge = () => {
+        const cycle = ['left', 'right', 'bottom', 'top', 'auto'];
+        const baseEdge = (connectEdge || 'left').split('-')[0];
+        const nextEdge = cycle[(cycle.indexOf(baseEdge) + 1) % cycle.length];
+        connectEdge = nextEdge;
+        const isManual = (nextEdge !== 'auto');
+        if (curveRecord) {
+          curveRecord.connectEdge = nextEdge;
+          curveRecord.manualEdge = isManual;
+        }
+        syncLiveLayout();
+        edgeCycleBtn.textContent = `Dock: ${placement.connectEdge.toUpperCase()}${isManual ? ' 🔒' : ''}`;
+      };
 
-        controlsDock.append(
-          makeElement('span', { style: { color: '#00f2fe', fontWeight: 'bold', fontSize: '11px', marginRight: '2px' } }, '✎ Callout:'),
-          edgeCycleBtn, styleBtn, okBtn
-        );
+      const cycleFrameStyle = () => {
+        const styles = ['bracket', 'box', 'pill', 'none'];
+        boxStyle = styles[(styles.indexOf(boxStyle) + 1) % styles.length];
+        if (curveRecord) curveRecord.boxStyle = boxStyle;
+        styleBtn.textContent = boxStyle === 'bracket' ? '◺ Bracket' : (boxStyle === 'box' ? '◻ Box' : (boxStyle === 'pill' ? '💊 Pill' : 'Plain'));
+        syncLiveLayout();
+      };
 
-        editorWrap.appendChild(textarea);
-        this.component.stageBox.appendChild(editorWrap);
-        this.component.stageBox.appendChild(controlsDock);
+      const stepEditorFont = (delta) => {
+        fontS = Math.max(11, Math.min(48, fontS + delta));
+        if (curveRecord) curveRecord.fontSize = fontS;
+        sizeLbl.textContent = `${fontS}px`;
+        syncLiveLayout();
+      };
 
-        textarea.addEventListener('input', autoGrow);
+      const edgeCycleBtn = makeElement('button', {
+        className: 'dr-nav-btn',
+        style: { padding: '1px 6px', fontSize: '9.5px', color: '#00f2fe', borderColor: 'rgba(0, 242, 254, 0.4)' },
+        onmousedown: (e) => { e.preventDefault(); e.stopPropagation(); cycleDockEdge(); }
+      }, `Dock: ${placement.connectEdge.toUpperCase()}${curveRecord?.manualEdge ? ' 🔒' : ''}`);
 
-        // Keyboard acceleration inside the callout textarea
-        textarea.addEventListener('keydown', (e) => {
-          // Tab: cycle docking edge on arrow (or Shift+Tab: cycle frame style)
-          if (e.key === 'Tab') {
-            e.preventDefault();
-            if (e.shiftKey) {
-              cycleFrameStyle();
-            } else {
-              cycleDockEdge();
-            }
-            return;
+      const styleBtn = makeElement('button', {
+        className: 'dr-nav-btn',
+        style: { padding: '1px 6px', fontSize: '9.5px' },
+        onmousedown: (e) => { e.preventDefault(); e.stopPropagation(); cycleFrameStyle(); }
+      }, boxStyle === 'bracket' ? '◺ Bracket' : (boxStyle === 'box' ? '◻ Box' : (boxStyle === 'pill' ? '💊 Pill' : 'Plain')));
+
+      const sizeLbl = makeElement('span', { style: { color: '#ffd700', fontWeight: 'bold', minWidth: '28px', textAlign: 'center' } }, `${fontS}px`);
+      const decBtn = makeElement('button', {
+        className: 'dr-nav-btn',
+        style: { padding: '1px 5px', fontSize: '9.5px' },
+        onmousedown: (e) => { e.preventDefault(); e.stopPropagation(); stepEditorFont(-2); }
+      }, 'A-');
+      const incBtn = makeElement('button', {
+        className: 'dr-nav-btn',
+        style: { padding: '1px 5px', fontSize: '9.5px' },
+        onmousedown: (e) => { e.preventDefault(); e.stopPropagation(); stepEditorFont(2); }
+      }, 'A+');
+
+      let committed = false;
+      let onOutClick = null;
+
+      const commit = (mode = 'blur') => {
+        if (committed) return;
+        committed = true;
+        this.component._commitActiveInlineEditor = null;
+        if (onOutClick) window.removeEventListener('mousedown', onOutClick);
+
+        const textVal = getCleanText();
+        if (curveRecord) {
+          curveRecord._isEditingText = false;
+          curveRecord._liveEditSize = null;
+          curveRecord.text = textVal;
+          if (curveRecord.manualEdge && isValidCardinal(connectEdge)) {
+            curveRecord.connectEdge = connectEdge;
           }
+          curveRecord.fontSize = fontS;
+          curveRecord.fontFamily = fontF;
+          curveRecord.boxStyle = boxStyle;
+        } else if (textVal) {
+          this.component.stageState.annotations.push({
+            id: 'text_' + Date.now(),
+            type: 'text_badge',
+            x: anchorPt[0],
+            y: anchorPt[1],
+            text: textVal,
+            fontSize: fontS,
+            fontFamily: fontF,
+            boxStyle: boxStyle,
+            lineStyle: this.component.stageState.lineStyle || 'classic',
+            connectEdge: connectEdge,
+            color: color
+          });
+        }
 
-          // Enter (without Shift): commit immediately
-          if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey) {
-            e.preventDefault();
-            commit();
-            return;
-          }
+        editorWrap.remove();
+        controlsDock.remove();
+        this.component.renderStage();
+        if (mode === 'escape') {
+          this.component.showKnotToast('Command Mode • Keys: A=Arrow, X=Flip, L=Loop, Del=Remove');
+        }
+      };
 
-          // Escape: cancel if empty or commit text
-          if (e.key === 'Escape') {
-            e.preventDefault();
-            textarea.value = '';
-            commit();
-            return;
-          }
-        });
+      this.component._commitActiveInlineEditor = () => commit('external');
 
-        onOutClick = (ev) => {
-          if (!editorWrap.contains(ev.target) && !controlsDock.contains(ev.target)) commit();
-        };
+      const okBtn = makeElement('button', {
+        className: 'dr-nav-btn primary',
+        style: { padding: '1px 8px', fontSize: '9.5px' },
+        onmousedown: (e) => { e.preventDefault(); e.stopPropagation(); commit('done'); }
+      }, '✓');
 
-        setTimeout(() => {
-          textarea.focus();
-          if (textarea.value.length > 0) {
-            textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
-          }
-          autoGrow();
-          window.addEventListener('mousedown', onOutClick);
-        }, 40);
-      }
+      controlsDock.append(
+        edgeCycleBtn, styleBtn, decBtn, sizeLbl, incBtn,
+        makeElement('span', { style: { color: '#64748b', fontSize: '9px' } }, 'Esc=Keys'),
+        okBtn
+      );
+
+      editorWrap.appendChild(editorEl);
+      this.component.stageBox.appendChild(editorWrap);
+      this.component.stageBox.appendChild(controlsDock);
+
+      editorEl.addEventListener('input', syncLiveLayout);
+      editorEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          if (e.shiftKey) cycleFrameStyle();
+          else cycleDockEdge();
+          return;
+        }
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+          e.preventDefault();
+          stepEditorFont(e.key === 'ArrowUp' ? 2 : -2);
+          return;
+        }
+        if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey) {
+          e.preventDefault();
+          commit('enter');
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          commit('escape');
+        }
+      });
+
+      onOutClick = (ev) => {
+        if (!editorWrap.contains(ev.target) && !controlsDock.contains(ev.target)) commit('outside');
+      };
+
+      setTimeout(() => {
+        editorEl.focus({ preventScroll: true });
+        const range = document.createRange();
+        range.selectNodeContents(editorEl);
+        range.collapse(false);
+        const sel = window.getSelection();
+        if (sel) {
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+        syncLiveLayout();
+        window.addEventListener('mousedown', onOutClick);
+      }, 15);
+    }
   wrapTextLines(text, maxCharsPerLine) {
       if (!text) return [];
       const paragraphs = String(text).split('\n');
@@ -545,95 +666,122 @@ class QuoraTextManager {
   }
 
   renderDirectTextBadgeSvg(ann, textBadgesLayer, stageState) {
-      const fontS = ann.fontSize || 20;
-      const fontF = ann.fontFamily || "'Architects Daughter', cursive, sans-serif";
+      if (ann._badgeElements) {
+        Object.values(ann._badgeElements).forEach(el => { if (el && el.remove) el.remove(); });
+        ann._badgeElements = null;
+      }
+
+      const p = stageState.prefs || {};
+      const fontS = ann.fontSize || stageState.fontSize || p.fontSize || 20;
+      const fontF = ann.fontFamily || stageState.fontFamily || p.fontFamily || "'Architects Daughter', cursive, sans-serif";
+      const boxStyle = ann.boxStyle || stageState.boxStyle || p.boxStyle || 'bracket';
+      const isEditing = Boolean(ann._isEditingText);
 
       const bounds = this.measureTextBounds(ann.text || '', fontS, fontF);
-      const padX = ann.boxStyle !== 'none' ? 8 : 4;
-      const padY = ann.boxStyle !== 'none' ? 4 : 2;
-
-      const boxW = bounds.maxW + padX * 2;
-      const boxH = bounds.totalH + padY * 2;
+      const padX = boxStyle !== 'none' ? 8 : 4;
+      const padY = boxStyle !== 'none' ? 4 : 2;
+      const boxW = (isEditing && ann._liveEditSize) ? ann._liveEditSize.width : (bounds.maxW + padX * 2);
+      const boxH = (isEditing && ann._liveEditSize) ? ann._liveEditSize.height : (bounds.totalH + padY * 2);
 
       const col = ann.color || '#00e676';
       const isSelected = (stageState.selectedItem === ann);
       const isNeon = (ann.lineStyle === 'neon');
       const coreTint = isNeon ? this.component.strokeManager.getLuminousCoreColor(col) : col;
 
-      const p = stageState.prefs || {};
-      const showBackdrop = Boolean(p.textBoxBgEnabled || (p.textBoxBgOpacity && p.textBoxBgOpacity > 0.05));
-      const bgOpacity = (p.textBoxBgOpacity !== undefined) ? p.textBoxBgOpacity : 0.0;
+      const showBackdrop = Boolean(p.textBoxBgEnabled && (p.textBoxBgOpacity === undefined || p.textBoxBgOpacity > 0.02));
+      const bgColor = p.textBoxBgColor || '#090d16';
+      const bgOpacity = p.textBoxBgOpacity !== undefined ? p.textBoxBgOpacity : 0.55;
+      const bgBlur = p.textBoxBgBlur !== undefined ? p.textBoxBgBlur : 4.0;
       const borderW = p.borderStrokeWidth || 2.4;
 
-      if (ann._badgeElements) {
-        Object.values(ann._badgeElements).forEach(el => { if (el && el.remove) el.remove(); });
-        ann._badgeElements = null;
-      }
+      const glowMode = p.textGlowMode || 'match';
+      const useNeonText = (glowMode === 'neon') || (glowMode === 'match' && isNeon);
+      const useShadowText = (glowMode === 'shadow') || (glowMode === 'match' && !isNeon);
+      const useHalo = Boolean((p.textReadabilityHalo === true) || glowMode === 'halo');
+      const glowSpread = p.textGlowSpread !== undefined ? p.textGlowSpread : 3.5;
+      const glowOpacity = p.textGlowOpacity !== undefined ? p.textGlowOpacity : 0.92;
+      const textFill = useNeonText ? coreTint : col;
+      const curveGlowPad = p.curveGlowWidth !== undefined ? p.curveGlowWidth : 10.0;
 
       const bD = `M ${ann.x} ${ann.y} L ${ann.x} ${ann.y + boxH} L ${ann.x + boxW} ${ann.y + boxH}`;
       const badgeElementsMap = {};
 
-      // 1. Shadow Layer: Classic drop shadow
-      if (!isNeon) {
-        const shadowG = makeElement('svg:g', {
-          transform: 'translate(2, 2)',
-          style: { pointerEvents: 'none' }
-        });
-        shadowG.appendChild(makeElement('svg:path', {
-          d: bD, fill: 'none', stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': String(borderW + 2.0), 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
-        }));
-        const txtShadow = makeElement('svg:text', {
-          x: ann.x + padX, y: ann.y + padY + fontS * 0.88, fill: 'rgba(10, 15, 25, 0.95)',
-          'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold'
-        });
-        bounds.lines.forEach((l, i) => {
-          txtShadow.appendChild(makeElement('svg:tspan', {
-            x: ann.x + padX, dy: i === 0 ? '0' : `${bounds.lineHeight}px`
-          }, l));
-        });
-        shadowG.appendChild(txtShadow);
-
+      if (useShadowText) {
+        const shadowG = makeElement('svg:g', { transform: 'translate(2, 2)', style: { pointerEvents: 'none' } });
+        if (boxStyle === 'bracket') {
+          shadowG.appendChild(makeElement('svg:path', {
+            d: bD, fill: 'none', stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': String(borderW + 2.0), 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+          }));
+        } else if (boxStyle === 'box' || boxStyle === 'pill') {
+          shadowG.appendChild(makeElement('svg:rect', {
+            x: ann.x, y: ann.y, width: boxW, height: boxH, rx: boxStyle === 'pill' ? '18' : '5',
+            fill: 'none', stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': String(borderW + 2.0)
+          }));
+        }
+        if (!isEditing) {
+          const txtShadow = makeElement('svg:text', {
+            x: ann.x + padX, y: ann.y + padY + fontS * 0.88, fill: 'rgba(10, 15, 25, 0.92)',
+            'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold'
+          });
+          bounds.lines.forEach((l, i) => {
+            txtShadow.appendChild(makeElement('svg:tspan', { x: ann.x + padX, dy: i === 0 ? '0' : `${bounds.lineHeight}px` }, l));
+          });
+          shadowG.appendChild(txtShadow);
+        }
         this.component.shadowLayer.appendChild(shadowG);
         badgeElementsMap.shadow = shadowG;
       }
 
-      // 2. Glow Layer: Neon Gaussian glow
-      if (isNeon) {
-        const glowG = makeElement('svg:g', {
-          style: { pointerEvents: 'none', opacity: String(p.textGlowOpacity || 0.95) }
-        });
-        glowG.appendChild(makeElement('svg:path', {
-          d: bD, fill: 'none', stroke: col, 'stroke-width': String(borderW + 6.0), 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-          style: { filter: 'url(#qa-neon-glow)' }
-        }));
-        const txtGlow = makeElement('svg:text', {
-          x: ann.x + padX, y: ann.y + padY + fontS * 0.88, fill: col, stroke: col, 'stroke-width': '2.8',
-          'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold',
-          style: { filter: 'url(#qa-text-glow)' }
-        });
-        bounds.lines.forEach((l, i) => {
-          txtGlow.appendChild(makeElement('svg:tspan', {
-            x: ann.x + padX, dy: i === 0 ? '0' : `${bounds.lineHeight}px`
-          }, l));
-        });
-        glowG.appendChild(txtGlow);
-
+      if (useNeonText) {
+        const glowG = makeElement('svg:g', { style: { pointerEvents: 'none', opacity: String(glowOpacity) } });
+        if (boxStyle === 'bracket') {
+          glowG.appendChild(makeElement('svg:path', {
+            d: bD, fill: 'none', stroke: col, 'stroke-width': String(borderW + curveGlowPad), 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+            style: { filter: 'url(#qa-neon-glow)' }
+          }));
+        } else if (boxStyle === 'box' || boxStyle === 'pill') {
+          glowG.appendChild(makeElement('svg:rect', {
+            x: ann.x, y: ann.y, width: boxW, height: boxH, rx: boxStyle === 'pill' ? '18' : '5',
+            fill: 'none', stroke: col, 'stroke-width': String(borderW + curveGlowPad), style: { filter: 'url(#qa-neon-glow)' }
+          }));
+        }
+        if (!isEditing) {
+          const txtGlow = makeElement('svg:text', {
+            x: ann.x + padX, y: ann.y + padY + fontS * 0.88, fill: col,
+            stroke: glowSpread > 0 ? col : 'none', 'stroke-width': String(glowSpread), 'stroke-linejoin': 'round',
+            'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold',
+            style: { filter: 'url(#qa-text-glow)' }
+          });
+          bounds.lines.forEach((l, i) => {
+            txtGlow.appendChild(makeElement('svg:tspan', { x: ann.x + padX, dy: i === 0 ? '0' : `${bounds.lineHeight}px` }, l));
+          });
+          glowG.appendChild(txtGlow);
+        }
         this.component.glowLayer.appendChild(glowG);
         badgeElementsMap.glow = glowG;
       }
 
-      // 3. Foreground Layer
       const g = makeElement('svg:g', {
         id: `badge-${ann.id}`,
         className: 'qa-movable-text-badge',
         style: { cursor: 'move', userSelect: 'none' },
-        ondblclick: (e) => {
-          e.stopPropagation();
-          this.promptInlineTailText(ann, [ann.x, ann.y], 'left');
-        }
+        title: 'Click to edit text • Drag to move'
       });
 
-      if (isSelected) {
+      if (showBackdrop) {
+        g.appendChild(makeElement('svg:rect', {
+          x: ann.x - 3, y: ann.y - 2, width: boxW + 6, height: boxH + 4, rx: boxStyle === 'pill' ? '20' : '8',
+          fill: bgColor, 'fill-opacity': String(bgOpacity), stroke: 'none',
+          ...(bgBlur > 0 ? { style: { filter: 'url(#qa-text-bg-blur)', pointerEvents: 'none' } } : { style: { pointerEvents: 'none' } })
+        }));
+      }
+
+      g.appendChild(makeElement('svg:rect', {
+        x: ann.x, y: ann.y, width: boxW, height: boxH, rx: boxStyle === 'pill' ? '18' : '5',
+        fill: 'rgba(255, 255, 255, 0.001)', stroke: 'none'
+      }));
+
+      if (isSelected && !isEditing) {
         g.appendChild(makeElement('svg:rect', {
           x: ann.x - 3, y: ann.y - 3, width: boxW + 6, height: boxH + 6, rx: '6',
           fill: 'none', stroke: '#00f2fe', 'stroke-width': '1.5', 'stroke-dasharray': '3,3',
@@ -641,62 +789,78 @@ class QuoraTextManager {
         }));
       }
 
-      if (showBackdrop && bgOpacity > 0.02) {
+      if (boxStyle === 'bracket') {
+        g.appendChild(makeElement('svg:path', {
+          d: bD, fill: 'none', stroke: textFill, 'stroke-width': String(borderW),
+          'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+          ...(useNeonText ? { style: { filter: 'url(#qa-neon-core)' } } : {})
+        }));
+      } else if (boxStyle === 'box' || boxStyle === 'pill') {
         g.appendChild(makeElement('svg:rect', {
-          x: ann.x, y: ann.y, width: boxW, height: boxH, rx: '4',
-          fill: `rgba(9, 13, 22, ${bgOpacity})`, stroke: 'none',
-          style: { pointerEvents: 'none' }
+          x: ann.x, y: ann.y, width: boxW, height: boxH, rx: boxStyle === 'pill' ? '18' : '5',
+          fill: 'none', stroke: textFill, 'stroke-width': String(borderW),
+          ...(useNeonText ? { style: { filter: 'url(#qa-neon-core)' } } : {})
         }));
       }
 
-      g.appendChild(makeElement('svg:path', {
-        d: bD, fill: 'none', stroke: isNeon ? coreTint : col, 'stroke-width': String(borderW),
-        'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-        style: isNeon ? { filter: 'url(#qa-neon-core)' } : {}
-      }));
+      if (!isEditing) {
+        if (useHalo) {
+          const txtHalo = makeElement('svg:text', {
+            x: ann.x + padX, y: ann.y + padY + fontS * 0.88,
+            fill: 'rgba(7, 10, 19, 0.90)', stroke: 'rgba(7, 10, 19, 0.90)', 'stroke-width': '2.8',
+            'stroke-linejoin': 'round', 'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold',
+            style: { pointerEvents: 'none' }
+          });
+          bounds.lines.forEach((l, i) => {
+            txtHalo.appendChild(makeElement('svg:tspan', { x: ann.x + padX, dy: i === 0 ? '0' : `${bounds.lineHeight}px` }, l));
+          });
+          g.appendChild(txtHalo);
+        }
 
-      const txt = makeElement('svg:text', {
-        x: ann.x + padX, y: ann.y + padY + fontS * 0.88, fill: isNeon ? coreTint : col,
-        'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold',
-        style: isNeon ? { filter: 'url(#qa-neon-core)' } : {}
-      });
-
-      bounds.lines.forEach((l, i) => {
-        txt.appendChild(makeElement('svg:tspan', {
-          x: ann.x + padX, dy: i === 0 ? '0' : `${bounds.lineHeight}px`
-        }, l));
-      });
-      g.appendChild(txt);
+        const txt = makeElement('svg:text', {
+          x: ann.x + padX, y: ann.y + padY + fontS * 0.88, fill: textFill,
+          'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold',
+          ...(useNeonText ? { style: { filter: 'url(#qa-neon-core)' } } : {})
+        });
+        bounds.lines.forEach((l, i) => {
+          txt.appendChild(makeElement('svg:tspan', { x: ann.x + padX, dy: i === 0 ? '0' : `${bounds.lineHeight}px` }, l));
+        });
+        g.appendChild(txt);
+      }
 
       let isDrag = false;
+      let didDrag = false;
       let sX = 0, sY = 0;
       let initialX = ann.x, initialY = ann.y;
 
       g.addEventListener('mousedown', (e) => {
         if (e.button === 2) return;
+        e.preventDefault();
         e.stopPropagation();
         this.component.selectItem(ann);
         isDrag = true;
+        didDrag = false;
         sX = e.clientX; sY = e.clientY;
         initialX = ann.x; initialY = ann.y;
 
         const onM = (ev) => {
           if (!isDrag) return;
-          const z = stageState.zoom || 1.0;
-          const dx = (ev.clientX - sX) / z;
-          const dy = (ev.clientY - sY) / z;
-          ann.x = Math.round(initialX + dx);
-          ann.y = Math.round(initialY + dy);
-          this.component.renderStage();
+          if (Math.hypot(ev.clientX - sX, ev.clientY - sY) > 4) {
+            didDrag = true;
+            window.getSelection()?.removeAllRanges();
+            const z = stageState.zoom || 1.0;
+            ann.x = Math.round(initialX + (ev.clientX - sX) / z);
+            ann.y = Math.round(initialY + (ev.clientY - sY) / z);
+            this.component.renderStage();
+          }
         };
-
         const onU = () => {
           isDrag = false;
           window.removeEventListener('mousemove', onM);
           window.removeEventListener('mouseup', onU);
-          this.component.renderStage();
+          if (!didDrag) this.promptInlineTailText(ann, [ann.x, ann.y], 'left');
+          else this.component.renderStage();
         };
-
         window.addEventListener('mousemove', onM);
         window.addEventListener('mouseup', onU);
       });
@@ -927,6 +1091,7 @@ class QuoraTextManager {
         angleDeg
       };
     }
+
   measureTextBounds(text, fontSize = 20, fontFamily = "'Architects Daughter', cursive, sans-serif") {
       if (!this._measureCanvas) {
         this._measureCanvas = document.createElement('canvas');
@@ -936,12 +1101,12 @@ class QuoraTextManager {
       ctx.font = `bold ${fontSize}px ${fontFamily}`;
 
       const rawStr = String(text || '').trim();
+      const lineHeight = Math.round(fontSize * 1.25);
       if (!rawStr) {
-        return { lines: [''], maxW: 60, totalH: Math.round(fontSize * 1.25) };
+        return { lines: [''], maxW: 60, totalH: lineHeight, lineHeight };
       }
 
-      // Dynamic column wrap: long text wraps at 240px, short text fits naturally
-      const targetColW = 240;
+      const targetColW = 260;
       const paragraphs = rawStr.split('\n');
       const lines = [];
 
@@ -973,9 +1138,7 @@ class QuoraTextManager {
         if (w > maxW) maxW = w;
       });
 
-      const lineHeight = Math.round(fontSize * 1.25);
       const totalH = Math.max(lineHeight, lines.length * lineHeight);
-
       return { lines, maxW, totalH, lineHeight };
     }
 }

@@ -15,15 +15,9 @@ class QuoraKnotManager {
       stageState.hasArrow = (curveRecord.arrowEnd && curveRecord.arrowEnd !== 'none');
 
       this.component.updatePaletteHighlight();
-      if (this.component.widthBtn) this.component.widthBtn.textContent = `Width: ${curveRecord.strokeWidth || 3.2}px`;
-      if (this.component.lineStyleBtn) this.component.lineStyleBtn.textContent = (curveRecord.lineStyle === 'neon') ? '💡 Neon' : '🖋️ Classic';
-      if (this.component.arrowBtn) {
-        this.component.arrowBtn.classList.toggle('primary', stageState.hasArrow);
-        const labels = { 'none': '🏹 Arrow: OFF', 'tip': '🏹 Arrow: TIP', 'tail': '🏹 Arrow: TAIL', 'both': '🏹 Arrow: BOTH' };
-        this.component.arrowBtn.textContent = labels[curveRecord.arrowEnd || 'none'] || '🏹 Arrow: TIP';
-      }
+      if (this.component.widthValueLbl) this.component.widthValueLbl.textContent = `${curveRecord.strokeWidth || 3.2}px`;
       if (this.component.loopBtn) {
-        this.component.loopBtn.textContent = curveRecord.isClosed ? '🔄 Loop: CLOSED' : '🔄 Loop: OPEN';
+        this.component.loopBtn.textContent = curveRecord.isClosed ? '● Loop' : '○ Loop';
         this.component.loopBtn.classList.toggle('primary', !!curveRecord.isClosed);
       }
 
@@ -31,9 +25,7 @@ class QuoraKnotManager {
       const invScale = 1 / z;
       const vertices = curveRecord.vertices;
 
-      if (!this.component._selectedKnotIndices) {
-        this.component._selectedKnotIndices = new Set();
-      }
+      if (!this.component._selectedKnotIndices) this.component._selectedKnotIndices = new Set();
       if (this.component._activeKnotIdx !== null && this.component._selectedKnotIndices.size === 0) {
         this.component._selectedKnotIndices.add(this.component._activeKnotIdx);
       }
@@ -50,7 +42,7 @@ class QuoraKnotManager {
         const fatTarget = makeElement('svg:circle', {
           cx: v.point[0], cy: v.point[1], r: hitRadius, fill: 'transparent',
           style: { cursor: 'move', pointerEvents: 'all' },
-          title: isCusp ? '⚡ Cusp point (Sharp Corner) • Right-click for menu' : 'Click to drag point • Right-click for actions'
+          title: isCusp ? '⚡ Cusp point • Right-click for menu' : 'Click to drag point • Right-click for actions'
         });
 
         let nodeMarker;
@@ -72,7 +64,7 @@ class QuoraKnotManager {
             stroke: isDeleteTarget ? '#ffffff' : (isSelected ? '#00f2fe' : '#ffd700'),
             'stroke-width': String((isSelected ? 2.5 : 1.5) * invScale),
             className: 'qa-on-curve-knot-handle',
-            style: { pointerEvents: 'none', filter: isDeleteTarget ? 'drop-shadow(0 0 6px #f59e0b)' : (isSelected ? 'drop-shadow(0 0 8px #00f2fe)' : 'none') }
+            style: { pointerEvents: 'none' }
           });
         } else {
           nodeMarker = makeElement('svg:circle', {
@@ -80,17 +72,14 @@ class QuoraKnotManager {
             fill: isDeleteTarget ? '#f59e0b' : (isSelected ? '#00f2fe' : '#00e676'),
             stroke: '#ffffff', 'stroke-width': String((isSelected ? 2.2 : 1.2) * invScale),
             className: 'qa-on-curve-knot-handle',
-            style: { pointerEvents: 'none', filter: isDeleteTarget ? 'drop-shadow(0 0 8px #f59e0b)' : (isSelected ? 'drop-shadow(0 0 10px #00f2fe)' : 'none') }
+            style: { pointerEvents: 'none' }
           });
         }
 
         if (isEndpoint) {
           fatTarget.addEventListener('mouseenter', () => {
             if (this._isDraggingKnot || this._isDraggingRay || this.component.isInteracting()) return;
-            if (this._endpointRayHideTimer) {
-              clearTimeout(this._endpointRayHideTimer);
-              this._endpointRayHideTimer = null;
-            }
+            if (this._endpointRayHideTimer) { clearTimeout(this._endpointRayHideTimer); this._endpointRayHideTimer = null; }
             this.component._activeKnotIdx = idx;
             this.renderOutboundTangentRay(curveRecord, idx, controlsLayer, stageState);
           });
@@ -122,12 +111,7 @@ class QuoraKnotManager {
           if (!dragging) return;
           dragging = false;
           this._isDraggingKnot = false;
-
-          if (ghostCurveEl) {
-            ghostCurveEl.remove();
-            ghostCurveEl = null;
-          }
-
+          if (ghostCurveEl) { ghostCurveEl.remove(); ghostCurveEl = null; }
           window.removeEventListener('mousemove', onDrag);
           window.removeEventListener('mouseup', onUp);
           window.removeEventListener('keydown', onKeyDownCancel);
@@ -145,9 +129,7 @@ class QuoraKnotManager {
               return vObj;
             });
           }
-          if (origBeziers) {
-            curveRecord.beziers = JSON.parse(JSON.stringify(origBeziers));
-          }
+          if (origBeziers) curveRecord.beziers = JSON.parse(JSON.stringify(origBeziers));
 
           this.component.commitCurveGeometryUpdate();
           this.exposeHandles(curveRecord, controlsLayer, stageState);
@@ -155,16 +137,10 @@ class QuoraKnotManager {
         };
 
         const onKeyDownCancel = (ev) => {
-          if (ev.key === 'Escape') {
-            ev.preventDefault();
-            cancelAndRevertDrag();
-          }
+          if (ev.key === 'Escape') { ev.preventDefault(); cancelAndRevertDrag(); }
         };
-
         const onContextMenuCancel = (ev) => {
-          ev.preventDefault();
-          ev.stopPropagation();
-          cancelAndRevertDrag();
+          ev.preventDefault(); ev.stopPropagation(); cancelAndRevertDrag();
         };
 
         fatTarget.addEventListener('mousedown', (e) => {
@@ -172,16 +148,11 @@ class QuoraKnotManager {
           e.stopPropagation();
 
           if (e.shiftKey) {
-            if (this.component._selectedKnotIndices.has(idx)) {
-              this.component._selectedKnotIndices.delete(idx);
-            } else {
-              this.component._selectedKnotIndices.add(idx);
-            }
-          } else {
-            if (!this.component._selectedKnotIndices.has(idx)) {
-              this.component._selectedKnotIndices.clear();
-              this.component._selectedKnotIndices.add(idx);
-            }
+            if (this.component._selectedKnotIndices.has(idx)) this.component._selectedKnotIndices.delete(idx);
+            else this.component._selectedKnotIndices.add(idx);
+          } else if (!this.component._selectedKnotIndices.has(idx)) {
+            this.component._selectedKnotIndices.clear();
+            this.component._selectedKnotIndices.add(idx);
           }
 
           this.component._activeKnotIdx = idx;
@@ -192,7 +163,8 @@ class QuoraKnotManager {
           const oldRay = document.getElementById('qa-outbound-tangent-ray');
           if (oldRay) oldRay.remove();
 
-          if (!v.isExplicitTangent && !v.isCusp) {
+          // Preserve fitted arch on 2-knot curves; relax dragged knot naturally on 3+ knot curves
+          if (vertices.length >= 3 && !v.isExplicitTangent && !v.isCusp) {
             v.tangentAngleOffset = 0;
             v.curvature = 1.0;
             v.balance = 1.0;
@@ -213,7 +185,7 @@ class QuoraKnotManager {
           if (curveRecord.beziers && curveRecord.beziers.length > 0) {
             currentPathD = 'M ' + curveRecord.beziers[0][0].join(' ');
             for (let bIdx = 0; bIdx < curveRecord.beziers.length; bIdx++) {
-              const [bStart, cp1, cp2, bEnd] = curveRecord.beziers[bIdx];
+              const [, cp1, cp2, bEnd] = curveRecord.beziers[bIdx];
               currentPathD += ` C ${cp1.join(' ')}, ${cp2.join(' ')}, ${bEnd.join(' ')}`;
             }
           }
@@ -222,13 +194,9 @@ class QuoraKnotManager {
           if (existingGhost) existingGhost.remove();
 
           ghostCurveEl = makeElement('svg:path', {
-            id: 'qa-drag-ghost-curve',
-            d: currentPathD,
-            fill: 'none',
-            stroke: 'rgba(0, 242, 254, 0.35)',
-            'stroke-width': String(7 * invScale),
-            'stroke-linecap': 'round',
-            'stroke-linejoin': 'round',
+            id: 'qa-drag-ghost-curve', d: currentPathD, fill: 'none',
+            stroke: 'rgba(0, 242, 254, 0.35)', 'stroke-width': String(7 * invScale),
+            'stroke-linecap': 'round', 'stroke-linejoin': 'round',
             style: { pointerEvents: 'none', filter: 'drop-shadow(0 0 6px rgba(0, 242, 254, 0.45))' }
           });
           this.component.glowLayer.appendChild(ghostCurveEl);
@@ -241,7 +209,6 @@ class QuoraKnotManager {
 
           const startClientX = e.clientX;
           const startClientY = e.clientY;
-
           window.addEventListener('keydown', onKeyDownCancel);
           window.addEventListener('contextmenu', onContextMenuCancel, true);
 
@@ -258,24 +225,17 @@ class QuoraKnotManager {
                 kv.point[1] = Math.round(origPt[1] + dy);
               }
             });
-
             this.component.commitCurveGeometryUpdate();
           };
 
           const onUp = () => {
             dragging = false;
             this._isDraggingKnot = false;
-
-            if (ghostCurveEl) {
-              ghostCurveEl.remove();
-              ghostCurveEl = null;
-            }
-
+            if (ghostCurveEl) { ghostCurveEl.remove(); ghostCurveEl = null; }
             window.removeEventListener('mousemove', onDrag);
             window.removeEventListener('mouseup', onUp);
             window.removeEventListener('keydown', onKeyDownCancel);
             window.removeEventListener('contextmenu', onContextMenuCancel, true);
-
             this.exposeHandles(curveRecord, controlsLayer, stageState);
             this.component.renderStage();
           };
@@ -705,14 +665,24 @@ class QuoraKnotManager {
 
       const knotNum = idx + 1;
       vertices.splice(idx, 1);
+
+      // Clear stale implicit offsets on newly adjacent knots so deleting a knot stays smooth
+      [idx - 1, idx].forEach(nIdx => {
+        const nv = vertices[nIdx];
+        if (nv && !nv.isExplicitTangent && !nv.isCusp) {
+          nv.tangentAngleOffset = 0;
+          nv.curvature = 1.0;
+          nv.balance = 1.0;
+        }
+      });
+
       this.component._activeKnotIdx = Math.max(0, Math.min(idx, vertices.length - 1));
       this.component.commitCurveGeometryUpdate();
       this.exposeHandles(curveRecord, controlsLayer, stageState);
       this.component.showKnotToast(`🗑️ Deleted knot #${knotNum} (${vertices.length} remaining)`);
       this.component.updateDynamicKeyInHUD();
       return true;
-  }
-
+    }
   updateHoveredDeleteTarget(mousePt) {
       const curve = this.component.getActiveCurve();
       if (!curve || !curve.vertices || curve.vertices.length === 0) {
@@ -741,106 +711,89 @@ class QuoraKnotManager {
   }
 
   updateDynamicMidpointCandidate(curveRecord, controlsLayer, stageState) {
-    controlsLayer.querySelectorAll('.qa-segment-midpoint-group').forEach(el => el.remove());
-
-    // STRICT SUPPRESSION: Never show virtual divider points if moving or in non-pick situations
-    if (
-      !curveRecord ||
-      !curveRecord.beziers ||
-      this._isDraggingKnot ||
-      this._isDraggingRay ||
-      this.component._isDrawingActive ||
-      this.component.isInteracting() ||
-      stageState.selectedItem !== curveRecord
-    ) {
-      return;
-    }
-
-    const mousePt = this.component._lastStageMousePt;
-    if (!mousePt) return;
-
-    let closestSegIdx = -1;
-    let minDistance = 45; // Must be within 45px proximity to candidate segment
-    let closestMidPt = null;
-
-    curveRecord.beziers.forEach((seg, segIdx) => {
-      const mid = CurveFitter.bezier_q(seg, 0.5);
-      const d = Math.hypot(mid[0] - mousePt[0], mid[1] - mousePt[1]);
-      if (d < minDistance) {
-        minDistance = d;
-        closestSegIdx = segIdx;
-        closestMidPt = mid;
-      }
-    });
-
-    if (closestSegIdx === -1 || !closestMidPt) return;
-
-    const g = makeElement('svg:g', {
-      className: 'qa-segment-midpoint-group',
-      style: { cursor: 'pointer' },
-      title: `Click or drag to split segment ${closestSegIdx + 1} with a new knot`
-    });
-
-    const hitArea = makeElement('svg:circle', {
-      cx: closestMidPt[0], cy: closestMidPt[1], r: '14', fill: 'transparent'
-    });
-
-    const dot = makeElement('svg:circle', {
-      cx: closestMidPt[0], cy: closestMidPt[1], r: '4',
-      fill: '#f59e0b', stroke: '#ffffff', 'stroke-width': '1.2',
-      style: { filter: 'drop-shadow(0 0 6px #f59e0b)', pointerEvents: 'none' }
-    });
-
-    let isDraggingMid = false;
-    let newKnot = null;
-
-    g.addEventListener('mousedown', (e) => {
-      e.stopPropagation();
-      isDraggingMid = true;
-
       controlsLayer.querySelectorAll('.qa-segment-midpoint-group').forEach(el => el.remove());
 
-      if (!curveRecord.vertices || curveRecord.vertices.length === 0) {
-        curveRecord.vertices = this.component.beziersToVertices(curveRecord.beziers);
+      if (
+        !curveRecord ||
+        !curveRecord.beziers ||
+        this._isDraggingKnot ||
+        this._isDraggingRay ||
+        this.component._isDrawingActive ||
+        this.component.isInteracting() ||
+        stageState.selectedItem !== curveRecord
+      ) {
+        return;
       }
 
-      newKnot = new BezierVertex([closestMidPt[0], closestMidPt[1]]);
-      newKnot.curvature = 1.0;
-      newKnot.balance = 1.0;
-      newKnot.tangentAngleOffset = 0;
+      const mousePt = this.component._lastStageMousePt;
+      if (!mousePt) return;
 
-      curveRecord.vertices.splice(closestSegIdx + 1, 0, newKnot);
-      this.component._activeKnotIdx = closestSegIdx + 1;
+      let closestSegIdx = -1;
+      let minDistance = 45;
+      let closestMidPt = null;
 
-      this.component.commitCurveGeometryUpdate();
-      this.exposeHandles(curveRecord, controlsLayer, stageState);
+      curveRecord.beziers.forEach((seg, segIdx) => {
+        const mid = CurveFitter.bezier_q(seg, 0.5);
+        const d = Math.hypot(mid[0] - mousePt[0], mid[1] - mousePt[1]);
+        if (d < minDistance) {
+          minDistance = d;
+          closestSegIdx = segIdx;
+          closestMidPt = mid;
+        }
+      });
 
-      const onMidDrag = (ev) => {
-        if (!isDraggingMid) return;
-        const rect = this.component.stageBox.getBoundingClientRect();
-        const z = stageState.zoom || 1.0;
-        newKnot.point[0] = (ev.clientX - rect.left) / z;
-        newKnot.point[1] = (ev.clientY - rect.top) / z;
-        this.component.commitCurveGeometryUpdate();
-        this.exposeHandles(curveRecord, controlsLayer, stageState);
-      };
+      if (closestSegIdx === -1 || !closestMidPt) return;
 
-      const onMidUp = () => {
-        isDraggingMid = false;
-        window.removeEventListener('mousemove', onMidDrag);
-        window.removeEventListener('mouseup', onMidUp);
-        this.exposeHandles(curveRecord, controlsLayer, stageState);
-        this.component.showKnotToast(`✓ Inserted knot #${closestSegIdx + 2}`);
-      };
+      const g = makeElement('svg:g', {
+        className: 'qa-segment-midpoint-group',
+        style: { cursor: 'pointer' },
+        title: `Click or drag to split segment ${closestSegIdx + 1}`
+      });
 
-      window.addEventListener('mousemove', onMidDrag);
-      window.addEventListener('mouseup', onMidUp);
-    });
+      const hitArea = makeElement('svg:circle', {
+        cx: closestMidPt[0], cy: closestMidPt[1], r: '14', fill: 'transparent'
+      });
+      const dot = makeElement('svg:circle', {
+        cx: closestMidPt[0], cy: closestMidPt[1], r: '4',
+        fill: '#f59e0b', stroke: '#ffffff', 'stroke-width': '1.2',
+        style: { filter: 'drop-shadow(0 0 6px #f59e0b)', pointerEvents: 'none' }
+      });
 
-    g.append(hitArea, dot);
-    controlsLayer.appendChild(g);
-  }
+      let isDraggingMid = false;
 
+      g.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        isDraggingMid = true;
+        controlsLayer.querySelectorAll('.qa-segment-midpoint-group').forEach(el => el.remove());
+
+        this.component.strokeManager.addKnotOnCurve(curveRecord, closestSegIdx, 0.5);
+        const insertedIdx = closestSegIdx + 1;
+        const newKnot = curveRecord.vertices[insertedIdx];
+
+        const onMidDrag = (ev) => {
+          if (!isDraggingMid || !newKnot) return;
+          const rect = this.component.stageBox.getBoundingClientRect();
+          const z = stageState.zoom || 1.0;
+          newKnot.point[0] = Math.round((ev.clientX - rect.left) / z);
+          newKnot.point[1] = Math.round((ev.clientY - rect.top) / z);
+          this.component.commitCurveGeometryUpdate();
+          this.exposeHandles(curveRecord, controlsLayer, stageState);
+        };
+
+        const onMidUp = () => {
+          isDraggingMid = false;
+          window.removeEventListener('mousemove', onMidDrag);
+          window.removeEventListener('mouseup', onMidUp);
+          this.exposeHandles(curveRecord, controlsLayer, stageState);
+        };
+
+        window.addEventListener('mousemove', onMidDrag);
+        window.addEventListener('mouseup', onMidUp);
+      });
+
+      g.append(hitArea, dot);
+      controlsLayer.appendChild(g);
+    }
   showKnotContextMenu(curveRecord, knotIdx, screenX, screenY) {
       const existing = document.getElementById('qa-knot-context-menu');
       if (existing) existing.remove();

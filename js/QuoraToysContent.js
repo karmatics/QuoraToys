@@ -74,41 +74,42 @@ class QuoraAnnotationContent {
   }
 
   static manifest() {
-    return [
-      {
-        section: 'annotation_studio',
-        partLabel: 'Chapter 1 • Live Studio',
-        title: 'Interactive Annotation & Vector Canvas',
-        blocks: [
-          { id: 'comp_annotation', type: 'component', component: 'QuoraAnnotationComponent' }
-        ]
-      },
-      {
-        section: 'unified_recon',
-        partLabel: 'Chapter 1 • System Evolution',
-        title: 'The Unified Hybrid Pen & Ambient Canvas Architecture',
-        blocks: [
-          { id: 'p_hybrid_pen_intro', type: 'p' },
-          { id: 'sidebar_hybrid_pen_mechanics', type: 'sidebar', kicker: 'Unified Input', title: 'Seamless Click-to-Point vs. Drag-to-Drawstring' },
-          { id: 'p_pause_clutch_handrest', type: 'p' },
-          { id: 'sidebar_pause_clutch', type: 'sidebar', kicker: 'Control Key Clutch', title: 'Resting Hand & String Radius Tuning' },
-          { id: 'p_self_annotating_help', type: 'p' },
-          { id: 'sidebar_meta_help', type: 'sidebar', kicker: 'Meta-UI', title: 'Interactive Help with Native Vector Annotations' },
-          { id: 'sidebar_recon_decisions', type: 'sidebar', kicker: 'Forward Design', title: 'Ambient Canvas & Forward Roadmap' }
-        ]
-      },
-      {
-        section: 'annotation_techniques',
-        partLabel: 'Chapter 1 • Mathematical Engine',
-        title: 'Kinetic Drag-Lead & On-Curve Knot Relaxation',
-        blocks: [
-          { id: 'p_annot_intro_1', type: 'p' },
-          { id: 'sidebar_annot_features', type: 'sidebar', kicker: 'Ergonomics', title: 'Why Drawing in QuoraToys Feels Natural' }
-        ]
-      }
-    ];
-  }
-
+      return [
+        {
+          section: 'annotation_studio',
+          partLabel: 'Chapter 1 • Live Studio',
+          title: 'Interactive Annotation & Vector Canvas',
+          blocks: [
+            { id: 'comp_annotation', type: 'component', component: 'QuoraAnnotationComponent' }
+          ]
+        },
+        {
+          section: 'unified_recon',
+          partLabel: 'Chapter 1 • System Evolution',
+          title: 'The Unified Hybrid Pen & Ambient Canvas Architecture',
+          blocks: [
+            { id: 'p_living_plan_update', type: 'p' },
+            { id: 'sidebar_living_plan_roadmap', type: 'sidebar', kicker: 'Iteration Plan', title: 'Text, Glow, HUD & Export Architecture' },
+            { id: 'p_hybrid_pen_intro', type: 'p' },
+            { id: 'sidebar_hybrid_pen_mechanics', type: 'sidebar', kicker: 'Unified Input', title: 'Seamless Click-to-Point vs. Drag-to-Drawstring' },
+            { id: 'p_pause_clutch_handrest', type: 'p' },
+            { id: 'sidebar_pause_clutch', type: 'sidebar', kicker: 'Control Key Clutch', title: 'Resting Hand & String Radius Tuning' },
+            { id: 'p_self_annotating_help', type: 'p' },
+            { id: 'sidebar_meta_help', type: 'sidebar', kicker: 'Meta-UI', title: 'Interactive Help with Native Vector Annotations' },
+            { id: 'sidebar_recon_decisions', type: 'sidebar', kicker: 'Forward Design', title: 'Ambient Canvas & Forward Roadmap' }
+          ]
+        },
+        {
+          section: 'annotation_techniques',
+          partLabel: 'Chapter 1 • Mathematical Engine',
+          title: 'Kinetic Drag-Lead & On-Curve Knot Relaxation',
+          blocks: [
+            { id: 'p_annot_intro_1', type: 'p' },
+            { id: 'sidebar_annot_features', type: 'sidebar', kicker: 'Ergonomics', title: 'Why Drawing in QuoraToys Feels Natural' }
+          ]
+        }
+      ];
+    }
   static p_hybrid_pen_intro() {
     return [
       "In the unified ambient canvas, modal tool switching is completely eliminated. When the pen touches the canvas at $P_0$, a subtle circular deadzone radius ($R = 32\\text{px}$) appears with a fat white point indicator.",
@@ -201,6 +202,24 @@ class QuoraAnnotationContent {
         "1. **The Kinetic String-Tether (Virtual Drag-Lead):** Involuntary physiological tremors in the human hand cause jagged wobbles when using a mouse or trackpad. QuoraToys attaches a virtual 32px elastic lead between your cursor and the pen tip. Tremors are absorbed at the source, letting anyone pull sweeping, elegant calligraphy arcs with zero effort.",
         "2. **Direct 'Rubber-Wire' Reshaping:** In Illustrator, modifying a curve requires switching to the direct selection tool, clicking an anchor, and hunting for tiny handle dots. In QuoraToys, you simply grab the curve itself with your mouse and pull. The wire bends right through your cursor, dynamically placing an on-curve knot that keeps the curve smooth.",
         "3. **Instant Draw-and-Type Acceleration:** The instant a curve ends, an architectural dashed bracket shelf (`✎ Type note...`) appears at the tail. Typing any character immediately typesets your message in Architect's Daughter font with a 2-sided bracket. If you don't type anything, the ghost shelf vanishes completely."
+      ];
+    }
+
+  static p_living_plan_update() {
+      return [
+        "The annotation workflow follows a low-friction interaction model: clicking a curve or its subtle pale `Note…` box immediately focuses inline text editing, while pressing `Escape` commits the text and drops into Curve Command Mode (`A` arrow, `X` flip, `L` loop, `S` line, `Del` delete, Arrow keys to nudge, `Alt+Arrow` to cycle focus).",
+        "Typography and glow optics are decoupled for legibility: a crisp dark outline halo sits behind glowing strokes so colored text stays sharp over busy images, and all controls in the ribbon use explicit multi-option pills (`Ink | Neon`, `Off | Tip | Tail | Both`) rather than hidden single-button toggles."
+      ];
+    }
+
+  static sidebar_living_plan_roadmap() {
+      return [
+        "Living Iteration Plan & Implemented Milestones:\n" +
+        "• Explicit Ribbon UI: Segmented selectors for Style (`Ink | Neon`), Arrow (`Off | Tip | Tail | Both`), Text Size (`A- / A+`), and Stroke Width (`− / +`).\n" +
+        "• Subtle Pale-Box Editing: Matched DOM-to-SVG font metrics and line wrapping with `Escape` returning to keyboard command mode.\n" +
+        "• Readability-First Glow: Independent Text Glow Mode (`Neon | Halo | Shadow | None`), Dark Outline Halo, Blur, Spread, Opacity, and Core Saturation.\n" +
+        "• Custom Export Area (`📐 Export Area`): Draw and resize a custom export crop rectangle (or reset to tight auto-bounds) with preserved neon glow layers and Matte/Transparent PNG export.\n" +
+        "• Portable Settings Capture: `📋 Copy Settings` and `📥 Paste` export/import full JSON defaults."
       ];
     }
 }

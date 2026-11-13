@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QuoraToys & Studio — Architecture Audit & Mathematical Specification</title>
+  <title>QuoraToys &amp; Studio — Architecture Audit &amp; Living Specification</title>
   <link rel="stylesheet" href="css/basicsWithDialogBox.css">
   <style>
     body {
@@ -15,26 +15,18 @@
       margin: 0;
       display: flex;
       justify-content: center;
+      overflow-y: auto;
     }
-    .doc-container {
-      max-width: 900px;
-      width: 100%;
-    }
+    .doc-container { max-width: 900px; width: 100%; }
     h1, h2, h3, h4 { color: #f8fafc; font-family: monospace; }
-    h1 { font-size: 28px; color: #00f2fe; border-bottom: 2px solid #00f2fe; padding-bottom: 12px; margin-bottom: 24px; }
-    h2 { font-size: 20px; color: #ffd700; border-bottom: 1px solid #1e293b; padding-bottom: 8px; margin-top: 40px; }
-    h3 { font-size: 15px; color: #38bdf8; margin-top: 24px; }
+    h1 { font-size: 26px; color: #00f2fe; border-bottom: 2px solid #00f2fe; padding-bottom: 12px; margin-bottom: 24px; }
+    h2 { font-size: 19px; color: #ffd700; border-bottom: 1px solid #1e293b; padding-bottom: 8px; margin-top: 36px; }
     p, li { font-size: 13.5px; }
     code { background: rgba(0, 242, 254, 0.12); color: #00f2fe; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 12px; }
-    pre { background: #050811; border: 1px solid #1e293b; border-radius: 8px; padding: 14px; overflow-x: auto; color: #7ee787; font-size: 12px; }
     .card { background: rgba(15, 23, 42, 0.7); border: 1px solid #1e293b; border-radius: 10px; padding: 18px; margin: 18px 0; }
-    .card.warning { border-left: 4px solid #f59e0b; background: rgba(245, 158, 11, 0.05); }
     .card.success { border-left: 4px solid #10b981; background: rgba(16, 185, 129, 0.05); }
     .card.cyan { border-left: 4px solid #00f2fe; background: rgba(0, 242, 254, 0.05); }
     .card.purple { border-left: 4px solid #c084fc; background: rgba(192, 132, 252, 0.05); }
-    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 12.5px; }
-    th, td { border: 1px solid #1e293b; padding: 8px 12px; text-align: left; }
-    th { background: rgba(15, 23, 42, 0.95); color: #00f2fe; }
     .nav-bar { position: fixed; top: 0; left: 0; width: 100%; background: rgba(15, 23, 42, 0.95); border-bottom: 1px solid #1e293b; padding: 10px 24px; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; z-index: 100; font-family: monospace; }
     .nav-bar a { color: #00f2fe; text-decoration: none; font-weight: bold; font-size: 12px; }
   </style>
@@ -46,33 +38,35 @@
   </div>
 
   <div class="doc-container" style="margin-top: 40px;">
-    <h1>QuoraToys &amp; Studio: Comprehensive Architecture &amp; Living Specification</h1>
-    <p><em>Version 2.7.0 • Living Architecture &amp; Engineering Dossier</em></p>
+    <h1>QuoraToys &amp; Studio: Living Architecture &amp; Iteration Plan</h1>
+    <p><em>Version 2.9.2 • Living Engineering Specification</em></p>
 
     <div class="card cyan">
-      <strong>Core Purpose:</strong> Universal Graphic Studio for instantaneous visual analysis and annotations. Delivers mathematical curve smoothing, drawstring-tether tremor reduction, target-first directional arrowheads, widened 360° callout frames, live optics tuning sliders, and clean retina exports.
+      <strong>Core Purpose:</strong> Universal Graphic Studio for fast visual commentary. Combines kinetic drawstring curve smoothing, legible glowing callouts, subtle inline editing, explicit UI controls, and clean custom-bounded retina exports.
     </div>
 
-    <h2>1. Continuous 360° Callout Frame &amp; Wide Corner Geometry</h2>
+    <h2>1. Explicit Interface &amp; Portable Settings Plan</h2>
     <div class="card success">
-      <h4>Widened Dual-Edge Invariant ($15^\circ \to 75^\circ$):</h4>
-      <p>The callout bracket never displays two parallel edges. It displays either a single vertical edge, a single horizontal edge, or both perpendicular edges meeting at the arrival corner across a generous angular sector.</p>
       <ul>
-        <li><strong>Trajectory Vector:</strong> $\mathbf{v} = P_{\text{end}} - P_{\text{cp}}$, $\alpha = \operatorname{atan2}(v_y, v_x)$.</li>
-        <li><strong>Near Horizontal ($0^\circ \to 15^\circ$):</strong> Displays <em>only</em> the arrival vertical edge (Left or Right), connecting at $H/2$ for pure horizontal.</li>
-        <li><strong>Near Vertical ($75^\circ \to 90^\circ$):</strong> Displays <em>only</em> the arrival horizontal edge (Top or Bottom), connecting at $W/2$ for pure vertical.</li>
-        <li><strong>Wide Dual-Edge Zone ($15^\circ \to 75^\circ$):</strong> Both perpendicular edges display simultaneously as an L-bracket, meeting seamlessly at the corner with zero gap.</li>
-        <li><strong>Zero Gap Guarantee:</strong> $(p_x + c_x, p_y + c_y) = P_{\text{end}}$ holds everywhere along 360°.</li>
+        <li><strong>Zero Opaque Toggles:</strong> Segmented selectors display all options directly (<code>Style: Ink | Neon</code>, <code>Arrow: Off | Tip | Tail | Both</code>, <code>A- / px / A+</code>).</li>
+        <li><strong>Clipboard Settings Capture:</strong> In <em>✨ Style &amp; Settings</em>, <code>📋 Copy Settings</code> exports the active JSON defaults to clipboard and <code>📥 Paste</code> restores or shares presets immediately.</li>
       </ul>
     </div>
 
-    <h2>2. Vibrant Saturated Glow &amp; Independent Optics</h2>
+    <h2>2. Subtle Pale-Box Text Flow &amp; Readability Glow</h2>
     <div class="card purple">
-      <h4>Decoupling Text Glow from Curve Glow:</h4>
       <ul>
-        <li><strong>Rich Saturated Text Glow:</strong> Text glyphs maintain vibrant, authentic color instead of washing out to 88% pale white.</li>
-        <li><strong>Independent Filter Controls:</strong> Curve glow blur/width and text glow blur/saturation are adjustable independently.</li>
-        <li><strong>Floating Background Option:</strong> By default, callout text floats transparently with no dark bounding box. A backdrop opacity slider allows custom darkening when needed.</li>
+        <li><strong>Seamless Click-to-Type:</strong> Clicking a curve body (without dragging) or its compact pale <code>Note…</code> box focuses inline text immediately; metrics match the SVG output so wrapping remains consistent.</li>
+        <li><strong>Command Mode Escape:</strong> Pressing <code>Escape</code> commits text and returns to Curve Command Mode; <code>Arrow</code> keys nudge the active item and <code>Alt+Arrow</code> cycles focus across knots and annotations.</li>
+        <li><strong>Readability-First Glow:</strong> Separate controls for Text Glow Mode (<code>Neon | Halo | Shadow | None</code>), Dark Outline Halo, Glow Blur, Glow Spread, Glow Opacity, Core Saturation, and Backdrop Opacity prevent fuzzy illegible text.</li>
+      </ul>
+    </div>
+
+    <h2>3. Custom Export Boundary Rectangle &amp; Clean Export</h2>
+    <div class="card cyan">
+      <ul>
+        <li><strong>Tight Auto-Bounds vs. Custom Export Area:</strong> Exports tightly wrap content by default, or use <code>📐 Export Area</code> to drag and resize an explicit crop boundary with one-click <code>✕ Auto</code> reset.</li>
+        <li><strong>Full Glow Preservation:</strong> Export clones the SVG with explicit <code>xmlns</code>, <code>width</code>, <code>height</code>, and <code>viewBox</code> while preserving <code>glowLayer</code> and supporting both Matte and Transparent PNG output.</li>
       </ul>
     </div>
   </div>
