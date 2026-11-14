@@ -49,72 +49,27 @@ class QuoraImageManager {
   }
 
   computeBounds(stageState) {
-      const pad = stageState.padding || 45;
-      let minX = 0, minY = 0, maxX = 720, maxY = 420;
+        const pad = stageState.padding || 45;
+        const vpW = this.component?.viewport?.clientWidth || 0;
+        const vpH = this.component?.viewport?.clientHeight || 0;
+        const z = Math.max(0.1, stageState.zoom || 1.0);
+        const minStageW = Math.max(800, Math.ceil(vpW / Math.min(1, z)));
+        const minStageH = Math.max(500, Math.ceil(vpH / Math.min(1, z)));
 
-      // 1. Placed Image Plates
-      (stageState.placedImages || []).forEach(plate => {
-        minX = Math.min(minX, plate.x);
-        minY = Math.min(minY, plate.y);
-        maxX = Math.max(maxX, plate.x + plate.width);
-        maxY = Math.max(maxY, plate.y + plate.height);
-      });
+        const bounds = StudioGeometry.computeStageBounds(stageState, minStageW, minStageH);
+        const totalW = stageState.manualSizing ? Math.max(bounds.totalW, stageState.canvasWidth || minStageW) : bounds.totalW;
+        const totalH = stageState.manualSizing ? Math.max(bounds.totalH, stageState.canvasHeight || minStageH) : bounds.totalH;
 
-      // 2. Optical Difference Callouts
-      (stageState.diffCallouts || []).forEach(diff => {
-        const r = diff.radius;
-        minX = Math.min(minX, diff.cropX - r - 20);
-        maxX = Math.max(maxX, diff.cropX + r + 20);
-        minY = Math.min(minY, diff.cropY - r - 20);
-        maxY = Math.max(maxY, diff.cropY + r + 20);
-      });
+        stageState.canvasWidth = totalW;
+        stageState.canvasHeight = totalH;
 
-      // 3. Vector Annotations, Splines & Attached Text Badges (Prevents Bracket Clipping)
-      (stageState.annotations || []).forEach(ann => {
-        if (ann.type === 'curve' && ann.vertices) {
-          ann.vertices.forEach(v => {
-            minX = Math.min(minX, v.point[0] - 20);
-            maxX = Math.max(maxX, v.point[0] + 20);
-            minY = Math.min(minY, v.point[1] - 20);
-            maxY = Math.max(maxY, v.point[1] + 20);
-          });
-
-          // Include text callout box boundaries if text is attached
-          if (ann.text && ann.beziers?.length > 0) {
-            const isAtTail = (ann.textEnd !== 'tip');
-            const termSeg = isAtTail ? ann.beziers[ann.beziers.length - 1] : ann.beziers[0];
-            const anchor = isAtTail ? termSeg[3] : termSeg[0];
-            const bW = ann.boxWidth || 280;
-            const bH = 80;
-
-            minX = Math.min(minX, anchor[0] - bW - 30);
-            maxX = Math.max(maxX, anchor[0] + bW + 30);
-            minY = Math.min(minY, anchor[1] - bH - 30);
-            maxY = Math.max(maxY, anchor[1] + bH + 30);
-          }
-        } else if (ann.type === 'text_badge') {
-          const bW = ann.boxWidth || 260;
-          const bH = 60;
-          minX = Math.min(minX, ann.x - 20);
-          maxX = Math.max(maxX, ann.x + bW + 20);
-          minY = Math.min(minY, ann.y - 20);
-          maxY = Math.max(maxY, ann.y + bH + 20);
-        }
-      });
-
-      const totalW = Math.max(1100, Math.round((maxX - minX) + (pad * 2)));
-      const totalH = Math.max(640, Math.round((maxY - minY) + (pad * 2)));
-
-      stageState.canvasWidth = totalW;
-      stageState.canvasHeight = totalH;
-
-      return {
-        totalW, totalH,
-        offsetX: Math.round(-minX + pad),
-        offsetY: Math.round(-minY + pad)
-      };
-  }
-
+        return {
+          totalW,
+          totalH,
+          offsetX: bounds.offsetX || pad,
+          offsetY: bounds.offsetY || pad
+        };
+    }
   renderControls(controlsLayer, stageState) {
       controlsLayer.querySelectorAll('.qa-image-plate-control').forEach(el => el.remove());
       const plate = stageState.activeImage;

@@ -8,214 +8,115 @@ class QuoraStrokeManager {
     this.component = component;
   }
 
-  beziersToVertices(beziers) {
-      if (!beziers || beziers.length === 0) return [];
-      const n = beziers.length;
-      const vertices = [];
-
-      for (let i = 0; i <= n; i++) {
-        const pt = (i < n) ? beziers[i][0].slice(0, 2) : beziers[n - 1][3].slice(0, 2);
-        const v = new BezierVertex(pt);
-        v.controlPoints[0] = (i > 0) ? beziers[i - 1][2].slice(0, 2) : pt.slice(0, 2);
-        v.controlPoints[1] = (i < n) ? beziers[i][1].slice(0, 2) : pt.slice(0, 2);
-        v.isExplicitTangent = false;
-        vertices.push(v);
-      }
-
-      // Snapshot fitted handles & tangents BEFORE computing unrotated Pass-1 baselines
-      const savedHandles = [];
-      for (let i = 0; i <= n; i++) {
-        const v = vertices[i];
-        const prevV = vertices[i - 1];
-        const nextV = vertices[i + 1];
-
-        const dPrev = prevV ? Math.hypot(v.point[0] - prevV.point[0], v.point[1] - prevV.point[1]) : 0;
-        const dNext = nextV ? Math.hypot(nextV.point[0] - v.point[0], nextV.point[1] - v.point[1]) : 0;
-        const lIn = prevV ? Math.hypot(v.controlPoints[0][0] - v.point[0], v.controlPoints[0][1] - v.point[1]) : 0;
-        const lOut = nextV ? Math.hypot(v.controlPoints[1][0] - v.point[0], v.controlPoints[1][1] - v.point[1]) : 0;
-
-        const sIn = (dPrev > 1e-4) ? (3 * lIn / dPrev) : 1.0;
-        const sOut = (dNext > 1e-4) ? (3 * lOut / dNext) : 1.0;
-
-        if (prevV && nextV) {
-          const sumS = sIn + sOut;
-          v.curvature = Math.max(0.25, Math.min(2.5, sumS / 2));
-          v.balance = sumS > 1e-4 ? Math.max(0.15, Math.min(1.85, (2 * sIn) / sumS)) : 1.0;
-        } else if (nextV) {
-          v.curvature = Math.max(0.25, Math.min(2.5, sOut));
-          v.balance = 1.0;
-        } else if (prevV) {
-          v.curvature = Math.max(0.25, Math.min(2.5, sIn));
-          v.balance = 1.0;
-        }
-
-        let actualTangent = null;
-        if (nextV && lOut > 1e-4) {
-          actualTangent = [(v.controlPoints[1][0] - v.point[0]) / lOut, (v.controlPoints[1][1] - v.point[1]) / lOut];
-        } else if (prevV && lIn > 1e-4) {
-          actualTangent = [(v.point[0] - v.controlPoints[0][0]) / lIn, (v.point[1] - v.controlPoints[0][1]) / lIn];
-        }
-
-        savedHandles.push({
-          cp0: v.controlPoints[0].slice(),
-          cp1: v.controlPoints[1].slice(),
-          actualTangent
-        });
-      }
-
-      // Compute fixed-point unrotated natural baselines
-      if (typeof UpdateControlPoints !== 'undefined' && typeof UpdateControlPoints.computeNaturalBaselines === 'function') {
-        UpdateControlPoints.computeNaturalBaselines(vertices, 8);
-      }
-
-      // Measure angular offset relative to the fixed unrotated baseline, then restore fitted handles
-      for (let i = 0; i <= n; i++) {
-        const v = vertices[i];
-        const saved = savedHandles[i];
-        const naturalTangent = v._naturalTangent || [1, 0];
-
-        if (saved.actualTangent && naturalTangent) {
-          const cross = naturalTangent[0] * saved.actualTangent[1] - naturalTangent[1] * saved.actualTangent[0];
-          const dot = naturalTangent[0] * saved.actualTangent[0] + naturalTangent[1] * saved.actualTangent[1];
-          let angleDiff = Math.atan2(cross, dot);
-          if (Math.abs(angleDiff) < 0.01) angleDiff = 0;
-          v.tangentAngleOffset = angleDiff;
-        } else {
-          v.tangentAngleOffset = 0;
-        }
-
-        v.controlPoints = [saved.cp0, saved.cp1];
-        v.isExplicitTangent = false;
-      }
-
-      return vertices;
+  beziersToVertices(beziers, cuspVertexIndices = []) {
+      return StudioGeometry.beziersToVertices(beziers, cuspVertexIndices);
     }
   verticesToBeziers(vertices) {
-    if (!vertices || vertices.length < 2) return [];
-    if (typeof UpdateControlPoints !== 'undefined') {
-      UpdateControlPoints.run(vertices, 6);
+      return StudioGeometry.verticesToBeziers(vertices);
     }
 
-    const beziers = [];
-    for (let i = 0; i < vertices.length - 1; i++) {
-      beziers.push([
-        [vertices[i].point[0], vertices[i].point[1]],
-        [vertices[i].controlPoints[1][0], vertices[i].controlPoints[1][1]],
-        [vertices[i + 1].controlPoints[0][0], vertices[i + 1].controlPoints[0][1]],
-        [vertices[i + 1].point[0], vertices[i + 1].point[1]]
-      ]);
-    }
-    return beziers;
-  }
+  commitSpline(beziers, color, hasArrow, existingVertices = null, cuspVertexIndices = []) {
+        if (!beziers || beziers.length === 0) return;
 
-  commitSpline(beziers, color, hasArrow, existingVertices = null) {
-      if (!beziers || beziers.length === 0) return;
+        let d = StudioGeometry.beziersToSvgD(beziers, false);
 
-      let d = 'M ' + beziers[0][0].join(' ');
-      for (let i = 0; i < beziers.length; i++) {
-        const [start, cp1, cp2, end] = beziers[i];
-        d += ` C ${cp1.join(' ')}, ${cp2.join(' ')}, ${end.join(' ')}`;
-      }
+        const p = this.component.stageState.prefs || {};
+        const shadowOffset = 2.0;
+        const shadowColor = 'rgba(10, 15, 25, 0.95)';
+        const lineStyle = this.component.stageState.lineStyle || p.lineStyle || 'classic';
+        const baseW = this.component.stageState.curveStrokeWidth || p.curveStrokeWidth || 3.2;
+        const z = this.component.stageState.cadStrokeMode ? (this.component.stageState.zoom || 1.0) : 1.0;
+        const sw = baseW / z;
+        const glowPad = p.curveGlowWidth !== undefined ? p.curveGlowWidth : 10;
+        const glowOp = p.curveGlowOpacity !== undefined ? p.curveGlowOpacity : 0.90;
 
-      const p = this.component.stageState.prefs || {};
-      const shadowOffset = 2.0;
-      const shadowColor = 'rgba(10, 15, 25, 0.95)';
-      const lineStyle = this.component.stageState.lineStyle || p.lineStyle || 'classic';
-      const baseW = this.component.stageState.curveStrokeWidth || p.curveStrokeWidth || 3.2;
-      const z = this.component.stageState.cadStrokeMode ? (this.component.stageState.zoom || 1.0) : 1.0;
-      const sw = baseW / z;
-      const glowPad = p.curveGlowWidth !== undefined ? p.curveGlowWidth : 10;
-      const glowOp = p.curveGlowOpacity !== undefined ? p.curveGlowOpacity : 0.90;
+        const shadowPath = makeElement('svg:path', {
+          d, transform: `translate(${shadowOffset}, ${shadowOffset})`,
+          stroke: shadowColor, 'stroke-width': String((baseW + 2.3) / z), 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none',
+          style: { display: lineStyle === 'classic' ? 'block' : 'none' }
+        });
 
-      const shadowPath = makeElement('svg:path', {
-        d, transform: `translate(${shadowOffset}, ${shadowOffset})`,
-        stroke: shadowColor, 'stroke-width': String((baseW + 2.3) / z), 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none',
-        style: { display: lineStyle === 'classic' ? 'block' : 'none' }
-      });
+        const glowPath = makeElement('svg:path', {
+          d, stroke: color, 'stroke-width': String((baseW + glowPad) / z),
+          'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none',
+          style: {
+            display: lineStyle === 'neon' ? 'block' : 'none',
+            filter: 'url(#qa-neon-glow)',
+            opacity: String(glowOp)
+          }
+        });
 
-      const glowPath = makeElement('svg:path', {
-        d, stroke: color, 'stroke-width': String((baseW + glowPad) / z),
-        'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none',
-        style: {
-          display: lineStyle === 'neon' ? 'block' : 'none',
-          filter: 'url(#qa-neon-glow)',
-          opacity: String(glowOp)
+        const splineGroup = makeElement('svg:g', { className: 'qa-spline-group' });
+
+        if (lineStyle === 'neon') {
+          const coreTint = this.getLuminousCoreColor(color);
+          const innerCore = makeElement('svg:path', {
+            d, stroke: coreTint, 'stroke-width': String(Math.max(2.0, baseW * 0.78) / z), 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none',
+            style: { filter: 'url(#qa-neon-core)' }
+          });
+          splineGroup.appendChild(innerCore);
+        } else {
+          const mainSpline = makeElement('svg:path', {
+            d, stroke: color, 'stroke-width': String(sw), 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none'
+          });
+          splineGroup.appendChild(mainSpline);
         }
-      });
 
-      const splineGroup = makeElement('svg:g', { className: 'qa-spline-group' });
+        const vertices = existingVertices || this.beziersToVertices(beziers, cuspVertexIndices);
+        const arrowMode = hasArrow ? (this.component.stageState.arrowMode || 'tip') : 'none';
 
-      if (lineStyle === 'neon') {
-        const coreTint = this.getLuminousCoreColor(color);
-        const innerCore = makeElement('svg:path', {
-          d, stroke: coreTint, 'stroke-width': String(Math.max(2.0, baseW * 0.78) / z), 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none',
-          style: { filter: 'url(#qa-neon-core)' }
-        });
-        splineGroup.appendChild(innerCore);
-      } else {
-        const mainSpline = makeElement('svg:path', {
-          d, stroke: color, 'stroke-width': String(sw), 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none'
-        });
-        splineGroup.appendChild(mainSpline);
+        const curveRecord = {
+          id: 'curve_' + Date.now(),
+          type: 'curve',
+          beziers,
+          vertices,
+          color,
+          strokeWidth: baseW,
+          lineStyle,
+          arrowEnd: arrowMode,
+          textEnd: arrowMode === 'tail' ? 'tip' : 'tail',
+          text: '',
+          hasTextBox: this.component.stageState.hasBorder,
+          boxStyle: this.component.stageState.boxStyle || p.boxStyle || 'bracket',
+          fontFamily: this.component.stageState.fontFamily || p.fontFamily,
+          fontSize: this.component.stageState.fontSize || p.fontSize || 20,
+          connectEdge: null,
+          elements: [shadowPath, splineGroup, glowPath]
+        };
+
+        this.component.shadowLayer.appendChild(shadowPath);
+        this.component.glowLayer.appendChild(glowPath);
+        this.component.strokeLayer.appendChild(splineGroup);
+
+        if (arrowMode === 'tip' || arrowMode === 'both') {
+          const p0 = beziers[0][0], p1 = beziers[0][1];
+          const dist = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) || 1;
+          const arrow = this.renderConcaveArrowhead(p0, [(p1[0] - p0[0]) / dist, (p1[1] - p0[1]) / dist], color, 2.0, baseW, lineStyle);
+          curveRecord._arrowSh = arrow.shadow;
+          curveRecord._arrowFg = arrow.foreground;
+          curveRecord._arrowGlow = arrow.glow;
+          if (arrow.shadow) this.component.shadowLayer.appendChild(arrow.shadow);
+          if (arrow.glow) this.component.glowLayer.appendChild(arrow.glow);
+          this.component.strokeLayer.appendChild(arrow.foreground);
+        }
+
+        if (arrowMode === 'tail' || arrowMode === 'both') {
+          const lastSeg = beziers[beziers.length - 1];
+          const p2 = lastSeg[2], p3 = lastSeg[3];
+          const dist = Math.hypot(p3[0] - p2[0], p3[1] - p2[1]) || 1;
+          const arrow = this.renderConcaveArrowhead(p3, [(p2[0] - p3[0]) / dist, (p2[1] - p3[1]) / dist], color, 2.0, baseW, lineStyle);
+          curveRecord._arrowShTail = arrow.shadow;
+          curveRecord._arrowFgTail = arrow.foreground;
+          curveRecord._arrowGlowTail = arrow.glow;
+          if (arrow.shadow) this.component.shadowLayer.appendChild(arrow.shadow);
+          if (arrow.glow) this.component.glowLayer.appendChild(arrow.glow);
+          this.component.strokeLayer.appendChild(arrow.foreground);
+        }
+
+        this.component.stageState.annotations.push(curveRecord);
+        this.component.selectItem(curveRecord);
+        this.component.updateDynamicKeyInHUD();
       }
-
-      const vertices = existingVertices || this.beziersToVertices(beziers);
-      const arrowMode = hasArrow ? (this.component.stageState.arrowMode || 'tip') : 'none';
-
-      const curveRecord = {
-        id: 'curve_' + Date.now(),
-        type: 'curve',
-        beziers,
-        vertices,
-        color,
-        strokeWidth: baseW,
-        lineStyle,
-        arrowEnd: arrowMode,
-        textEnd: arrowMode === 'tail' ? 'tip' : 'tail',
-        text: '',
-        hasTextBox: this.component.stageState.hasBorder,
-        boxStyle: this.component.stageState.boxStyle || p.boxStyle || 'bracket',
-        fontFamily: this.component.stageState.fontFamily || p.fontFamily,
-        fontSize: this.component.stageState.fontSize || p.fontSize || 20,
-        connectEdge: null,
-        elements: [shadowPath, splineGroup, glowPath]
-      };
-
-      this.component.shadowLayer.appendChild(shadowPath);
-      this.component.glowLayer.appendChild(glowPath);
-      this.component.strokeLayer.appendChild(splineGroup);
-
-      if (arrowMode === 'tip' || arrowMode === 'both') {
-        const p0 = beziers[0][0];
-        const p1 = beziers[0][1];
-        const dist = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) || 1;
-        const arrow = this.renderConcaveArrowhead(p0, [(p1[0] - p0[0]) / dist, (p1[1] - p0[1]) / dist], color, 2.0, baseW, lineStyle);
-        curveRecord._arrowSh = arrow.shadow;
-        curveRecord._arrowFg = arrow.foreground;
-        curveRecord._arrowGlow = arrow.glow;
-        if (arrow.shadow) this.component.shadowLayer.appendChild(arrow.shadow);
-        if (arrow.glow) this.component.glowLayer.appendChild(arrow.glow);
-        this.component.strokeLayer.appendChild(arrow.foreground);
-      }
-
-      if (arrowMode === 'tail' || arrowMode === 'both') {
-        const lastSeg = beziers[beziers.length - 1];
-        const p2 = lastSeg[2];
-        const p3 = lastSeg[3];
-        const dist = Math.hypot(p3[0] - p2[0], p3[1] - p2[1]) || 1;
-        const arrow = this.renderConcaveArrowhead(p3, [(p2[0] - p3[0]) / dist, (p2[1] - p3[1]) / dist], color, 2.0, baseW, lineStyle);
-        curveRecord._arrowShTail = arrow.shadow;
-        curveRecord._arrowFgTail = arrow.foreground;
-        curveRecord._arrowGlowTail = arrow.glow;
-        if (arrow.shadow) this.component.shadowLayer.appendChild(arrow.shadow);
-        if (arrow.glow) this.component.glowLayer.appendChild(arrow.glow);
-        this.component.strokeLayer.appendChild(arrow.foreground);
-      }
-
-      this.component.stageState.annotations.push(curveRecord);
-      this.component.selectItem(curveRecord);
-      this.component.updateDynamicKeyInHUD();
-    }
   updateCurveGeometry() {
       const curve = this.component.getActiveCurve();
       if (!curve || !curve.vertices || curve.vertices.length < 2) return;
@@ -307,63 +208,41 @@ class QuoraStrokeManager {
 
       this.component.renderStage();
     }
+
   renderConcaveArrowhead(p0, exitTangent, color, shadowOffset = 2.0, strokeWidth = 3.2, lineStyle = 'classic') {
-      const ux = exitTangent[0];
-      const uy = exitTangent[1];
-      const nx = -uy;
-      const ny = ux;
+        const z = (this.component.stageState.cadStrokeMode) ? (this.component.stageState.zoom || 1.0) : 1.0;
+        const geo = StudioGeometry.computeConcaveArrowPath(p0, exitTangent, strokeWidth, z);
 
-      const z = (this.component.stageState.cadStrokeMode) ? (this.component.stageState.zoom || 1.0) : 1.0;
-      const sw = Math.max(1.5, Math.min(12, strokeWidth || 3.2));
-      const effectiveSw = sw / z;
+        let arrowShadow = null;
+        let arrowGlow = null;
+        let arrowForeground = null;
 
-      const barbLen = Math.round((14 + sw * 1.25) / Math.sqrt(z));
-      const barbSpread = Math.round((8 + sw * 0.95) / Math.sqrt(z));
-      const waistBack = Math.round((6 + sw * 0.6) / Math.sqrt(z));
-      const waistSpread = Math.max(2, (sw * 0.75) / Math.sqrt(z));
+        if (lineStyle === 'classic') {
+          arrowShadow = makeElement('svg:path', {
+            d: geo.d, transform: `translate(${shadowOffset}, ${shadowOffset})`,
+            stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': String(geo.shadowWidth), fill: 'none',
+            'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+          });
+          arrowForeground = makeElement('svg:path', {
+            d: geo.d, stroke: color, 'stroke-width': String(geo.effectiveWidth), fill: 'none',
+            'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+          });
+        } else if (lineStyle === 'neon') {
+          const coreTint = this.getLuminousCoreColor(color);
+          arrowGlow = makeElement('svg:path', {
+            d: geo.d, stroke: color, 'stroke-width': String(geo.glowWidth), fill: 'none',
+            'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+            style: { filter: 'url(#qa-neon-glow)', opacity: '0.92' }
+          });
+          arrowForeground = makeElement('svg:path', {
+            d: geo.d, stroke: coreTint, 'stroke-width': String(geo.coreWidth), fill: 'none',
+            'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+            style: { filter: 'url(#qa-neon-core)' }
+          });
+        }
 
-      const b1 = [p0[0] + ux * barbLen + nx * barbSpread, p0[1] + uy * barbLen + ny * barbSpread];
-      const b2 = [p0[0] + ux * barbLen - nx * barbSpread, p0[1] + uy * barbLen - ny * barbSpread];
-      const c1 = [p0[0] + ux * waistBack + nx * waistSpread, p0[1] + uy * waistBack + ny * waistSpread];
-      const c2 = [p0[0] + ux * waistBack - nx * waistSpread, p0[1] + uy * waistBack - ny * waistSpread];
-
-      const arrowD = `M ${b1[0]} ${b1[1]} Q ${c1[0]} ${c1[1]} ${p0[0]} ${p0[1]} M ${p0[0]} ${p0[1]} Q ${c2[0]} ${c2[1]} ${b2[0]} ${b2[1]}`;
-
-      let arrowShadow = null;
-      let arrowGlow = null;
-      let arrowForeground = null;
-
-      if (lineStyle === 'classic') {
-        arrowShadow = makeElement('svg:path', {
-          d: arrowD, transform: `translate(${shadowOffset}, ${shadowOffset})`,
-          stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': String((sw + 2.4) / z), fill: 'none',
-          'stroke-linecap': 'round', 'stroke-linejoin': 'round'
-        });
-        arrowForeground = makeElement('svg:path', {
-          d: arrowD, stroke: color, 'stroke-width': String(effectiveSw), fill: 'none',
-          'stroke-linecap': 'round', 'stroke-linejoin': 'round'
-        });
-      } else if (lineStyle === 'neon') {
-        const coreTint = this.getLuminousCoreColor(color);
-
-        // Neon Arrowhead Outer Glow Layer (Diffuse Gaussian bloom)
-        arrowGlow = makeElement('svg:path', {
-          d: arrowD, stroke: color, 'stroke-width': String((sw + 10) / z), fill: 'none',
-          'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-          style: { filter: 'url(#qa-neon-glow)', opacity: '0.92' }
-        });
-
-        // Neon Arrowhead Inner Core (Narrow 2.5px plasma blade)
-        arrowForeground = makeElement('svg:path', {
-          d: arrowD, stroke: coreTint, 'stroke-width': String(2.5 / z), fill: 'none',
-          'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-          style: { filter: 'url(#qa-neon-core)' }
-        });
+        return { shadow: arrowShadow, foreground: arrowForeground, glow: arrowGlow };
       }
-
-      return { shadow: arrowShadow, foreground: arrowForeground, glow: arrowGlow };
-    }
-
   swapCurveTerminals(curve) {
       if (!curve || !curve.beziers || curve.beziers.length === 0) return;
 
@@ -435,35 +314,10 @@ class QuoraStrokeManager {
       this.component.exposeBezierHandles(curve);
       this.component.showKnotToast(`✓ Point inserted on curve at #${idx + 2}`);
     }
+
   getLuminousCoreColor(colorStr) {
-      if (!colorStr) return 'rgb(255, 255, 255)';
-      let r = 255, g = 255, b = 255;
-      const str = String(colorStr).trim();
-
-      if (str.startsWith('#')) {
-        let hex = str.slice(1);
-        if (hex.length === 3) hex = hex.split('').map(x => x + x).join('');
-        r = parseInt(hex.slice(0, 2), 16) || 255;
-        g = parseInt(hex.slice(2, 4), 16) || 255;
-        b = parseInt(hex.slice(4, 6), 16) || 255;
-      } else if (str.startsWith('rgb')) {
-        const match = str.match(/rgb\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/i);
-        if (match) {
-          r = parseInt(match[1], 10);
-          g = parseInt(match[2], 10);
-          b = parseInt(match[3], 10);
-        }
-      }
-
-      // Dynamic core saturation: adjustable from pale white to vibrant punchy color
-      const p = this.component.stageState?.prefs || {};
-      const sat = (p.textCoreSaturation !== undefined) ? p.textCoreSaturation : 0.40;
-      const whiteWeight = 1.0 - sat;
-
-      const coreR = Math.round(255 * whiteWeight + r * sat);
-      const coreG = Math.round(255 * whiteWeight + g * sat);
-      const coreB = Math.round(255 * whiteWeight + b * sat);
-      return `rgb(${coreR}, ${coreG}, ${coreB})`;
+      const sat = this.component.stageState?.prefs?.textCoreSaturation ?? 0.40;
+      return StudioGeometry.getLuminousCoreColor(colorStr, sat);
     }
   applyCadZoomCompensation(zoomLevel = 1.0) {
       const z = Math.max(0.1, zoomLevel || 1.0);

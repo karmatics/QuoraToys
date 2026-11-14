@@ -1,6 +1,6 @@
 {
   "name": "QuoraToys",
-  "version": "2.9.1",
+  "version": "2.9.5",
   "description": "QuoraToys: Interactive visual solvers, kinetic vector annotations, living documentation, and in-situ browser tools",
   "type": "luno-web-app",
   "mainClass": "QuoraToysApp",
@@ -17,6 +17,10 @@
     "js/BezierVertex.js",
     "js/UpdateControlPoints.js",
     "js/CurveFitter.js",
+    "js/StudioGeometry.js",
+    "js/StudioEngine.js",
+    "js/StudioSvgRenderer.js",
+    "js/QuoraCleanStudioDialog.js",
     "js/QuoraLogger.js",
     "js/QuoraCurveAnalyzer.js",
     "js/QuoraStrokeManager.js",

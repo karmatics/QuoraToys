@@ -74,42 +74,44 @@ class QuoraAnnotationContent {
   }
 
   static manifest() {
-      return [
-        {
-          section: 'annotation_studio',
-          partLabel: 'Chapter 1 • Live Studio',
-          title: 'Interactive Annotation & Vector Canvas',
-          blocks: [
-            { id: 'comp_annotation', type: 'component', component: 'QuoraAnnotationComponent' }
-          ]
-        },
-        {
-          section: 'unified_recon',
-          partLabel: 'Chapter 1 • System Evolution',
-          title: 'The Unified Hybrid Pen & Ambient Canvas Architecture',
-          blocks: [
-            { id: 'p_living_plan_update', type: 'p' },
-            { id: 'sidebar_living_plan_roadmap', type: 'sidebar', kicker: 'Iteration Plan', title: 'Text, Glow, HUD & Export Architecture' },
-            { id: 'p_hybrid_pen_intro', type: 'p' },
-            { id: 'sidebar_hybrid_pen_mechanics', type: 'sidebar', kicker: 'Unified Input', title: 'Seamless Click-to-Point vs. Drag-to-Drawstring' },
-            { id: 'p_pause_clutch_handrest', type: 'p' },
-            { id: 'sidebar_pause_clutch', type: 'sidebar', kicker: 'Control Key Clutch', title: 'Resting Hand & String Radius Tuning' },
-            { id: 'p_self_annotating_help', type: 'p' },
-            { id: 'sidebar_meta_help', type: 'sidebar', kicker: 'Meta-UI', title: 'Interactive Help with Native Vector Annotations' },
-            { id: 'sidebar_recon_decisions', type: 'sidebar', kicker: 'Forward Design', title: 'Ambient Canvas & Forward Roadmap' }
-          ]
-        },
-        {
-          section: 'annotation_techniques',
-          partLabel: 'Chapter 1 • Mathematical Engine',
-          title: 'Kinetic Drag-Lead & On-Curve Knot Relaxation',
-          blocks: [
-            { id: 'p_annot_intro_1', type: 'p' },
-            { id: 'sidebar_annot_features', type: 'sidebar', kicker: 'Ergonomics', title: 'Why Drawing in QuoraToys Feels Natural' }
-          ]
-        }
-      ];
-    }
+        return [
+          {
+            section: 'annotation_studio',
+            partLabel: 'Chapter 1 • Live Studio',
+            title: 'Interactive Annotation & Vector Canvas',
+            blocks: [
+              { id: 'comp_annotation', type: 'component', component: 'QuoraAnnotationComponent' }
+            ]
+          },
+          {
+            section: 'unified_recon',
+            partLabel: 'Chapter 1 • System Evolution',
+            title: 'The Unified Hybrid Pen & Ambient Canvas Architecture',
+            blocks: [
+              { id: 'p_living_plan_update', type: 'p' },
+              { id: 'sidebar_living_plan_roadmap', type: 'sidebar', kicker: 'Iteration Plan', title: 'Text, Glow, HUD & Export Architecture' },
+              { id: 'p_hybrid_pen_intro', type: 'p' },
+              { id: 'sidebar_hybrid_pen_mechanics', type: 'sidebar', kicker: 'Unified Input', title: 'Tether Backup-Erase, Slack Zone & Drawstring' },
+              { id: 'p_cusp_plan', type: 'p' },
+              { id: 'sidebar_cusp_plan', type: 'sidebar', kicker: 'Next Milestone', title: 'Slack-String Redirection & Persistent Cusp Plan' },
+              { id: 'p_pause_clutch_handrest', type: 'p' },
+              { id: 'sidebar_pause_clutch', type: 'sidebar', kicker: 'Control Key Clutch', title: 'Resting Hand & String Radius Tuning' },
+              { id: 'p_self_annotating_help', type: 'p' },
+              { id: 'sidebar_meta_help', type: 'sidebar', kicker: 'Meta-UI', title: 'Interactive Help with Native Vector Annotations' },
+              { id: 'sidebar_recon_decisions', type: 'sidebar', kicker: 'Forward Design', title: 'Ambient Canvas & Forward Roadmap' }
+            ]
+          },
+          {
+            section: 'annotation_techniques',
+            partLabel: 'Chapter 1 • Mathematical Engine',
+            title: 'Kinetic Drag-Lead & On-Curve Knot Relaxation',
+            blocks: [
+              { id: 'p_annot_intro_1', type: 'p' },
+              { id: 'sidebar_annot_features', type: 'sidebar', kicker: 'Ergonomics', title: 'Why Drawing in QuoraToys Feels Natural' }
+            ]
+          }
+        ];
+      }
   static p_hybrid_pen_intro() {
     return [
       "In the unified ambient canvas, modal tool switching is completely eliminated. When the pen touches the canvas at $P_0$, a subtle circular deadzone radius ($R = 32\\text{px}$) appears with a fat white point indicator.",
@@ -118,16 +120,16 @@ class QuoraAnnotationContent {
   }
 
   static sidebar_hybrid_pen_mechanics() {
-      return [
-        "The Unified Curve Philosophy:\n" +
-        "• Everything is a Curve: An arrow is a curve with an arrowhead. A highlight ring is a closed curve loop. A callout is a curve with attached text.\n" +
-        "• Touch Down at $P_0$: Displays a pale boundary circle ($R=32\\text{px}$) and fat white tip indicator.\n" +
-        "• Click Release Inside $R$: Commits $P_0$ as a discrete vertex. Chain relaxes dynamically as the mouse moves; previous segments stay solid while the active lead is dashed.\n" +
-        "• Drag Exceeding $R$: The solid white drawstring pulls the curve tip at $P_{\\text{pen}} = \\text{Cursor} - \\mathbf{u} \\cdot R$.\n" +
-        "• Direct Rubber-Wire Bending: Grab any curve segment with the mouse and pull to bend the spline directly through your cursor.\n" +
-        "• Endpoint Snapping & Extension: Starting a stroke at an endpoint continues the curve; ending near the origin snaps into a closed loop ring."
-      ];
-    }
+        return [
+          "The Unified Curve & Backup-Erase Mechanics:\n" +
+          "• Everything is a Curve: An arrow is a curve with an arrowhead. A highlight ring is a closed curve loop. A callout is a curve with attached text.\n" +
+          "• Drag Exceeding Deadzone: A solid white drawstring pulls the curve tip at $P_{\\text{pen}} = \\text{Cursor} - \\mathbf{u} \\cdot R$ ($R = 32\\text{px}$), while a subtle dashed circle around the cursor marks the contiguous erase zone ($r_{\\text{erase}} \\le 0.62 R$).\n" +
+          "• Contiguous Backup & Erase: Backing the cursor into the dashed erase circle pops trailing points sequentially from the tip (without disturbing earlier crossed loops), allowing seamless in-stroke correction.\n" +
+          "• Slack Zone Redirection: Between $r_{\\text{erase}}$ and $R$, the string goes slack (shown as a dashed tether), giving room to pivot without erasing.\n" +
+          "• Direct Rubber-Wire Bending: Grab any curve segment with the mouse and pull to bend the spline directly through your cursor.\n" +
+          "• Endpoint Snapping & Extension: Starting a stroke at an endpoint continues the curve; ending near the origin snaps into a closed loop ring."
+        ];
+      }
   static p_pause_clutch_handrest() {
     return [
       "Drawing complex technical annotations with a mouse or trackpad causes hand fatigue. Under the **Pause & Tether-Clutch** protocol, holding the `Ctrl` key acts as a mechanical clutch:",
@@ -222,6 +224,23 @@ class QuoraAnnotationContent {
         "• Portable Settings Capture: `📋 Copy Settings` and `📥 Paste` export/import full JSON defaults."
       ];
     }
+
+  static p_cusp_plan() {
+        return [
+          "When backing up into the slack/erase zone and pulling out in a substantially different direction, the user intends a sharp corner rather than a rounded turn. Currently, `CurveFitter.fit()` smooths the entire polyline into a single chain, and `UpdateControlPoints` only preserves sharp corners when a vertex has `isCusp = true`.",
+          "The upcoming **Slack-String Cusp Detection** system bridges the gesture machine directly to `BezierVertex.isCusp` so intentional direction reversals lock in as persistent, non-collinear Bézier corners until explicitly straightened."
+        ];
+      }
+
+  static sidebar_cusp_plan() {
+        return [
+          "4-Stage Plan for Smart Slack-String Cusps:\n" +
+          "• 1. Slack & Direction Memory (`QuoraGestureMachine`): Record the incoming unit pull direction $\\mathbf{d}_{\\text{in}}$ whenever the cursor backs into the slack zone ($r_{\\text{erase}} < d < R$) or stops after a contiguous erase rewind.\n" +
+          "• 2. Turn-Angle Detection & Telegraph: On pulling taut again ($d > R$) in direction $\\mathbf{d}_{\\text{out}}$, compute $\\theta = \\arccos(\\mathbf{d}_{\\text{in}} \\cdot \\mathbf{d}_{\\text{out}})$. If $\\theta \\ge \\theta_{\\text{cusp}}$ (e.g. $45^\\circ$–$55^\\circ$), tag the tip index in `cuspIndices`. While slack and aimed past threshold, preview an amber diamond cusp marker at `curTip`.\n" +
+          "• 3. Piecewise Spline Splitting (`CurveFitter` + `QuoraStrokeManager`): Split `strokePoints` at each index in `cuspIndices` and fit each smooth sub-chain independently, guaranteeing the corner point is an exact shared knot with independent incoming and outgoing Bézier control handles.\n" +
+          "• 4. Persistent Non-Collinear Knots (`UpdateControlPoints` + `QuoraKnotManager`): Mark the boundary `BezierVertex` with `isCusp = true` and preserve both wings' independent angle offsets during neighbor drags until the author explicitly straightens/rejoins the knot (`C` hotkey or context menu)."
+        ];
+      }
 }
 
 // --- Chapter 2: In-Situ Bookmarklet Hub ---

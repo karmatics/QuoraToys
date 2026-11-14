@@ -27,6 +27,7 @@
     .card.success { border-left: 4px solid #10b981; background: rgba(16, 185, 129, 0.05); }
     .card.cyan { border-left: 4px solid #00f2fe; background: rgba(0, 242, 254, 0.05); }
     .card.purple { border-left: 4px solid #c084fc; background: rgba(192, 132, 252, 0.05); }
+    .card.amber { border-left: 4px solid #f59e0b; background: rgba(245, 158, 11, 0.05); }
     .nav-bar { position: fixed; top: 0; left: 0; width: 100%; background: rgba(15, 23, 42, 0.95); border-bottom: 1px solid #1e293b; padding: 10px 24px; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; z-index: 100; font-family: monospace; }
     .nav-bar a { color: #00f2fe; text-decoration: none; font-weight: bold; font-size: 12px; }
   </style>
@@ -39,7 +40,7 @@
 
   <div class="doc-container" style="margin-top: 40px;">
     <h1>QuoraToys &amp; Studio: Living Architecture &amp; Iteration Plan</h1>
-    <p><em>Version 2.9.2 • Living Engineering Specification</em></p>
+    <p><em>Version 2.9.3 • Living Engineering Specification</em></p>
 
     <div class="card cyan">
       <strong>Core Purpose:</strong> Universal Graphic Studio for fast visual commentary. Combines kinetic drawstring curve smoothing, legible glowing callouts, subtle inline editing, explicit UI controls, and clean custom-bounded retina exports.
@@ -67,6 +68,17 @@
       <ul>
         <li><strong>Tight Auto-Bounds vs. Custom Export Area:</strong> Exports tightly wrap content by default, or use <code>📐 Export Area</code> to drag and resize an explicit crop boundary with one-click <code>✕ Auto</code> reset.</li>
         <li><strong>Full Glow Preservation:</strong> Export clones the SVG with explicit <code>xmlns</code>, <code>width</code>, <code>height</code>, and <code>viewBox</code> while preserving <code>glowLayer</code> and supporting both Matte and Transparent PNG output.</li>
+      </ul>
+    </div>
+
+    <h2>4. Tether Backup-Erase &amp; Slack-String Cusp Plan</h2>
+    <div class="card amber">
+      <ul>
+        <li><strong>Restored Contiguous Backup &amp; Erase (Implemented):</strong> During drawstring drawing, a dashed cursor circle (<code>#qa-cursor-erase-circle</code>, radius <code>clamp(eraseRadius, 8, 0.62 * tetherLength)</code>) visualizes the active erase zone. Backing the cursor over the active tip (including fast sweeps via segment distance) contiguously rewinds trailing <code>strokePoints</code> from the tip without disturbing earlier crossed loops, while showing dashed slack-tether feedback between the erase boundary and the full tether radius.</li>
+        <li><strong>Stage 1 — Slack-State &amp; Incoming Tangent Memory:</strong> In <code>QuoraGestureMachine</code>, record the incoming unit draw direction <code>d_in</code> whenever the cursor enters the slack zone (<code>eraseR &lt; dist &lt; tetherLen</code>) or completes an erase rewind.</li>
+        <li><strong>Stage 2 — Direction Reversal Detection &amp; Live Telegraph:</strong> As the user pulls taut again in direction <code>d_out</code>, compute turn angle <code>theta = acos(dot(d_in, d_out))</code>. When <code>theta &gt;= cuspAngleThreshold</code> (e.g., 45°–55°), mark the current tip index in <code>cuspIndices</code> and preview an amber diamond cusp marker at <code>curTip</code> while slack.</li>
+        <li><strong>Stage 3 — Piecewise Cusp-Segmented Fitting:</strong> Split <code>strokePoints</code> at each index in <code>cuspIndices</code> before calling <code>CurveFitter.fit()</code>, fitting each smooth sub-chain independently so the corner vertex is preserved identically and adjacent Bézier control points remain non-collinear.</li>
+        <li><strong>Stage 4 — Persistent Cusp State Until Straightened:</strong> Flag the boundary <code>BezierVertex</code> with <code>isCusp = true</code> and retain independent incoming/outgoing tangent offsets in <code>UpdateControlPoints</code> across neighbor drags until explicitly straightened via the <code>C</code> hotkey or knot context menu.</li>
       </ul>
     </div>
   </div>

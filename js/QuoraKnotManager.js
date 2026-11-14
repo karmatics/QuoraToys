@@ -252,275 +252,293 @@ class QuoraKnotManager {
       this.updateDynamicMidpointCandidate(curveRecord, controlsLayer, stageState);
       this.component.updateDynamicKeyInHUD();
     }
+
   renderOutboundTangentRay(curveRecord, knotIdx, controlsLayer, stageState) {
-      const existing = document.getElementById('qa-outbound-tangent-ray');
-      if (existing) existing.remove();
+        const existing = document.getElementById('qa-outbound-tangent-ray');
+        if (existing) existing.remove();
 
-      const vertices = curveRecord.vertices;
-      if (!vertices || vertices.length < 2) return;
-      const v = vertices[knotIdx] || vertices[0];
-      const pt = v.point;
+        const vertices = curveRecord.vertices;
+        if (!vertices || vertices.length < 2) return;
+        const v = vertices[knotIdx] || vertices[0];
+        const pt = v.point;
 
-      // Extended leverage distance: 68px gives comfortable angular control
-      const rayLength = 68;
-      const isStart = (knotIdx === 0);
-      const isTail = (knotIdx === vertices.length - 1);
-      const isInterior = (!isStart && !isTail);
+        const rayLength = 68;
+        const isStart = (knotIdx === 0);
+        const isTail = (knotIdx === vertices.length - 1);
+        const isInterior = (!isStart && !isTail);
 
-      // Compute tangent directly from the curve's actual Bézier control points
-      let tangentRayDir = [1, 0];
-      if (isStart && v.controlPoints[1]) {
-        const dx = pt[0] - v.controlPoints[1][0];
-        const dy = pt[1] - v.controlPoints[1][1];
-        const len = Math.hypot(dx, dy) || 1;
-        tangentRayDir = [dx / len, dy / len];
-      } else if (isTail && v.controlPoints[0]) {
-        const dx = pt[0] - v.controlPoints[0][0];
-        const dy = pt[1] - v.controlPoints[0][1];
-        const len = Math.hypot(dx, dy) || 1;
-        tangentRayDir = [dx / len, dy / len];
-      } else if (v.controlPoints[1]) {
-        const dx = v.controlPoints[1][0] - pt[0];
-        const dy = v.controlPoints[1][1] - pt[1];
-        const len = Math.hypot(dx, dy) || 1;
-        tangentRayDir = [dx / len, dy / len];
-      }
+        const forwardNatural = (typeof UpdateControlPoints !== 'undefined' && typeof UpdateControlPoints.computeCounterfactualTangent === 'function')
+          ? UpdateControlPoints.computeCounterfactualTangent(vertices, knotIdx)
+          : [1, 0];
 
-      const actualAngle = Math.atan2(tangentRayDir[1], tangentRayDir[0]);
+        const g = makeElement('svg:g', { id: 'qa-outbound-tangent-ray' });
+        g.addEventListener('mouseenter', () => {
+          this._isOverRay = true;
+          if (this._endpointRayHideTimer) { clearTimeout(this._endpointRayHideTimer); this._endpointRayHideTimer = null; }
+        });
+        g.addEventListener('mouseleave', () => { this._isOverRay = false; });
 
-      // Natural counterfactual baseline for magnetic snapping
-      const forwardNatural = (typeof UpdateControlPoints !== 'undefined' && typeof UpdateControlPoints.computeCounterfactualTangent === 'function')
-        ? UpdateControlPoints.computeCounterfactualTangent(vertices, knotIdx)
-        : [1, 0];
+        const attachWingHandle = (wingSide, dirVec, natDir, isExplicit) => {
+          const actualAngle = Math.atan2(dirVec[1], dirVec[0]);
+          const naturalAngle = Math.atan2(natDir[1], natDir[0]);
+          const offsetRad = StudioGeometry.normalizeAngle(actualAngle - naturalAngle);
+          const rayEnd = [pt[0] + Math.cos(actualAngle) * rayLength, pt[1] + Math.sin(actualAngle) * rayLength];
+          const naturalEnd = [pt[0] + Math.cos(naturalAngle) * (rayLength - 10), pt[1] + Math.sin(naturalAngle) * (rayLength - 10)];
 
-      const naturalRayDir = isStart ? [-forwardNatural[0], -forwardNatural[1]] : forwardNatural;
-      const naturalAngle = Math.atan2(naturalRayDir[1], naturalRayDir[0]);
+          const baselineLine = makeElement('svg:line', {
+            x1: pt[0], y1: pt[1], x2: naturalEnd[0], y2: naturalEnd[1],
+            stroke: 'rgba(255, 255, 255, 0.35)', 'stroke-width': '1.2', 'stroke-dasharray': '2,3',
+            style: { pointerEvents: 'none', display: isExplicit ? 'block' : 'none' }
+          });
+          g.appendChild(baselineLine);
 
-      let offsetRad = actualAngle - naturalAngle;
-      while (offsetRad > Math.PI) offsetRad -= Math.PI * 2;
-      while (offsetRad < -Math.PI) offsetRad += Math.PI * 2;
+          const arcR = 26;
+          const arcStart = [pt[0] + Math.cos(naturalAngle) * arcR, pt[1] + Math.sin(naturalAngle) * arcR];
+          const arcEnd = [pt[0] + Math.cos(actualAngle) * arcR, pt[1] + Math.sin(actualAngle) * arcR];
+          const angleArc = makeElement('svg:path', {
+            d: `M ${arcStart[0]} ${arcStart[1]} A ${arcR} ${arcR} 0 0 ${offsetRad > 0 ? 1 : 0} ${arcEnd[0]} ${arcEnd[1]}`,
+            fill: 'none', stroke: v.isCusp ? 'rgba(245, 158, 11, 0.75)' : 'rgba(255, 215, 0, 0.75)', 'stroke-width': '1.8',
+            style: { pointerEvents: 'none', display: isExplicit ? 'block' : 'none' }
+          });
+          g.appendChild(angleArc);
 
-      const isExplicit = Boolean(v.isExplicitTangent && Math.abs(offsetRad) > 0.005);
-
-      const g = makeElement('svg:g', { id: 'qa-outbound-tangent-ray' });
-
-      g.addEventListener('mouseenter', () => {
-        this._isOverRay = true;
-        if (this._endpointRayHideTimer) {
-          clearTimeout(this._endpointRayHideTimer);
-          this._endpointRayHideTimer = null;
-        }
-      });
-
-      g.addEventListener('mouseleave', () => {
-        this._isOverRay = false;
-      });
-
-      // 1. Natural Baseline Guide Line
-      const naturalEnd = [pt[0] + Math.cos(naturalAngle) * (rayLength - 10), pt[1] + Math.sin(naturalAngle) * (rayLength - 10)];
-      const baselineLine = makeElement('svg:line', {
-        x1: pt[0], y1: pt[1], x2: naturalEnd[0], y2: naturalEnd[1],
-        stroke: 'rgba(255, 255, 255, 0.35)', 'stroke-width': '1.2', 'stroke-dasharray': '2,3',
-        style: { pointerEvents: 'none', display: isExplicit ? 'block' : 'none' }
-      });
-      g.appendChild(baselineLine);
-
-      // 2. Arc Sector representation
-      const arcR = 26;
-      const arcStart = [pt[0] + Math.cos(naturalAngle) * arcR, pt[1] + Math.sin(naturalAngle) * arcR];
-      const arcEnd = [pt[0] + Math.cos(actualAngle) * arcR, pt[1] + Math.sin(actualAngle) * arcR];
-      const sweepFlag = (offsetRad > 0) ? 1 : 0;
-      const arcD = `M ${arcStart[0]} ${arcStart[1]} A ${arcR} ${arcR} 0 0 ${sweepFlag} ${arcEnd[0]} ${arcEnd[1]}`;
-
-      const angleArc = makeElement('svg:path', {
-        d: arcD, fill: 'none', stroke: 'rgba(255, 215, 0, 0.75)', 'stroke-width': '1.8',
-        style: { pointerEvents: 'none', display: isExplicit ? 'block' : 'none' }
-      });
-      g.appendChild(angleArc);
-
-      // 3. Projected Telemetry Badge (PROJECTED OUTSIDE GRAB HANDLE: radius = rayLength + 26px)
-      const deg = Math.round(offsetRad * (180 / Math.PI));
-      const textRadius = rayLength + 26;
-      const lblX = pt[0] + Math.cos(actualAngle) * textRadius;
-      const lblY = pt[1] + Math.sin(actualAngle) * textRadius;
-
-      const degreeBadgeGroup = makeElement('svg:g', {
-        className: 'qa-telemetry-degree-badge',
-        style: { pointerEvents: 'none', display: isExplicit ? 'block' : 'none' }
-      });
-
-      const badgeBackdrop = makeElement('svg:rect', {
-        x: lblX - 22, y: lblY - 9, width: '44', height: '18', rx: '4',
-        fill: 'rgba(9, 13, 22, 0.94)', stroke: '#ffd700', 'stroke-width': '1.2'
-      });
-
-      const degreeLabel = makeElement('svg:text', {
-        x: lblX, y: lblY + 3.5, fill: '#ffd700', 'font-size': '10px', 'font-family': 'monospace',
-        'text-anchor': 'middle', 'dominant-baseline': 'middle',
-        style: { fontWeight: 'bold' }
-      }, `${deg > 0 ? '+' : ''}${deg}°`);
-
-      degreeBadgeGroup.append(badgeBackdrop, degreeLabel);
-      g.appendChild(degreeBadgeGroup);
-
-      // 4. Interior knots: symmetric collinear tangent line extending in opposite direction
-      if (isInterior) {
-        const oppAngle = actualAngle + Math.PI;
-        const oppEnd = [pt[0] + Math.cos(oppAngle) * (rayLength * 0.75), pt[1] + Math.sin(oppAngle) * (rayLength * 0.75)];
-
-        g.appendChild(makeElement('svg:line', {
-          x1: pt[0], y1: pt[1], x2: oppEnd[0], y2: oppEnd[1],
-          stroke: isExplicit ? 'rgba(255, 215, 0, 0.45)' : 'rgba(56, 189, 248, 0.35)',
-          'stroke-width': '1.2', 'stroke-dasharray': '3,3', 'stroke-linecap': 'round',
-          style: { pointerEvents: 'none' }
-        }));
-      }
-
-      const rayEnd = [pt[0] + Math.cos(actualAngle) * rayLength, pt[1] + Math.sin(actualAngle) * rayLength];
-
-      const line = makeElement('svg:line', {
-        x1: pt[0], y1: pt[1], x2: rayEnd[0], y2: rayEnd[1],
-        stroke: isExplicit ? '#ffd700' : 'rgba(56, 189, 248, 0.65)',
-        'stroke-width': '1.5', 'stroke-linecap': 'round',
-        style: { pointerEvents: 'none' }
-      });
-
-      // 5. Ergonomic circular handle with 18px invisible hit target
-      const handleGroup = makeElement('svg:g', {
-        className: 'qa-tangent-handle-group',
-        style: { cursor: 'crosshair', pointerEvents: 'all' }
-      });
-
-      const fatHitArea = makeElement('svg:circle', {
-        cx: rayEnd[0], cy: rayEnd[1], r: '18', fill: 'transparent',
-        style: { pointerEvents: 'all' },
-        title: isExplicit ? 'Locked tangent angle • Double-click to reset to natural baseline' : 'Drag to adjust tangent angle (snaps to baseline at 5°)'
-      });
-
-      const handleNode = makeElement('svg:circle', {
-        className: 'qa-tangent-handle-node',
-        cx: rayEnd[0], cy: rayEnd[1], r: '6',
-        fill: isExplicit ? '#ffd700' : '#00f2fe',
-        stroke: '#070a13', 'stroke-width': '2.0',
-        style: {
-          filter: isExplicit ? 'drop-shadow(0 0 6px #ffd700)' : 'drop-shadow(0 0 6px #00f2fe)',
-          pointerEvents: 'none'
-        }
-      });
-
-      handleGroup.append(fatHitArea, handleNode);
-
-      fatHitArea.addEventListener('mouseenter', () => {
-        handleNode.setAttribute('r', '8');
-        handleNode.style.filter = 'drop-shadow(0 0 10px #00f2fe)';
-      });
-      fatHitArea.addEventListener('mouseleave', () => {
-        handleNode.setAttribute('r', '6');
-        handleNode.style.filter = isExplicit ? 'drop-shadow(0 0 6px #ffd700)' : 'drop-shadow(0 0 6px #00f2fe)';
-      });
-
-      fatHitArea.addEventListener('dblclick', (e) => {
-        e.stopPropagation();
-        v.tangentAngleOffset = 0;
-        v.isExplicitTangent = false;
-        this.component.commitCurveGeometryUpdate();
-        this.exposeHandles(curveRecord, controlsLayer, stageState);
-        this.component.showKnotToast('⚡ Reset to Natural Baseline (Implicit)');
-      });
-
-      let draggingRay = false;
-      fatHitArea.addEventListener('mousedown', (e) => {
-        e.stopPropagation();
-        draggingRay = true;
-        this._isDraggingRay = true;
-
-        controlsLayer.querySelectorAll('.qa-segment-midpoint-group').forEach(el => el.remove());
-
-        // LIVE REAL-TIME TELEMETRY WHILE DRAGGING (Degrees projected outside grab handle)
-        const onRayMove = (ev) => {
-          if (!draggingRay) return;
-          const rect = this.component.stageBox.getBoundingClientRect();
-          const z = stageState.zoom || 1.0;
-          const mX = (ev.clientX - rect.left) / z;
-          const mY = (ev.clientY - rect.top) / z;
-
-          const cursorAngle = Math.atan2(mY - pt[1], mX - pt[0]);
-          let deltaAngle = cursorAngle - naturalAngle;
-
-          while (deltaAngle > Math.PI) deltaAngle -= Math.PI * 2;
-          while (deltaAngle < -Math.PI) deltaAngle += Math.PI * 2;
-
-          const isSnapped = Math.abs(deltaAngle) < 0.087;
-          if (isSnapped) {
-            deltaAngle = 0;
-            v.isExplicitTangent = false;
-          } else {
-            v.isExplicitTangent = true;
+          let oppLine = null;
+          if (isInterior && !v.isCusp) {
+            const oppAngle = actualAngle + Math.PI;
+            oppLine = makeElement('svg:line', {
+              x1: pt[0], y1: pt[1],
+              x2: pt[0] + Math.cos(oppAngle) * (rayLength * 0.75),
+              y2: pt[1] + Math.sin(oppAngle) * (rayLength * 0.75),
+              stroke: isExplicit ? 'rgba(255, 215, 0, 0.45)' : 'rgba(56, 189, 248, 0.35)',
+              'stroke-width': '1.2', 'stroke-dasharray': '3,3', 'stroke-linecap': 'round',
+              style: { pointerEvents: 'none' }
+            });
+            g.appendChild(oppLine);
           }
 
-          v.tangentAngleOffset = deltaAngle;
-          this.component.commitCurveGeometryUpdate();
+          const textRadius = rayLength + 26;
+          const lblX = pt[0] + Math.cos(actualAngle) * textRadius;
+          const lblY = pt[1] + Math.sin(actualAngle) * textRadius;
+          const deg = Math.round(offsetRad * (180 / Math.PI));
 
-          const curAng = naturalAngle + deltaAngle;
-          const newEnd = [pt[0] + Math.cos(curAng) * rayLength, pt[1] + Math.sin(curAng) * rayLength];
-          line.setAttribute('x2', newEnd[0]);
-          line.setAttribute('y2', newEnd[1]);
-          fatHitArea.setAttribute('cx', newEnd[0]);
-          fatHitArea.setAttribute('cy', newEnd[1]);
-          handleNode.setAttribute('cx', newEnd[0]);
-          handleNode.setAttribute('cy', newEnd[1]);
-          handleNode.setAttribute('fill', v.isExplicitTangent ? '#ffd700' : '#00f2fe');
+          const degreeBadgeGroup = makeElement('svg:g', {
+            className: 'qa-telemetry-degree-badge',
+            style: { pointerEvents: 'none', display: isExplicit ? 'block' : 'none' }
+          });
+          const badgeBackdrop = makeElement('svg:rect', {
+            x: lblX - 22, y: lblY - 9, width: '44', height: '18', rx: '4',
+            fill: 'rgba(9, 13, 22, 0.94)', stroke: v.isCusp ? '#f59e0b' : '#ffd700', 'stroke-width': '1.2'
+          });
+          const degreeLabel = makeElement('svg:text', {
+            x: lblX, y: lblY + 3.5, fill: v.isCusp ? '#f59e0b' : '#ffd700', 'font-size': '10px',
+            'font-family': 'monospace', 'text-anchor': 'middle', 'dominant-baseline': 'middle',
+            style: { fontWeight: 'bold' }
+          }, `${deg > 0 ? '+' : ''}${deg}°`);
+          degreeBadgeGroup.append(badgeBackdrop, degreeLabel);
+          g.appendChild(degreeBadgeGroup);
 
-          // Dynamic Angle Arc & Projected Telemetry Badge update live!
-          if (Math.abs(deltaAngle) > 0.005 || isSnapped) {
-            baselineLine.style.display = 'block';
-            angleArc.style.display = 'block';
-            degreeBadgeGroup.style.display = 'block';
+          const strokeCol = v.isCusp ? '#f59e0b' : (isExplicit ? '#ffd700' : 'rgba(56, 189, 248, 0.65)');
+          const line = makeElement('svg:line', {
+            x1: pt[0], y1: pt[1], x2: rayEnd[0], y2: rayEnd[1],
+            stroke: strokeCol, 'stroke-width': '1.5', 'stroke-linecap': 'round', style: { pointerEvents: 'none' }
+          });
 
-            const sFlag = (deltaAngle > 0) ? 1 : 0;
-            const aEnd = [pt[0] + Math.cos(curAng) * arcR, pt[1] + Math.sin(curAng) * arcR];
-            angleArc.setAttribute('d', `M ${arcStart[0]} ${arcStart[1]} A ${arcR} ${arcR} 0 0 ${sFlag} ${aEnd[0]} ${aEnd[1]}`);
+          const handleGroup = makeElement('svg:g', { className: 'qa-tangent-handle-group', style: { cursor: 'crosshair', pointerEvents: 'all' } });
+          const fatHitArea = makeElement('svg:circle', {
+            cx: rayEnd[0], cy: rayEnd[1], r: '18', fill: 'transparent', style: { pointerEvents: 'all' },
+            title: v.isCusp
+              ? 'Drag cusp wing (snap 0° collinear to restore smooth point)'
+              : (isInterior ? 'Drag smooth tangent • Alt+Drag to break into cusp • Dbl-click reset' : 'Drag to adjust tangent • Dbl-click reset')
+          });
+          const nodeCol = v.isCusp ? '#f59e0b' : (isExplicit ? '#ffd700' : '#00f2fe');
+          const handleNode = makeElement('svg:circle', {
+            className: 'qa-tangent-handle-node', cx: rayEnd[0], cy: rayEnd[1], r: '6',
+            fill: nodeCol, stroke: '#070a13', 'stroke-width': '2.0',
+            style: { filter: `drop-shadow(0 0 6px ${nodeCol})`, pointerEvents: 'none' }
+          });
 
-            const liveDeg = Math.round(deltaAngle * (180 / Math.PI));
-            const liveX = pt[0] + Math.cos(curAng) * textRadius;
-            const liveY = pt[1] + Math.sin(curAng) * textRadius;
+          handleGroup.append(fatHitArea, handleNode);
+          fatHitArea.addEventListener('mouseenter', () => { handleNode.setAttribute('r', '8'); });
+          fatHitArea.addEventListener('mouseleave', () => { handleNode.setAttribute('r', '6'); });
+          fatHitArea.addEventListener('dblclick', (e) => {
+            e.stopPropagation();
+            v.tangentAngleOffset = 0; v.cuspInAngleOffset = 0; v.cuspOutAngleOffset = 0;
+            v.isCusp = false; v.isExplicitTangent = false;
+            this.component.commitCurveGeometryUpdate();
+            this.exposeHandles(curveRecord, controlsLayer, stageState);
+            this.component.showKnotToast('⚡ Reset to Natural Baseline');
+          });
 
-            const textWidth = isSnapped ? 68 : 44;
-            badgeBackdrop.setAttribute('x', liveX - textWidth / 2);
-            badgeBackdrop.setAttribute('y', liveY - 9);
-            badgeBackdrop.setAttribute('width', textWidth);
-            badgeBackdrop.setAttribute('stroke', isSnapped ? '#00f2fe' : '#ffd700');
+          let draggingRay = false;
+          let snappedToSmooth = false;
+          let collinearSmoothDir = null;
+          let collinearGuide = null;
 
-            degreeLabel.setAttribute('x', liveX);
-            degreeLabel.setAttribute('y', liveY + 3.5);
-            degreeLabel.textContent = isSnapped ? '⚡ 0° SNAP' : `${liveDeg > 0 ? '+' : ''}${liveDeg}°`;
-            degreeLabel.setAttribute('fill', isSnapped ? '#00f2fe' : '#ffd700');
+          fatHitArea.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+            draggingRay = true;
+            this._isDraggingRay = true;
+            controlsLayer.querySelectorAll('.qa-segment-midpoint-group').forEach(el => el.remove());
+
+            if (isInterior && !v.isCusp && e.altKey) {
+              StudioGeometry.setVertexCuspState(vertices, knotIdx, true);
+              this.component.commitCurveGeometryUpdate();
+              this.component.showKnotToast('◆ Broke smooth knot into cusp');
+            }
+
+            const onRayMove = (ev) => {
+              if (!draggingRay) return;
+              const rect = this.component.stageBox.getBoundingClientRect();
+              const z = stageState.zoom || 1.0;
+              const mX = (ev.clientX - rect.left) / z;
+              const mY = (ev.clientY - rect.top) / z;
+              const cursorAngle = Math.atan2(mY - pt[1], mX - pt[0]);
+
+              if (isInterior && v.isCusp) {
+                baselineLine.style.display = 'none';
+                angleArc.style.display = 'none';
+
+                const otherCp = wingSide === 'in' ? v.controlPoints[1] : v.controlPoints[0];
+                const otherDir = StudioGeometry.normalize([otherCp[0] - pt[0], otherCp[1] - pt[1]]);
+                const collinearAngle = Math.atan2(-otherDir[1], -otherDir[0]);
+                const kinkDelta = StudioGeometry.normalizeAngle(cursorAngle - collinearAngle);
+                snappedToSmooth = Math.abs(kinkDelta) < 0.095;
+                const finalAngle = snappedToSmooth ? collinearAngle : cursorAngle;
+                collinearSmoothDir = wingSide === 'out' ? [Math.cos(collinearAngle), Math.sin(collinearAngle)] : otherDir;
+
+                if (wingSide === 'in') {
+                  const nIn = v._naturalInTangent || [-1, 0];
+                  v.cuspInAngleOffset = StudioGeometry.normalizeAngle(finalAngle - Math.atan2(nIn[1], nIn[0]));
+                } else {
+                  const nOut = v._naturalOutTangent || [1, 0];
+                  v.cuspOutAngleOffset = StudioGeometry.normalizeAngle(finalAngle - Math.atan2(nOut[1], nOut[0]));
+                }
+                this.component.commitCurveGeometryUpdate();
+
+                const newEnd = [pt[0] + Math.cos(finalAngle) * rayLength, pt[1] + Math.sin(finalAngle) * rayLength];
+                line.setAttribute('x2', newEnd[0]); line.setAttribute('y2', newEnd[1]);
+                line.setAttribute('stroke', snappedToSmooth ? '#00f2fe' : '#f59e0b');
+                fatHitArea.setAttribute('cx', newEnd[0]); fatHitArea.setAttribute('cy', newEnd[1]);
+                handleNode.setAttribute('cx', newEnd[0]); handleNode.setAttribute('cy', newEnd[1]);
+                handleNode.setAttribute('fill', snappedToSmooth ? '#00f2fe' : '#f59e0b');
+
+                if (snappedToSmooth) {
+                  if (!collinearGuide) {
+                    collinearGuide = makeElement('svg:line', {
+                      id: 'qa-cusp-collinear-guide', stroke: '#00f2fe', 'stroke-width': '1.5',
+                      'stroke-dasharray': '4,3', style: { pointerEvents: 'none' }
+                    });
+                    g.appendChild(collinearGuide);
+                  }
+                  collinearGuide.setAttribute('x1', pt[0] - collinearSmoothDir[0] * rayLength);
+                  collinearGuide.setAttribute('y1', pt[1] - collinearSmoothDir[1] * rayLength);
+                  collinearGuide.setAttribute('x2', pt[0] + collinearSmoothDir[0] * rayLength);
+                  collinearGuide.setAttribute('y2', pt[1] + collinearSmoothDir[1] * rayLength);
+                  collinearGuide.style.display = 'block';
+                } else if (collinearGuide) {
+                  collinearGuide.style.display = 'none';
+                }
+
+                degreeBadgeGroup.style.display = 'block';
+                const liveX = pt[0] + Math.cos(finalAngle) * textRadius;
+                const liveY = pt[1] + Math.sin(finalAngle) * textRadius;
+                const bw = snappedToSmooth ? 82 : 48;
+                badgeBackdrop.setAttribute('x', liveX - bw / 2); badgeBackdrop.setAttribute('y', liveY - 9);
+                badgeBackdrop.setAttribute('width', bw);
+                badgeBackdrop.setAttribute('stroke', snappedToSmooth ? '#00f2fe' : '#f59e0b');
+                degreeLabel.setAttribute('x', liveX); degreeLabel.setAttribute('y', liveY + 3.5);
+                degreeLabel.setAttribute('fill', snappedToSmooth ? '#00f2fe' : '#f59e0b');
+                degreeLabel.textContent = snappedToSmooth ? '⚡ 0° SMOOTH' : `${Math.round(Math.abs(kinkDelta) * (180 / Math.PI))}°`;
+                return;
+              }
+
+              let deltaAngle = StudioGeometry.normalizeAngle(cursorAngle - naturalAngle);
+              const isSnapped = Math.abs(deltaAngle) < 0.087;
+              if (isSnapped) { deltaAngle = 0; v.isExplicitTangent = false; }
+              else { v.isExplicitTangent = true; }
+
+              v.tangentAngleOffset = deltaAngle;
+              this.component.commitCurveGeometryUpdate();
+
+              const curAng = naturalAngle + deltaAngle;
+              const newEnd = [pt[0] + Math.cos(curAng) * rayLength, pt[1] + Math.sin(curAng) * rayLength];
+              line.setAttribute('x2', newEnd[0]); line.setAttribute('y2', newEnd[1]);
+              fatHitArea.setAttribute('cx', newEnd[0]); fatHitArea.setAttribute('cy', newEnd[1]);
+              handleNode.setAttribute('cx', newEnd[0]); handleNode.setAttribute('cy', newEnd[1]);
+              handleNode.setAttribute('fill', v.isExplicitTangent ? '#ffd700' : '#00f2fe');
+
+              if (oppLine) {
+                const oppAng = curAng + Math.PI;
+                oppLine.setAttribute('x2', pt[0] + Math.cos(oppAng) * (rayLength * 0.75));
+                oppLine.setAttribute('y2', pt[1] + Math.sin(oppAng) * (rayLength * 0.75));
+              }
+
+              if (Math.abs(deltaAngle) > 0.005 || isSnapped) {
+                baselineLine.style.display = 'block';
+                angleArc.style.display = 'block';
+                const aEnd = [pt[0] + Math.cos(curAng) * arcR, pt[1] + Math.sin(curAng) * arcR];
+                angleArc.setAttribute('d', `M ${arcStart[0]} ${arcStart[1]} A ${arcR} ${arcR} 0 0 ${deltaAngle > 0 ? 1 : 0} ${aEnd[0]} ${aEnd[1]}`);
+
+                degreeBadgeGroup.style.display = 'block';
+                const liveDeg = Math.round(deltaAngle * (180 / Math.PI));
+                const liveX = pt[0] + Math.cos(curAng) * textRadius;
+                const liveY = pt[1] + Math.sin(curAng) * textRadius;
+                const bw = isSnapped ? 68 : 44;
+                badgeBackdrop.setAttribute('x', liveX - bw / 2); badgeBackdrop.setAttribute('y', liveY - 9);
+                badgeBackdrop.setAttribute('width', bw);
+                badgeBackdrop.setAttribute('stroke', isSnapped ? '#00f2fe' : '#ffd700');
+                degreeLabel.setAttribute('x', liveX); degreeLabel.setAttribute('y', liveY + 3.5);
+                degreeLabel.setAttribute('fill', isSnapped ? '#00f2fe' : '#ffd700');
+                degreeLabel.textContent = isSnapped ? '⚡ 0° SNAP' : `${liveDeg > 0 ? '+' : ''}${liveDeg}°`;
+              } else {
+                baselineLine.style.display = 'none';
+                angleArc.style.display = 'none';
+                degreeBadgeGroup.style.display = 'none';
+              }
+            };
+
+            const onRayUp = () => {
+              draggingRay = false;
+              this._isDraggingRay = false;
+              if (collinearGuide) { collinearGuide.remove(); collinearGuide = null; }
+              window.removeEventListener('mousemove', onRayMove);
+              window.removeEventListener('mouseup', onRayUp);
+              if (isInterior && v.isCusp && snappedToSmooth && collinearSmoothDir) {
+                StudioGeometry.setVertexCuspState(vertices, knotIdx, false, collinearSmoothDir);
+                this.component.commitCurveGeometryUpdate();
+                this.component.showKnotToast('● Snapped 0° Smooth Point');
+              }
+              this.exposeHandles(curveRecord, controlsLayer, stageState);
+              this.component.updateDynamicKeyInHUD();
+            };
+
+            window.addEventListener('mousemove', onRayMove);
+            window.addEventListener('mouseup', onRayUp);
+          });
+
+          g.append(line, handleGroup);
+        };
+
+        if (isStart && v.controlPoints[1]) {
+          const dir = StudioGeometry.normalize([pt[0] - v.controlPoints[1][0], pt[1] - v.controlPoints[1][1]]);
+          attachWingHandle('out', dir, [-forwardNatural[0], -forwardNatural[1]], Boolean(v.isExplicitTangent && Math.abs(v.tangentAngleOffset || 0) > 0.005));
+        } else if (isTail && v.controlPoints[0]) {
+          const dir = StudioGeometry.normalize([pt[0] - v.controlPoints[0][0], pt[1] - v.controlPoints[0][1]]);
+          attachWingHandle('in', dir, forwardNatural, Boolean(v.isExplicitTangent && Math.abs(v.tangentAngleOffset || 0) > 0.005));
+        } else if (isInterior) {
+          const outDir = StudioGeometry.normalize([v.controlPoints[1][0] - pt[0], v.controlPoints[1][1] - pt[1]]);
+          if (v.isCusp) {
+            const inDir = StudioGeometry.normalize([v.controlPoints[0][0] - pt[0], v.controlPoints[0][1] - pt[1]]);
+            attachWingHandle('in', inDir, v._naturalInTangent || [-1, 0], Math.abs(v.cuspInAngleOffset || 0) > 0.01);
+            attachWingHandle('out', outDir, v._naturalOutTangent || [1, 0], Math.abs(v.cuspOutAngleOffset || 0) > 0.01);
           } else {
-            baselineLine.style.display = 'none';
-            angleArc.style.display = 'none';
-            degreeBadgeGroup.style.display = 'none';
+            const isExp = Boolean(v.isExplicitTangent && Math.abs(v.tangentAngleOffset || 0) > 0.005);
+            attachWingHandle('out', outDir, forwardNatural, isExp);
           }
+        }
 
-          QuoraLogger.getInstance().log('knots', 9, `Tangent Angle: ${Math.round(deltaAngle * (180 / Math.PI))}° [Snapped: ${isSnapped}]`);
-        };
-
-        const onRayUp = () => {
-          draggingRay = false;
-          this._isDraggingRay = false;
-          window.removeEventListener('mousemove', onRayMove);
-          window.removeEventListener('mouseup', onRayUp);
-          this.renderOutboundTangentRay(curveRecord, knotIdx, controlsLayer, stageState);
-          this.renderSegmentMidpointIndicators(curveRecord, controlsLayer, stageState);
-          this.component.updateDynamicKeyInHUD();
-        };
-
-        window.addEventListener('mousemove', onRayMove);
-        window.addEventListener('mouseup', onRayUp);
-      });
-
-      g.append(line, handleGroup);
-      controlsLayer.appendChild(g);
-    }
+        controlsLayer.appendChild(g);
+      }
   renderSegmentMidpointIndicators(curveRecord, controlsLayer, stageState) {
     controlsLayer.querySelectorAll('.qa-segment-midpoint-group').forEach(el => el.remove());
 
