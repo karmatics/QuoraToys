@@ -70,220 +70,96 @@ class QuoraImageManager {
           offsetY: bounds.offsetY || pad
         };
     }
+
   renderControls(controlsLayer, stageState) {
-      controlsLayer.querySelectorAll('.qa-image-plate-control').forEach(el => el.remove());
-      const plate = stageState.activeImage;
-      if (!plate) return;
+    controlsLayer.querySelectorAll('.qa-image-plate-control').forEach(el => el.remove());
+    const plate = stageState.activeImage;
+    if (!plate) return;
 
-      const z = stageState.zoom || 1.0;
-      const invScale = (1 / z).toFixed(3);
-      const g = makeElement('svg:g', { className: 'qa-image-plate-control' });
+    const comp = this.component;
+    const z = stageState.zoom || 1.0;
+    const inv = 1 / z;
+    const invScale = inv.toFixed(3);
+    const isFaded = plate.opacity === 0.5;
 
-      // 1. Transparent Drag Surface
-      const dragSurface = makeElement('svg:rect', {
-        x: plate.x, y: plate.y, width: plate.width, height: plate.height,
-        fill: 'rgba(0, 242, 254, 0.02)', stroke: '#00f2fe', 'stroke-width': String(1.8 / z),
-        'stroke-dasharray': `${6/z},${4/z}`,
-        style: { cursor: 'move', pointerEvents: 'all' },
-        title: 'Drag to move image plate • Press Delete to remove'
-      });
-
-      let isMoving = false;
-      let startMouseX = 0, startMouseY = 0;
-      let initialPlateX = plate.x, initialPlateY = plate.y;
-
-      dragSurface.addEventListener('mousedown', (e) => {
-        if (e.button === 2) return;
-        if (e.target.closest('.qa-plate-mini-toolbar')) return;
+    const dragSurface = makeElement('svg:rect', {
+      x: plate.x, y: plate.y, width: plate.width, height: plate.height,
+      fill: 'rgba(0, 242, 254, 0.02)', stroke: '#00f2fe', 'stroke-width': String(1.8 * inv),
+      'stroke-dasharray': `${6 * inv},${4 * inv}`,
+      style: { cursor: 'move', pointerEvents: 'all' },
+      title: 'Drag to move image plate • Press Delete to remove',
+      onmousedown: (e) => {
+        if (e.button === 2 || e.target.closest('.qa-plate-mini-toolbar')) return;
         e.stopPropagation();
-        isMoving = true;
-        startMouseX = e.clientX;
-        startMouseY = e.clientY;
-        initialPlateX = plate.x;
-        initialPlateY = plate.y;
-
-        const onPlateMove = (ev) => {
-          if (!isMoving) return;
+        const sx = e.clientX, sy = e.clientY, ix = plate.x, iy = plate.y;
+        this._trackDrag((ev) => {
           const curZ = stageState.zoom || 1.0;
-          plate.x = Math.round(initialPlateX + (ev.clientX - startMouseX) / curZ);
-          plate.y = Math.round(initialPlateY + (ev.clientY - startMouseY) / curZ);
-          this.component.renderStage();
-        };
-
-        const onPlateUp = () => {
-          isMoving = false;
-          window.removeEventListener('mousemove', onPlateMove);
-          window.removeEventListener('mouseup', onPlateUp);
-        };
-
-        window.addEventListener('mousemove', onPlateMove);
-        window.addEventListener('mouseup', onPlateUp);
-      });
-
-      g.appendChild(dragSurface);
-
-      // 2. Zoom-Invariant Mini Action Deck Docked Above Image Top Edge
-      const deckY = plate.y - (30 / z);
-      const deckX = plate.x;
-
-      const deckForeign = makeElement('svg:foreignObject', {
-        className: 'qa-plate-mini-toolbar',
-        x: deckX, y: deckY, width: '340', height: '30',
-        style: {
-          overflow: 'visible', pointerEvents: 'auto',
-          transformOrigin: '0 100%', transform: `scale(${invScale})`
-        }
-      });
-
-      const isFaded = (plate.opacity === 0.5);
-
-      const deckWrap = makeElement('div', {
-        style: {
-          display: 'inline-flex', alignItems: 'center', gap: '4px',
-          background: 'rgba(9, 13, 22, 0.96)', border: '1px solid rgba(0, 242, 254, 0.45)',
-          borderRadius: '14px', padding: '2px 8px', boxShadow: '0 4px 14px rgba(0,0,0,0.85)',
-          backdropFilter: 'blur(10px)'
-        }
-      }, [
-        makeElement('button', {
-          className: 'dr-nav-btn',
-          style: { padding: '2px 7px', fontSize: '10px', color: '#00f2fe' },
-          title: 'Clone image plate (D)',
-          onclick: (e) => { e.stopPropagation(); this.duplicateActivePlate(stageState); }
-        }, '⧉ Clone'),
-        makeElement('button', {
-          className: 'dr-nav-btn',
-          style: { padding: '2px 7px', fontSize: '10px', color: '#38bdf8' },
-          title: 'Crop image plate to sub-rectangle',
-          onclick: (e) => { e.stopPropagation(); this.startPlateCrop(plate); }
-        }, '✂️ Crop'),
-        makeElement('button', {
-          className: 'dr-nav-btn',
-          style: { padding: '2px 7px', fontSize: '10px', color: isFaded ? '#ffd700' : '#cbd5e1' },
-          title: 'Toggle Opacity (100% / 50%)',
-          onclick: (e) => { e.stopPropagation(); this.togglePlateOpacity(stageState, plate); }
-        }, isFaded ? '◐ 50%' : '● 100%'),
-        makeElement('button', {
-          className: 'dr-nav-btn',
-          style: { padding: '2px 5px', fontSize: '10px' },
-          title: 'Bring forward in layer stack',
-          onclick: (e) => { e.stopPropagation(); this.bringForward(stageState, plate); }
-        }, '▲'),
-        makeElement('button', {
-          className: 'dr-nav-btn',
-          style: { padding: '2px 5px', fontSize: '10px' },
-          title: 'Send backward in layer stack',
-          onclick: (e) => { e.stopPropagation(); this.sendBackward(stageState, plate); }
-        }, '▼'),
-        makeElement('button', {
-          className: 'dr-nav-btn',
-          style: { padding: '2px 7px', fontSize: '10px', color: '#ff7b72' },
-          title: 'Delete image plate (Del)',
-          onclick: (e) => { e.stopPropagation(); this.deleteActivePlate(stageState); }
-        }, '🗑️ Del')
-      ]);
-
-      deckForeign.appendChild(deckWrap);
-      g.appendChild(deckForeign);
-
-      // 3. True Opposite-Corner Anchored Resize Grips
-      const gripSize = 10 / z;
-      const halfGrip = gripSize / 2;
-      const corners = [
-        { id: 'nw', x: plate.x, y: plate.y, cursor: 'nwse-resize' },
-        { id: 'ne', x: plate.x + plate.width, y: plate.y, cursor: 'nesw-resize' },
-        { id: 'se', x: plate.x + plate.width, y: plate.y + plate.height, cursor: 'nwse-resize' },
-        { id: 'sw', x: plate.x, y: plate.y + plate.height, cursor: 'nesw-resize' }
-      ];
-
-      corners.forEach(corner => {
-        const grip = makeElement('svg:rect', {
-          className: 'qa-image-resize-grip',
-          'data-orig-x': corner.x,
-          'data-orig-y': corner.y,
-          x: corner.x - halfGrip, y: corner.y - halfGrip,
-          width: gripSize, height: gripSize,
-          fill: '#00f2fe', stroke: '#ffffff', 'stroke-width': String(1.5 / z), rx: String(2 / z),
-          style: { cursor: corner.cursor, pointerEvents: 'all', filter: 'drop-shadow(0 0 4px rgba(0,0,0,0.8))' },
-          title: 'Drag to scale image with opposite corner fixed'
+          plate.x = Math.round(ix + (ev.clientX - sx) / curZ);
+          plate.y = Math.round(iy + (ev.clientY - sy) / curZ);
+          comp.renderStage();
         });
+      }
+    });
 
-        let isResizing = false;
-        let startX = 0, startW = plate.width, startH = plate.height;
-        let startPlateX = plate.x, startPlateY = plate.y;
+    const deckBtn = (label, opts, fn) => makeElement('button', {
+      className: 'dr-nav-btn',
+      style: { padding: '2px 7px', fontSize: '10px', ...opts.style },
+      title: opts.title || '',
+      onclick: (e) => { e.stopPropagation(); fn(); }
+    }, label);
 
-        grip.addEventListener('mousedown', (e) => {
-          e.stopPropagation();
-          isResizing = true;
-          startX = e.clientX;
-          startW = plate.width;
-          startH = plate.height;
-          startPlateX = plate.x;
-          startPlateY = plate.y;
+    const deckWrap = makeElement('div', {
+      style: {
+        display: 'inline-flex', alignItems: 'center', gap: '4px',
+        background: 'rgba(9, 13, 22, 0.96)', border: '1px solid rgba(0, 242, 254, 0.45)',
+        borderRadius: '14px', padding: '2px 8px', boxShadow: '0 4px 14px rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)'
+      }
+    }, [
+      deckBtn('⧉ Clone', { style: { color: '#00f2fe' }, title: 'Clone image plate (D)' }, () => this.duplicateActivePlate(stageState)),
+      deckBtn('✂️ Crop', { style: { color: '#38bdf8' }, title: 'Crop image plate to sub-rectangle' }, () => this.startPlateCrop(plate)),
+      deckBtn(isFaded ? '◐ 50%' : '● 100%', { style: { color: isFaded ? '#ffd700' : '#cbd5e1' }, title: 'Toggle Opacity (100% / 50%)' }, () => this.togglePlateOpacity(stageState, plate)),
+      deckBtn('▲', { style: { padding: '2px 5px' }, title: 'Bring forward in layer stack' }, () => this.bringForward(stageState, plate)),
+      deckBtn('▼', { style: { padding: '2px 5px' }, title: 'Send backward in layer stack' }, () => this.sendBackward(stageState, plate)),
+      deckBtn('🗑️ Del', { style: { color: '#ff7b72' }, title: 'Delete image plate (Del)' }, () => this.deleteActivePlate(stageState))
+    ]);
 
-          const onResizeMove = (ev) => {
-            if (!isResizing) return;
-            const curZ = stageState.zoom || 1.0;
-            const deltaX = (ev.clientX - startX) / curZ;
+    const deckForeign = makeElement('svg:foreignObject', {
+      className: 'qa-plate-mini-toolbar',
+      x: plate.x, y: plate.y - 30 * inv, width: '340', height: '30',
+      style: { overflow: 'visible', pointerEvents: 'auto', transformOrigin: '0 100%', transform: `scale(${invScale})` }
+    }, [deckWrap]);
 
-            // MATHEMATICALLY EXACT OPPOSITE-CORNER ANCHORING
-            if (corner.id === 'se') {
-              // Opposite corner is NW (startPlateX, startPlateY) - stays completely still!
-              const newW = Math.max(40, startW + deltaX);
-              plate.x = startPlateX;
-              plate.y = startPlateY;
-              plate.width = newW;
-              plate.height = Math.round(newW / plate.aspect);
-            } else if (corner.id === 'nw') {
-              // Opposite corner is SE (startPlateX + startW, startPlateY + startH) - stays completely still!
-              const fixedX = startPlateX + startW;
-              const fixedY = startPlateY + startH;
-              const newW = Math.max(40, startW - deltaX);
-              const newH = Math.round(newW / plate.aspect);
-              plate.x = fixedX - newW;
-              plate.y = fixedY - newH;
-              plate.width = newW;
-              plate.height = newH;
-            } else if (corner.id === 'ne') {
-              // Opposite corner is SW (startPlateX, startPlateY + startH) - stays completely still!
-              const fixedX = startPlateX;
-              const fixedY = startPlateY + startH;
-              const newW = Math.max(40, startW + deltaX);
-              const newH = Math.round(newW / plate.aspect);
-              plate.x = fixedX;
-              plate.y = fixedY - newH;
-              plate.width = newW;
-              plate.height = newH;
-            } else if (corner.id === 'sw') {
-              // Opposite corner is NE (startPlateX + startW, startPlateY) - stays completely still!
-              const fixedX = startPlateX + startW;
-              const fixedY = startPlateY;
-              const newW = Math.max(40, startW - deltaX);
-              const newH = Math.round(newW / plate.aspect);
-              plate.x = fixedX - newW;
-              plate.y = fixedY;
-              plate.width = newW;
-              plate.height = newH;
-            }
-
-            this.component.renderStage();
-          };
-
-          const onResizeUp = () => {
-            isResizing = false;
-            window.removeEventListener('mousemove', onResizeMove);
-            window.removeEventListener('mouseup', onResizeUp);
-          };
-
-          window.addEventListener('mousemove', onResizeMove);
-          window.addEventListener('mouseup', onResizeUp);
+    const gripSize = 10 * inv;
+    const half = gripSize / 2;
+    const grips = [
+      { id: 'nw', x: plate.x, y: plate.y, cursor: 'nwse-resize' },
+      { id: 'ne', x: plate.x + plate.width, y: plate.y, cursor: 'nesw-resize' },
+      { id: 'se', x: plate.x + plate.width, y: plate.y + plate.height, cursor: 'nwse-resize' },
+      { id: 'sw', x: plate.x, y: plate.y + plate.height, cursor: 'nesw-resize' }
+    ].map(c => makeElement('svg:rect', {
+      className: 'qa-image-resize-grip', 'data-orig-x': c.x, 'data-orig-y': c.y,
+      x: c.x - half, y: c.y - half, width: gripSize, height: gripSize,
+      fill: '#00f2fe', stroke: '#ffffff', 'stroke-width': String(1.5 * inv), rx: String(2 * inv),
+      style: { cursor: c.cursor, pointerEvents: 'all', filter: 'drop-shadow(0 0 4px rgba(0,0,0,0.8))' },
+      title: 'Drag to scale image with opposite corner fixed',
+      onmousedown: (e) => {
+        e.stopPropagation();
+        const sx = e.clientX, sw = plate.width, sh = plate.height, px = plate.x, py = plate.y;
+        this._trackDrag((ev) => {
+          const dx = (ev.clientX - sx) / (stageState.zoom || 1.0);
+          const nw = Math.max(40, Math.round(c.id.includes('e') ? sw + dx : sw - dx));
+          const nh = Math.round(nw / plate.aspect);
+          plate.x = c.id.includes('w') ? px + sw - nw : px;
+          plate.y = c.id.includes('n') ? py + sh - nh : py;
+          plate.width = nw;
+          plate.height = nh;
+          comp.renderStage();
         });
+      }
+    }));
 
-        g.appendChild(grip);
-      });
-
-      controlsLayer.appendChild(g);
-    }
+    controlsLayer.appendChild(makeElement('svg:g', { className: 'qa-image-plate-control' }, [dragSurface, deckForeign, ...grips]));
+  }
   deleteActivePlate(stageState) {
     if (!stageState.activeImage) return false;
     const idx = stageState.placedImages.indexOf(stageState.activeImage);
@@ -809,123 +685,67 @@ class QuoraImageManager {
     }
 
   renderExportBoundsOverlay(targetLayer, stageState) {
-      const existing = document.getElementById('qa-export-bounds-overlay');
-      if (existing) existing.remove();
+    document.getElementById('qa-export-bounds-overlay')?.remove();
+    const rect = stageState.exportRect;
+    if (!rect || rect.width < 10 || rect.height < 10) return;
 
-      const rect = stageState.exportRect;
-      if (!rect || rect.width < 10 || rect.height < 10) return;
+    const comp = this.component;
+    const inv = 1 / (stageState.zoom || 1.0);
+    const big = 10000;
+    const maskPath = `M -${big} -${big} H ${big} V ${big} H -${big} Z M ${rect.x} ${rect.y} V ${rect.y + rect.height} H ${rect.x + rect.width} V ${rect.y} Z`;
 
-      const z = stageState.zoom || 1.0;
-      const invScale = 1 / z;
-      const g = makeElement('svg:g', { id: 'qa-export-bounds-overlay' });
-
-      const big = 10000;
-      const maskPath = `M -${big} -${big} H ${big} V ${big} H -${big} Z M ${rect.x} ${rect.y} V ${rect.y + rect.height} H ${rect.x + rect.width} V ${rect.y} Z`;
-      g.appendChild(makeElement('svg:path', {
-        d: maskPath,
-        fill: 'rgba(0, 0, 0, 0.42)',
-        'fill-rule': 'evenodd',
-        style: { pointerEvents: 'none' }
-      }));
-
-      const borderRect = makeElement('svg:rect', {
-        x: rect.x, y: rect.y, width: rect.width, height: rect.height,
-        fill: 'none', stroke: '#ffd700', 'stroke-width': String(2 * invScale),
-        'stroke-dasharray': `${7 * invScale},${4 * invScale}`,
-        style: { cursor: 'move', pointerEvents: 'stroke' }
-      });
-
-      let isDraggingRect = false;
-      let sX = 0, sY = 0, origX = rect.x, origY = rect.y;
-
-      borderRect.addEventListener('mousedown', (e) => {
+    const maskEl = makeElement('svg:path', { d: maskPath, fill: 'rgba(0, 0, 0, 0.42)', 'fill-rule': 'evenodd', style: { pointerEvents: 'none' } });
+    const borderRect = makeElement('svg:rect', {
+      x: rect.x, y: rect.y, width: rect.width, height: rect.height,
+      fill: 'none', stroke: '#ffd700', 'stroke-width': String(2 * inv), 'stroke-dasharray': `${7 * inv},${4 * inv}`,
+      style: { cursor: 'move', pointerEvents: 'stroke' },
+      onmousedown: (e) => {
         if (e.button === 2) return;
         e.stopPropagation();
-        isDraggingRect = true;
-        sX = e.clientX; sY = e.clientY;
-        origX = rect.x; origY = rect.y;
-
-        const onM = (ev) => {
-          if (!isDraggingRect) return;
-          const curZ = stageState.zoom || 1.0;
-          rect.x = Math.max(0, Math.round(origX + (ev.clientX - sX) / curZ));
-          rect.y = Math.max(0, Math.round(origY + (ev.clientY - sY) / curZ));
+        const sx = e.clientX, sy = e.clientY, ox = rect.x, oy = rect.y;
+        this._trackDrag((ev) => {
+          const z = stageState.zoom || 1.0;
+          rect.x = Math.max(0, Math.round(ox + (ev.clientX - sx) / z));
+          rect.y = Math.max(0, Math.round(oy + (ev.clientY - sy) / z));
           this.renderExportBoundsOverlay(targetLayer, stageState);
-        };
-        const onU = () => {
-          isDraggingRect = false;
-          window.removeEventListener('mousemove', onM);
-          window.removeEventListener('mouseup', onU);
-        };
-        window.addEventListener('mousemove', onM);
-        window.addEventListener('mouseup', onU);
-      });
-
-      g.appendChild(borderRect);
-
-      const gripSize = 10 * invScale;
-      const half = gripSize / 2;
-      const corners = [
-        { id: 'nw', x: rect.x, y: rect.y, cursor: 'nwse-resize' },
-        { id: 'ne', x: rect.x + rect.width, y: rect.y, cursor: 'nesw-resize' },
-        { id: 'se', x: rect.x + rect.width, y: rect.y + rect.height, cursor: 'nwse-resize' },
-        { id: 'sw', x: rect.x, y: rect.y + rect.height, cursor: 'nesw-resize' }
-      ];
-
-      corners.forEach(c => {
-        const handle = makeElement('svg:rect', {
-          x: c.x - half, y: c.y - half, width: gripSize, height: gripSize,
-          fill: '#ffd700', stroke: '#070a13', 'stroke-width': String(1.5 * invScale), rx: String(2 * invScale),
-          style: { cursor: c.cursor, pointerEvents: 'all' }
         });
+      }
+    });
 
-        handle.addEventListener('mousedown', (e) => {
-          e.stopPropagation();
-          const startX = e.clientX, startY = e.clientY;
-          const stRect = { ...rect };
-
-          const onMove = (ev) => {
-            const curZ = stageState.zoom || 1.0;
-            const dx = (ev.clientX - startX) / curZ;
-            const dy = (ev.clientY - startY) / curZ;
-
-            if (c.id.includes('e')) rect.width = Math.max(40, Math.round(stRect.width + dx));
-            if (c.id.includes('s')) rect.height = Math.max(40, Math.round(stRect.height + dy));
-            if (c.id.includes('w')) {
-              const newW = Math.max(40, Math.round(stRect.width - dx));
-              rect.x = Math.round(stRect.x + (stRect.width - newW));
-              rect.width = newW;
-            }
-            if (c.id.includes('n')) {
-              const newH = Math.max(40, Math.round(stRect.height - dy));
-              rect.y = Math.round(stRect.y + (stRect.height - newH));
-              rect.height = newH;
-            }
-            this.renderExportBoundsOverlay(targetLayer, stageState);
-          };
-
-          const onUp = () => {
-            window.removeEventListener('mousemove', onMove);
-            window.removeEventListener('mouseup', onUp);
-          };
-          window.addEventListener('mousemove', onMove);
-          window.addEventListener('mouseup', onUp);
+    const gSize = 10 * inv, half = gSize / 2;
+    const grips = [
+      { id: 'nw', x: rect.x, y: rect.y, cursor: 'nwse-resize' },
+      { id: 'ne', x: rect.x + rect.width, y: rect.y, cursor: 'nesw-resize' },
+      { id: 'se', x: rect.x + rect.width, y: rect.y + rect.height, cursor: 'nwse-resize' },
+      { id: 'sw', x: rect.x, y: rect.y + rect.height, cursor: 'nesw-resize' }
+    ].map(c => makeElement('svg:rect', {
+      x: c.x - half, y: c.y - half, width: gSize, height: gSize,
+      fill: '#ffd700', stroke: '#070a13', 'stroke-width': String(1.5 * inv), rx: String(2 * inv),
+      style: { cursor: c.cursor, pointerEvents: 'all' },
+      onmousedown: (e) => {
+        e.stopPropagation();
+        const sx = e.clientX, sy = e.clientY, stR = { ...rect };
+        this._trackDrag((ev) => {
+          const z = stageState.zoom || 1.0;
+          const dx = (ev.clientX - sx) / z, dy = (ev.clientY - sy) / z;
+          if (c.id.includes('e')) rect.width = Math.max(40, Math.round(stR.width + dx));
+          if (c.id.includes('s')) rect.height = Math.max(40, Math.round(stR.height + dy));
+          if (c.id.includes('w')) { const nw = Math.max(40, Math.round(stR.width - dx)); rect.x = Math.round(stR.x + (stR.width - nw)); rect.width = nw; }
+          if (c.id.includes('n')) { const nh = Math.max(40, Math.round(stR.height - dy)); rect.y = Math.round(stR.y + (stR.height - nh)); rect.height = nh; }
+          this.renderExportBoundsOverlay(targetLayer, stageState);
         });
+      }
+    }));
 
-        g.appendChild(handle);
-      });
-
-      const pillFo = makeElement('svg:foreignObject', {
-        x: rect.x, y: Math.max(0, rect.y - 28 * invScale), width: '240', height: '26',
-        style: { overflow: 'visible', transformOrigin: '0 100%', transform: `scale(${invScale})` }
-      });
-
-      const pill = makeElement('div', {
+    const pillFo = makeElement('svg:foreignObject', {
+      x: rect.x, y: Math.max(0, rect.y - 28 * inv), width: '240', height: '26',
+      style: { overflow: 'visible', transformOrigin: '0 100%', transform: `scale(${inv.toFixed(3)})` }
+    }, [
+      makeElement('div', {
         style: {
-          display: 'inline-flex', alignItems: 'center', gap: '6px',
-          background: 'rgba(9, 13, 22, 0.96)', border: '1px solid #ffd700',
-          borderRadius: '14px', padding: '2px 8px', fontSize: '10px', fontFamily: 'monospace',
-          color: '#ffd700', boxShadow: '0 4px 12px rgba(0,0,0,0.8)', whiteSpace: 'nowrap'
+          display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(9, 13, 22, 0.96)',
+          border: '1px solid #ffd700', borderRadius: '14px', padding: '2px 8px', fontSize: '10px',
+          fontFamily: 'monospace', color: '#ffd700', boxShadow: '0 4px 12px rgba(0,0,0,0.8)', whiteSpace: 'nowrap'
         }
       }, [
         makeElement('span', { style: { fontWeight: 'bold' } }, `📐 Export: ${Math.round(rect.width)}×${Math.round(rect.height)}`),
@@ -936,16 +756,25 @@ class QuoraImageManager {
           onclick: (e) => {
             e.stopPropagation();
             stageState.exportRect = null;
-            this.component.renderStage();
-            this.component.showKnotToast('📐 Export bounds reset to Auto');
+            comp.renderStage();
+            comp.showKnotToast('📐 Export bounds reset to Auto');
           }
         }, '✕ Auto')
-      ]);
+      ])
+    ]);
 
-      pillFo.appendChild(pill);
-      g.appendChild(pillFo);
-      targetLayer.appendChild(g);
-    }
+    targetLayer.appendChild(makeElement('svg:g', { id: 'qa-export-bounds-overlay' }, [maskEl, borderRect, ...grips, pillFo]));
+  }
+  _trackDrag(onMove, onUp) {
+    const handleMove = (ev) => onMove(ev);
+    const handleUp = (ev) => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+      if (onUp) onUp(ev);
+    };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+  }
 }
 
 globalThis.QuoraImageManager = QuoraImageManager;

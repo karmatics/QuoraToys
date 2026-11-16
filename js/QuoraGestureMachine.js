@@ -126,583 +126,386 @@ class QuoraGestureMachine {
   }
 
   cleanupGestureIndicators() {
-        if (this.pauseTimer) clearTimeout(this.pauseTimer);
-        if (this.deadzoneCircle) { this.deadzoneCircle.remove(); this.deadzoneCircle = null; }
-        if (this.cursorEraseCircle) { this.cursorEraseCircle.remove(); this.cursorEraseCircle = null; }
-        if (this.tipPointIndicator) { this.tipPointIndicator.remove(); this.tipPointIndicator = null; }
-        if (this.activeTetherLine) { this.activeTetherLine.remove(); this.activeTetherLine = null; }
-        if (this.cuspMarkersGroup) { this.cuspMarkersGroup.remove(); this.cuspMarkersGroup = null; }
-        if (this.svgSurface && this.svgSurface._preview) { this.svgSurface._preview.remove(); this.svgSurface._preview = null; }
-        if (this.svgSurface && this.svgSurface._previewGlow) { this.svgSurface._previewGlow.remove(); this.svgSurface._previewGlow = null; }
-        if (this.svgSurface && this.svgSurface._previewArrow) { this.svgSurface._previewArrow.remove(); this.svgSurface._previewArrow = null; }
-        if (this.svgSurface && this.svgSurface._previewArrowGlow) { this.svgSurface._previewArrowGlow.remove(); this.svgSurface._previewArrowGlow = null; }
+      if (this.pauseTimer) clearTimeout(this.pauseTimer);
+      if (this.deadzoneCircle) { this.deadzoneCircle.remove(); this.deadzoneCircle = null; }
+      if (this.cursorEraseCircle) { this.cursorEraseCircle.remove(); this.cursorEraseCircle = null; }
+      if (this.tipPointIndicator) { this.tipPointIndicator.remove(); this.tipPointIndicator = null; }
+      if (this.activeTetherLine) { this.activeTetherLine.remove(); this.activeTetherLine = null; }
+      if (this.cuspMarkersGroup) { this.cuspMarkersGroup.remove(); this.cuspMarkersGroup = null; }
+      if (this.svgSurface && this.svgSurface._preview) { this.svgSurface._preview.remove(); this.svgSurface._preview = null; }
+      if (this.svgSurface && this.svgSurface._previewGlow) { this.svgSurface._previewGlow.remove(); this.svgSurface._previewGlow = null; }
+      if (this.svgSurface && this.svgSurface._previewArrow) { this.svgSurface._previewArrow.remove(); this.svgSurface._previewArrow = null; }
+      if (this.svgSurface && this.svgSurface._previewArrowShadow) { this.svgSurface._previewArrowShadow.remove(); this.svgSurface._previewArrowShadow = null; }
+      if (this.svgSurface && this.svgSurface._previewArrowGlow) { this.svgSurface._previewArrowGlow.remove(); this.svgSurface._previewArrowGlow = null; }
 
-        this._prevCursorPt = null;
+      this._prevCursorPt = null;
 
-        const dial = document.getElementById('qa-transient-cursor-dial');
-        if (dial) dial.remove();
-        const clutch = document.getElementById('qa-clutch-rest-badge');
-        if (clutch) clutch.remove();
+      const dial = document.getElementById('qa-transient-cursor-dial');
+      if (dial) dial.remove();
+      const clutch = document.getElementById('qa-clutch-rest-badge');
+      if (clutch) clutch.remove();
 
-        if (this.component && this.component.inSituHud) {
-          this.component.inSituHud.hideCursorReticle();
-          this.component.inSituHud.hideTransientCursorDial();
-        }
+      if (this.component && this.component.inSituHud) {
+        this.component.inSituHud.hideCursorReticle();
+        this.component.inSituHud.hideTransientCursorDial();
       }
-
+    }
   onMouseDown(e) {
-        if (e.target.closest('.qa-on-curve-knot-handle, .qa-tangent-handle-group, .qa-segment-midpoint-group, .qa-movable-label-group, .qa-image-plate-control, #qa-keyin-matrix-hud, #qa-transient-cursor-dial, .qa-selectable-callout, .qa-movable-text-badge, #qa-knot-context-menu, #qa-inline-tail-editor, #qa-callout-editor-dock, #qa-export-bounds-overlay')) return;
+          if (e.target.closest('.qa-on-curve-knot-handle, .qa-tangent-handle-group, .qa-segment-midpoint-group, .qa-movable-label-group, .qa-image-plate-control, #qa-keyin-matrix-hud, #qa-transient-cursor-dial, .qa-selectable-callout, .qa-movable-text-badge, #qa-knot-context-menu, #qa-inline-tail-editor, #qa-callout-editor-dock, #qa-export-bounds-overlay')) return;
 
-        if (this.component._commitActiveInlineEditor) {
-          this.component._commitActiveInlineEditor();
-        }
-
-        const pt = this.getStagePt(e);
-        this.component._lastStageMousePt = pt;
-        const isPaintMode = (this.component.stageState.activeTool === 'paint');
-
-        if (this.component._isDefiningExportRect) {
-          this._isDrawingExportRect = true;
-          this._exportRectStart = pt;
-          let preview = document.getElementById('qa-export-rect-preview');
-          if (!preview) {
-            preview = makeElement('svg:rect', {
-              id: 'qa-export-rect-preview', x: pt[0], y: pt[1], width: 0, height: 0,
-              fill: 'rgba(255, 215, 0, 0.12)', stroke: '#ffd700', 'stroke-width': '2', 'stroke-dasharray': '6,4',
-              style: { pointerEvents: 'none' }
-            });
-            this.component.controlsLayer.appendChild(preview);
-          }
-          return;
-        }
-
-        if (e.shiftKey && this.component.getActiveCurve() && !this.isDrawing && !isPaintMode) {
-          const hitCurve = this.component.findNearestCurveAtPoint(pt, 16);
-          if (!hitCurve) {
-            this.isMarquee = true;
-            this.marqueeStart = pt;
-            let marqueeEl = document.getElementById('qa-marquee-box');
-            if (!marqueeEl) {
-              marqueeEl = makeElement('svg:rect', {
-                id: 'qa-marquee-box', x: pt[0], y: pt[1], width: 0, height: 0,
-                fill: 'rgba(0, 242, 254, 0.08)', stroke: '#00f2fe', 'stroke-width': '1.5', 'stroke-dasharray': '4,3',
-                style: { pointerEvents: 'none', filter: 'drop-shadow(0 0 4px rgba(0,242,254,0.5))' }
-              });
-              this.component.controlsLayer.appendChild(marqueeEl);
-            }
-            return;
-          }
-        }
-
-        if (!isPaintMode) {
-          const hitCurve = this.component.findNearestCurveAtPoint(pt, 24);
-          if (hitCurve) {
-            const closestKnotIdx = (hitCurve.t < 0.5) ? hitCurve.segIdx : Math.min((hitCurve.ann.vertices?.length || 1) - 1, hitCurve.segIdx + 1);
-            this.component._activeKnotIdx = closestKnotIdx;
-            if (!this.component._selectedKnotIndices) this.component._selectedKnotIndices = new Set();
-            this.component._selectedKnotIndices.clear();
-            this.component._selectedKnotIndices.add(closestKnotIdx);
-
-            this.component.selectItem(hitCurve.ann);
-            this.component.updateDynamicMidpointCandidate?.(hitCurve.ann);
-
-            const isWholeMove = Boolean(e.altKey || e.metaKey);
-            const originalVertices = hitCurve.ann.vertices.map(v => [v.point[0], v.point[1]]);
-
-            this._pendingBend = {
-              curve: hitCurve.ann, segIdx: hitCurve.segIdx, startPt: pt,
-              inserted: false, didDrag: false, isWholeMove, originalVertices
-            };
-            if (isWholeMove) this.component.showKnotToast('↔ Moving Whole Arrow (Alt+Drag)');
-            return;
-          }
-          this._pendingBend = null;
-
-          const hitPlate = this.component.hitTestImagePlate(pt);
-          if (hitPlate && !e.shiftKey) {
-            this.component.stageState.activeImage = hitPlate;
-            this.component.stageState.selectedItem = null;
-            this.component.controlsLayer.innerHTML = '';
-            this.component.renderStage();
-            return;
+          if (this.component._commitActiveInlineEditor) {
+            this.component._commitActiveInlineEditor();
           }
 
-          const curCurve = this.component.getActiveCurve();
-          if (curCurve && curCurve.vertices && curCurve.vertices.length >= 2 && !curCurve.isClosed) {
-            const vHead = curCurve.vertices[0].point;
-            const vTail = curCurve.vertices[curCurve.vertices.length - 1].point;
-            if (Math.hypot(pt[0] - vTail[0], pt[1] - vTail[1]) < 20) {
-              this.extendingCurve = curCurve; this.extendAtTail = true;
-              this.component.showKnotToast('↔ Extending curve from tail...');
-            } else if (Math.hypot(pt[0] - vHead[0], pt[1] - vHead[1]) < 20) {
-              this.extendingCurve = curCurve; this.extendAtTail = false;
-              this.component.showKnotToast('↔ Extending curve from head...');
-            } else {
-              this.extendingCurve = null;
-            }
-          } else {
-            this.extendingCurve = null;
-          }
-        }
-
-        if (this.component.stageState.activeTool === 'text') {
-          this.component.promptDirectTextBadge(pt[0], pt[1]);
-          return;
-        }
-
-        if (this.component._handRestActive) {
-          this.component._handRestActive = false;
-          this.isDrawing = true;
-          this.component._isDrawingActive = true;
-          this._prevCursorPt = pt;
-          this.component.hideClutchHandRestBadge();
-          return;
-        }
-
-        if (!isPaintMode) {
-          const hadSelection = Boolean(this.component.stageState.selectedItem || this.component.stageState.activeImage);
-          if (hadSelection && !this.extendingCurve) this.component.deselectAll();
-        }
-
-        this.cleanupGestureIndicators();
-        this.isDrawing = true;
-        this.component._isDrawingActive = true;
-        this.startPt = pt;
-        this._prevCursorPt = pt;
-        this.hasExceededDeadzone = false;
-        this.strokePoints = [pt];
-        this.tetherState = { cuspIndices: [], inSlackRedirect: false, slackIncomingDir: null, cuspAngleDeg: 45 };
-        this._lastErasePt = pt;
-
-        if (isPaintMode && this.component.stageState.brushMode === 'erase') {
-          const plate = this.component.hitTestImagePlate(pt) || this.component.stageState.activeImage || this.component.stageState.placedImages?.[0];
-          if (plate) {
-            this.component.imageManager.eraseImagePlatePixels(
-              plate, pt[0], pt[1],
-              (this.component.stageState.brushSize || 32) / 2,
-              this.component.stageState.brushSoftness || 0
-            );
-          } else {
-            this.component.showKnotToast('Drop or paste an image first to erase pixels');
-          }
-          return;
-        }
-
-        if (!isPaintMode) {
-          this.deadzoneCircle = makeElement('svg:circle', {
-            id: 'qa-deadzone-circle', cx: pt[0], cy: pt[1], r: '6',
-            fill: 'rgba(255, 255, 255, 0.15)', stroke: '#00f2fe', 'stroke-width': '1.2', 'stroke-dasharray': '2,2',
-            style: { pointerEvents: 'none' }
-          });
-          this.component.controlsLayer.appendChild(this.deadzoneCircle);
-
-          this.tipPointIndicator = makeElement('svg:circle', {
-            id: 'qa-tip-point', cx: pt[0], cy: pt[1], r: '3.5', fill: '#ffffff',
-            stroke: '#00e676', 'stroke-width': '1.5', style: { pointerEvents: 'none' }
-          });
-          this.component.controlsLayer.appendChild(this.tipPointIndicator);
-        }
-      }
-
-  onMouseMove(e) {
-        try {
           const pt = this.getStagePt(e);
           this.component._lastStageMousePt = pt;
+          const isPaintMode = (this.component.stageState.activeTool === 'paint');
 
-          if (this._isDrawingExportRect && this._exportRectStart) {
-            const preview = document.getElementById('qa-export-rect-preview');
-            if (preview) {
-              preview.setAttribute('x', Math.min(this._exportRectStart[0], pt[0]));
-              preview.setAttribute('y', Math.min(this._exportRectStart[1], pt[1]));
-              preview.setAttribute('width', Math.abs(pt[0] - this._exportRectStart[0]));
-              preview.setAttribute('height', Math.abs(pt[1] - this._exportRectStart[1]));
+          if (this.component._isDefiningExportRect) {
+            this._isDrawingExportRect = true;
+            this._exportRectStart = pt;
+            let preview = document.getElementById('qa-export-rect-preview');
+            if (!preview) {
+              preview = makeElement('svg:rect', {
+                id: 'qa-export-rect-preview', x: pt[0], y: pt[1], width: 0, height: 0,
+                fill: 'rgba(255, 215, 0, 0.12)', stroke: '#ffd700', 'stroke-width': '2', 'stroke-dasharray': '6,4',
+                style: { pointerEvents: 'none' }
+              });
+              this.component.controlsLayer.appendChild(preview);
             }
             return;
           }
 
-          if (this.isMarquee && this.marqueeStart) {
-            const marqueeEl = document.getElementById('qa-marquee-box');
-            if (marqueeEl) {
-              marqueeEl.setAttribute('x', Math.min(this.marqueeStart[0], pt[0]));
-              marqueeEl.setAttribute('y', Math.min(this.marqueeStart[1], pt[1]));
-              marqueeEl.setAttribute('width', Math.abs(pt[0] - this.marqueeStart[0]));
-              marqueeEl.setAttribute('height', Math.abs(pt[1] - this.marqueeStart[1]));
-            }
-            return;
-          }
-
-          if (this._pendingBend) {
-            const dx = pt[0] - this._pendingBend.startPt[0];
-            const dy = pt[1] - this._pendingBend.startPt[1];
-            if (Math.hypot(dx, dy) > 3) {
-              this._pendingBend.didDrag = true;
-              if (this._pendingBend.isWholeMove) {
-                this._pendingBend.curve.vertices.forEach((v, idx) => {
-                  const orig = this._pendingBend.originalVertices[idx];
-                  if (orig) { v.point[0] = Math.round(orig[0] + dx); v.point[1] = Math.round(orig[1] + dy); }
+          if (e.shiftKey && this.component.getActiveCurve() && !this.isDrawing && !isPaintMode) {
+            const hitCurve = this.component.findNearestCurveAtPoint(pt, 16);
+            if (!hitCurve) {
+              this.isMarquee = true;
+              this.marqueeStart = pt;
+              let marqueeEl = document.getElementById('qa-marquee-box');
+              if (!marqueeEl) {
+                marqueeEl = makeElement('svg:rect', {
+                  id: 'qa-marquee-box', x: pt[0], y: pt[1], width: 0, height: 0,
+                  fill: 'rgba(0, 242, 254, 0.08)', stroke: '#00f2fe', 'stroke-width': '1.5', 'stroke-dasharray': '4,3',
+                  style: { pointerEvents: 'none', filter: 'drop-shadow(0 0 4px rgba(0,242,254,0.5))' }
                 });
-                this.component.commitCurveGeometryUpdate();
-              } else {
-                if (!this._pendingBend.inserted) {
-                  this.component.strokeManager.addKnotOnCurve(this._pendingBend.curve, this._pendingBend.segIdx);
-                  this.component.exposeBezierHandles(this._pendingBend.curve);
-                  this._pendingBend.inserted = true;
-                }
-                const activeKnot = this._pendingBend.curve.vertices[this.component._activeKnotIdx];
-                if (activeKnot) {
-                  activeKnot.point[0] = pt[0]; activeKnot.point[1] = pt[1];
-                  this.component.commitCurveGeometryUpdate();
-                }
-              }
-            }
-            return;
-          }
-
-          if (this.component.stageState.activeTool === 'paint') {
-            let ring = document.getElementById('qa-paint-cursor-ring');
-            if (!ring) {
-              ring = makeElement('svg:circle', { id: 'qa-paint-cursor-ring', fill: 'none', style: { pointerEvents: 'none' } });
-              this.component.controlsLayer.appendChild(ring);
-            }
-            const isErase = (this.component.stageState.brushMode === 'erase');
-            ring.setAttribute('cx', pt[0]);
-            ring.setAttribute('cy', pt[1]);
-            ring.setAttribute('r', String((this.component.stageState.brushSize || 32) / 2));
-            ring.setAttribute('stroke', isErase ? '#00f2fe' : '#f59e0b');
-            ring.setAttribute('stroke-width', '1.4');
-            ring.setAttribute('stroke-dasharray', isErase ? '4,3' : 'none');
-          } else {
-            const ring = document.getElementById('qa-paint-cursor-ring');
-            if (ring) ring.remove();
-          }
-
-          if (!this.isDrawing && !this.component._isDrawingActive && !this.component.isInteracting() && !this.component._penNodes) {
-            if (this.component.stageState.activeTool !== 'paint') {
-              this.updateSpatialHover(pt);
-              if (this.component.knotManager) {
-                this.component.knotManager.updateHoveredDeleteTarget(pt);
-                const curve = this.component.getActiveCurve();
-                if (curve) this.component.knotManager.updateDynamicMidpointCandidate(curve, this.component.controlsLayer, this.component.stageState);
-              }
-            }
-            return;
-          } else {
-            this.clearHoverHighlight();
-          }
-
-          if (!this.isDrawing) return;
-
-          if (this.component.stageState.activeTool === 'paint') {
-            const paintTether = this.component.stageState.paintTetherLength !== undefined ? this.component.stageState.paintTetherLength : 12;
-
-            if (this.component.stageState.brushMode === 'erase') {
-              const plate = this.component.hitTestImagePlate(pt) || this.component.stageState.activeImage || this.component.stageState.placedImages?.[0];
-              if (plate) {
-                let targetPt = pt;
-                if (paintTether > 0 && this._lastErasePt) {
-                  const dist = Math.hypot(pt[0] - this._lastErasePt[0], pt[1] - this._lastErasePt[1]);
-                  if (dist <= paintTether) return;
-                  const ux = (pt[0] - this._lastErasePt[0]) / dist;
-                  const uy = (pt[1] - this._lastErasePt[1]) / dist;
-                  targetPt = [pt[0] - ux * paintTether, pt[1] - uy * paintTether];
-                }
-                this.component.imageManager.eraseImagePlatePixels(
-                  plate, targetPt[0], targetPt[1],
-                  (this.component.stageState.brushSize || 32) / 2,
-                  this.component.stageState.brushSoftness || 0,
-                  this._lastErasePt ? this._lastErasePt[0] : null,
-                  this._lastErasePt ? this._lastErasePt[1] : null
-                );
-                this._lastErasePt = targetPt;
+                this.component.controlsLayer.appendChild(marqueeEl);
               }
               return;
             }
+          }
 
-            if (this.component.stageState.brushMode === 'rect') { this.component.previewBlockoutRect(this.strokePoints[0], pt); return; }
-            if (this.component.stageState.brushMode === 'oval') { this.component.previewBlockoutOval(this.strokePoints[0], pt); return; }
+          if (!isPaintMode) {
+            const hitCurve = this.component.findNearestCurveAtPoint(pt, 24);
+            if (hitCurve) {
+              const closestKnotIdx = (hitCurve.t < 0.5) ? hitCurve.segIdx : Math.min((hitCurve.ann.vertices?.length || 1) - 1, hitCurve.segIdx + 1);
+              this.component._activeKnotIdx = closestKnotIdx;
+              if (!this.component._selectedKnotIndices) this.component._selectedKnotIndices = new Set();
+              this.component._selectedKnotIndices.clear();
+              this.component._selectedKnotIndices.add(closestKnotIdx);
 
-            const lastPaintPt = this.strokePoints[this.strokePoints.length - 1];
-            const pDist = Math.hypot(pt[0] - lastPaintPt[0], pt[1] - lastPaintPt[1]);
-            if (paintTether > 0) {
-              if (pDist > paintTether) {
-                const ux = (pt[0] - lastPaintPt[0]) / pDist;
-                const uy = (pt[1] - lastPaintPt[1]) / pDist;
-                this.strokePoints.push([pt[0] - ux * paintTether, pt[1] - uy * paintTether]);
+              this.component.selectItem(hitCurve.ann);
+              this.component.updateDynamicMidpointCandidate?.(hitCurve.ann);
+
+              // Whole-entity move: Alt/Meta+Drag, or the panel's "Move whole" mode
+              const altHeld = Boolean(e.altKey || e.metaKey);
+              const isWholeMove = Boolean(altHeld || this.component.stageState.moveWholeMode);
+              const originalVertices = hitCurve.ann.vertices.map(v => [v.point[0], v.point[1]]);
+
+              this._pendingBend = {
+                curve: hitCurve.ann, segIdx: hitCurve.segIdx, startPt: pt,
+                inserted: false, didDrag: false, isWholeMove, originalVertices
+              };
+              if (isWholeMove) {
+                this.component.showKnotToast(altHeld
+                  ? '↔ Moving whole entity (Alt+Drag)'
+                  : '✥ Move mode: dragging whole entity');
               }
-              if (!this.activeTetherLine) {
-                this.activeTetherLine = makeElement('svg:line', { id: 'qa-drawstring-line', stroke: 'rgba(245, 158, 11, 0.85)', 'stroke-width': '1.4', 'stroke-dasharray': '2,2' });
-                this.component.controlsLayer.appendChild(this.activeTetherLine);
+              return;
+            }
+            this._pendingBend = null;
+
+            const hitPlate = this.component.hitTestImagePlate(pt);
+            if (hitPlate && !e.shiftKey) {
+              this.component.stageState.activeImage = hitPlate;
+              this.component.stageState.selectedItem = null;
+              this.component.controlsLayer.innerHTML = '';
+              this.component.renderStage();
+              return;
+            }
+
+            const curCurve = this.component.getActiveCurve();
+            if (curCurve && curCurve.vertices && curCurve.vertices.length >= 2 && !curCurve.isClosed) {
+              const vHead = curCurve.vertices[0].point;
+              const vTail = curCurve.vertices[curCurve.vertices.length - 1].point;
+              if (Math.hypot(pt[0] - vTail[0], pt[1] - vTail[1]) < 20) {
+                this.extendingCurve = curCurve; this.extendAtTail = true;
+                this.component.showKnotToast('↔ Extending curve from tail...');
+              } else if (Math.hypot(pt[0] - vHead[0], pt[1] - vHead[1]) < 20) {
+                this.extendingCurve = curCurve; this.extendAtTail = false;
+                this.component.showKnotToast('↔ Extending curve from head...');
+              } else {
+                this.extendingCurve = null;
               }
-              const tip = this.strokePoints[this.strokePoints.length - 1];
-              this.activeTetherLine.setAttribute('x1', tip[0]);
-              this.activeTetherLine.setAttribute('y1', tip[1]);
-              this.activeTetherLine.setAttribute('x2', pt[0]);
-              this.activeTetherLine.setAttribute('y2', pt[1]);
             } else {
-              this.strokePoints.push(pt);
+              this.extendingCurve = null;
             }
+          }
 
-            const pathD = this.getSmoothPath(this.strokePoints);
-            if (!this.svgSurface._paintPreview) {
-              this.svgSurface._paintPreview = makeElement('svg:path', {
-                stroke: this.component.stageState.brushColor,
-                'stroke-width': String(this.component.stageState.brushSize),
-                'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none',
-                ...(this.component.stageState.brushSoftness > 0 ? { filter: 'url(#qa-brush-blur)' } : {})
-              });
-              this.component.paintLayer.appendChild(this.svgSurface._paintPreview);
-            }
-            this.svgSurface._paintPreview.setAttribute('d', pathD);
+          if (this.component.stageState.activeTool === 'text') {
+            this.component.promptDirectTextBadge(pt[0], pt[1]);
             return;
           }
 
-          const baseW = this.component.stageState.curveStrokeWidth || 3.2;
-          const z = this.component.stageState.cadStrokeMode ? (this.component.stageState.zoom || 1.0) : 1.0;
-          const curW = baseW / z;
-          const isNeon = (this.component.stageState.lineStyle === 'neon');
-
-          if (e.shiftKey) {
-            this.hasExceededDeadzone = true;
-            if (this.deadzoneCircle) { this.deadzoneCircle.remove(); this.deadzoneCircle = null; }
-            if (this.cursorEraseCircle) { this.cursorEraseCircle.style.display = 'none'; }
-            if (this.cuspMarkersGroup) { this.cuspMarkersGroup.innerHTML = ''; }
+          if (this.component._handRestActive) {
+            this.component._handRestActive = false;
+            this.isDrawing = true;
+            this.component._isDrawingActive = true;
             this._prevCursorPt = pt;
-            this.strokePoints = [this.startPt, pt];
-            this.tetherState = { cuspIndices: [], inSlackRedirect: false, slackIncomingDir: null, cuspAngleDeg: 45 };
-            const curCol = this.component.stageState.currentColor || '#00e676';
-            const straightD = `M ${this.startPt[0]} ${this.startPt[1]} L ${pt[0]} ${pt[1]}`;
-
-            if (isNeon) {
-              const coreTint = this.component.strokeManager.getLuminousCoreColor(curCol);
-              if (!this.svgSurface._previewGlow) {
-                this.svgSurface._previewGlow = makeElement('svg:path', {
-                  stroke: curCol, 'stroke-width': String((baseW + 10) / z), fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-                  style: { pointerEvents: 'none', filter: 'url(#qa-neon-glow)', opacity: '0.92' }
-                });
-                this.component.glowLayer.appendChild(this.svgSurface._previewGlow);
-              }
-              this.svgSurface._previewGlow.setAttribute('d', straightD);
-              this.svgSurface._previewGlow.style.display = 'block';
-
-              if (!this.svgSurface._preview) {
-                this.svgSurface._preview = makeElement('svg:path', {
-                  stroke: coreTint, 'stroke-width': String(Math.max(2.0, baseW * 0.78) / z), fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-                  style: { pointerEvents: 'none', filter: 'url(#qa-neon-core)' }
-                });
-                this.component.strokeLayer.appendChild(this.svgSurface._preview);
-              }
-              this.svgSurface._preview.setAttribute('d', straightD);
-              this.svgSurface._preview.setAttribute('stroke', coreTint);
-              this.svgSurface._preview.setAttribute('stroke-width', String(Math.max(2.0, baseW * 0.78) / z));
-            } else {
-              if (this.svgSurface._previewGlow) this.svgSurface._previewGlow.style.display = 'none';
-              if (!this.svgSurface._preview) {
-                this.svgSurface._preview = makeElement('svg:path', {
-                  stroke: curCol, 'stroke-width': String(curW), fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', style: { pointerEvents: 'none' }
-                });
-                this.component.strokeLayer.appendChild(this.svgSurface._preview);
-              }
-              this.svgSurface._preview.setAttribute('d', straightD);
-              this.svgSurface._preview.setAttribute('stroke', curCol);
-              this.svgSurface._preview.setAttribute('stroke-width', String(curW));
-            }
-
-            if (this.component.stageState.hasArrow) {
-              const dHead = Math.hypot(pt[0] - this.startPt[0], pt[1] - this.startPt[1]) || 1;
-              const arrow = this.component.strokeManager.renderConcaveArrowhead(
-                this.startPt, [(pt[0] - this.startPt[0]) / dHead, (pt[1] - this.startPt[1]) / dHead],
-                curCol, 2.0, baseW, this.component.stageState.lineStyle
-              );
-              if (this.svgSurface._previewArrow) this.svgSurface._previewArrow.remove();
-              if (this.svgSurface._previewArrowGlow) this.svgSurface._previewArrowGlow.remove();
-              if (arrow.glow) { this.svgSurface._previewArrowGlow = arrow.glow; this.component.glowLayer.appendChild(this.svgSurface._previewArrowGlow); }
-              this.svgSurface._previewArrow = arrow.foreground;
-              this.component.strokeLayer.appendChild(this.svgSurface._previewArrow);
-            }
+            this.component.hideClutchHandRestBadge();
             return;
           }
 
-          if (!this.hasExceededDeadzone && Math.hypot(pt[0] - this.startPt[0], pt[1] - this.startPt[1]) > 4) {
-            this.hasExceededDeadzone = true;
-            if (this.deadzoneCircle) { this.deadzoneCircle.remove(); this.deadzoneCircle = null; }
-          }
-          if (!this.hasExceededDeadzone) {
-            if (this.tipPointIndicator) {
-              this.tipPointIndicator.setAttribute('cx', this.startPt[0]);
-              this.tipPointIndicator.setAttribute('cy', this.startPt[1]);
-            }
-            this._prevCursorPt = pt;
-            return;
+          if (!isPaintMode) {
+            const hadSelection = Boolean(this.component.stageState.selectedItem || this.component.stageState.activeImage);
+            if (hadSelection && !this.extendingCurve) this.component.deselectAll();
           }
 
-          const tetherLen = this.component.stageState.tetherLength || 32;
-          const baseEraseR = this.component.stageState.eraseRadius || 20;
-          const eraseR = Math.max(8, Math.min(baseEraseR, Math.round(tetherLen * 0.62)));
-
-          if (!this.cursorEraseCircle) {
-            this.cursorEraseCircle = makeElement('svg:circle', {
-              id: 'qa-cursor-erase-circle', fill: 'rgba(255, 255, 255, 0.03)',
-              stroke: 'rgba(255, 255, 255, 0.5)', 'stroke-width': String(1.2 / z),
-              'stroke-dasharray': `${3 / z},${3 / z}`, style: { pointerEvents: 'none' }
-            });
-            this.component.controlsLayer.appendChild(this.cursorEraseCircle);
-          }
-          this.cursorEraseCircle.style.display = 'block';
-          this.cursorEraseCircle.setAttribute('cx', pt[0]);
-          this.cursorEraseCircle.setAttribute('cy', pt[1]);
-          this.cursorEraseCircle.setAttribute('r', String(eraseR));
-          this.cursorEraseCircle.setAttribute('stroke-width', String(1.2 / z));
-          this.cursorEraseCircle.setAttribute('stroke-dasharray', `${3 / z},${3 / z}`);
-
-          if (e.ctrlKey || e.metaKey) {
-            this.component._clutchActive = true;
-            const last = this.strokePoints[this.strokePoints.length - 1];
-            const newR = Math.max(12, Math.min(180, Math.hypot(pt[0] - last[0], pt[1] - last[1])));
-            this.component.stageState.tetherLength = Math.round(newR);
-            const clutchEraseR = Math.max(8, Math.min(baseEraseR, Math.round(newR * 0.62)));
-            this.cursorEraseCircle.setAttribute('r', String(clutchEraseR));
-            this.cursorEraseCircle.setAttribute('stroke', 'rgba(255, 215, 0, 0.55)');
-            if (!this.activeTetherLine) {
-              this.activeTetherLine = makeElement('svg:line', { id: 'qa-drawstring-line', stroke: '#ffd700', 'stroke-width': '1.8', 'stroke-dasharray': '3,3' });
-              this.component.controlsLayer.appendChild(this.activeTetherLine);
-            }
-            this.activeTetherLine.setAttribute('x1', last[0]);
-            this.activeTetherLine.setAttribute('y1', last[1]);
-            this.activeTetherLine.setAttribute('x2', pt[0]);
-            this.activeTetherLine.setAttribute('y2', pt[1]);
-            this._prevCursorPt = pt;
-            this.component.showKnotToast(`⏸️ Tether: ${Math.round(newR)}px (Hold Ctrl)`);
-            return;
-          } else {
-            this.component._clutchActive = false;
-          }
-
-          if (!this.activeTetherLine) {
-            this.activeTetherLine = makeElement('svg:line', { id: 'qa-drawstring-line', stroke: 'rgba(255, 255, 255, 0.85)', 'stroke-width': '1.8' });
-            this.component.controlsLayer.appendChild(this.activeTetherLine);
-          }
-
-          const step = StudioGeometry.stepDrawstringTether(this.strokePoints, pt, tetherLen, eraseR, this._prevCursorPt, this.tetherState);
+          this.cleanupGestureIndicators();
+          this.isDrawing = true;
+          this.component._isDrawingActive = true;
+          this.startPt = pt;
           this._prevCursorPt = pt;
-          this.strokePoints = step.points;
-          this.tetherState.cuspIndices = step.cuspIndices;
-          this.tetherState.inSlackRedirect = step.inSlackRedirect;
-          this.tetherState.slackIncomingDir = step.slackIncomingDir;
+          this.hasExceededDeadzone = false;
+          this.strokePoints = [pt];
+          this.tetherState = { cuspIndices: [], inSlackRedirect: false, slackIncomingDir: null, cuspAngleDeg: 45 };
+          this._lastErasePt = pt;
 
-          const curTip = step.curTip;
-          const didRewind = step.didRewind;
-          const isSlack = step.isSlack;
-
-          if (this.tipPointIndicator) {
-            this.tipPointIndicator.setAttribute('cx', curTip[0]);
-            this.tipPointIndicator.setAttribute('cy', curTip[1]);
-            this.tipPointIndicator.setAttribute('stroke', didRewind ? '#f59e0b' : '#00e676');
-          }
-
-          this.activeTetherLine.setAttribute('x1', curTip[0]);
-          this.activeTetherLine.setAttribute('y1', curTip[1]);
-          this.activeTetherLine.setAttribute('x2', pt[0]);
-          this.activeTetherLine.setAttribute('y2', pt[1]);
-          this.activeTetherLine.setAttribute('stroke', didRewind ? '#f59e0b' : (isSlack ? 'rgba(255, 255, 255, 0.55)' : 'rgba(255, 255, 255, 0.9)'));
-          this.activeTetherLine.setAttribute('stroke-dasharray', isSlack ? `${3 / z},${3 / z}` : 'none');
-
-          this.cursorEraseCircle.setAttribute('stroke', didRewind ? '#f59e0b' : 'rgba(255, 255, 255, 0.5)');
-          this.cursorEraseCircle.setAttribute('fill', didRewind ? 'rgba(245, 158, 11, 0.14)' : 'rgba(255, 255, 255, 0.03)');
-
-          if (!this.cuspMarkersGroup) {
-            this.cuspMarkersGroup = makeElement('svg:g', { id: 'qa-stroke-cusp-markers', style: { pointerEvents: 'none' } });
-            this.component.controlsLayer.appendChild(this.cuspMarkersGroup);
-          }
-          this.cuspMarkersGroup.innerHTML = '';
-          const invScale = 1 / (this.component.stageState.zoom || 1.0);
-          step.cuspIndices.forEach(idx => {
-            const cp = this.strokePoints[idx];
-            if (!cp) return;
-            const s = 9 * invScale;
-            this.cuspMarkersGroup.appendChild(makeElement('svg:rect', {
-              x: cp[0] - s / 2, y: cp[1] - s / 2, width: s, height: s, rx: String(1.5 * invScale),
-              transform: `rotate(45, ${cp[0]}, ${cp[1]})`,
-              fill: '#f59e0b', stroke: '#ffffff', 'stroke-width': String(1.5 * invScale)
-            }));
-          });
-          if (step.pendingCusp) {
-            const s = 11 * invScale;
-            this.cuspMarkersGroup.appendChild(makeElement('svg:rect', {
-              x: curTip[0] - s / 2, y: curTip[1] - s / 2, width: s, height: s, rx: String(1.5 * invScale),
-              transform: `rotate(45, ${curTip[0]}, ${curTip[1]})`,
-              fill: 'rgba(245, 158, 11, 0.35)', stroke: '#ffd700', 'stroke-width': String(1.8 * invScale)
-            }));
-          }
-
-          const dToOrigin = Math.hypot(curTip[0] - this.startPt[0], curTip[1] - this.startPt[1]);
-          const isLoopClosing = (this.strokePoints.length > 8 && dToOrigin < 24);
-          const pointsForSpline = [...this.strokePoints];
-          if (isLoopClosing) pointsForSpline.push([this.startPt[0], this.startPt[1]]);
-          else if (pointsForSpline.length === 1) pointsForSpline.push(curTip);
-
-          const previewD = this.getSmoothPath(pointsForSpline);
-          const curCol = isLoopClosing ? '#00f2fe' : (this.component.stageState.currentColor || '#00e676');
-
-          if (isNeon) {
-            const coreTint = this.component.strokeManager.getLuminousCoreColor(curCol);
-            if (!this.svgSurface._previewGlow) {
-              this.svgSurface._previewGlow = makeElement('svg:path', {
-                stroke: curCol, 'stroke-width': String((baseW + 10) / z), fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-                style: { pointerEvents: 'none', filter: 'url(#qa-neon-glow)', opacity: '0.92' }
-              });
-              this.component.glowLayer.appendChild(this.svgSurface._previewGlow);
+          if (isPaintMode && this.component.stageState.brushMode === 'erase') {
+            const plate = this.component.hitTestImagePlate(pt) || this.component.stageState.activeImage || this.component.stageState.placedImages?.[0];
+            if (plate) {
+              this.component.imageManager.eraseImagePlatePixels(
+                plate, pt[0], pt[1],
+                (this.component.stageState.brushSize || 32) / 2,
+                this.component.stageState.brushSoftness || 0
+              );
+            } else {
+              this.component.showKnotToast('Drop or paste an image first to erase pixels');
             }
-            this.svgSurface._previewGlow.setAttribute('d', previewD);
-            this.svgSurface._previewGlow.setAttribute('stroke', curCol);
-            this.svgSurface._previewGlow.setAttribute('stroke-width', String((baseW + 10) / z));
-            this.svgSurface._previewGlow.style.display = 'block';
-
-            if (!this.svgSurface._preview) {
-              this.svgSurface._preview = makeElement('svg:path', {
-                stroke: coreTint, 'stroke-width': String(Math.max(2.0, baseW * 0.78) / z), fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-                style: { pointerEvents: 'none', filter: 'url(#qa-neon-core)' }
-              });
-              this.component.strokeLayer.appendChild(this.svgSurface._preview);
-            }
-            this.svgSurface._preview.setAttribute('d', previewD);
-            this.svgSurface._preview.setAttribute('stroke', coreTint);
-            this.svgSurface._preview.setAttribute('stroke-width', String(Math.max(2.0, baseW * 0.78) / z));
-            this.svgSurface._preview.style.filter = 'url(#qa-neon-core)';
-          } else {
-            if (this.svgSurface._previewGlow) this.svgSurface._previewGlow.style.display = 'none';
-            if (!this.svgSurface._preview) {
-              this.svgSurface._preview = makeElement('svg:path', {
-                stroke: curCol, 'stroke-width': String(curW), fill: isLoopClosing ? 'rgba(0, 242, 254, 0.08)' : 'none',
-                'stroke-linecap': 'round', 'stroke-linejoin': 'round', style: { pointerEvents: 'none' }
-              });
-              this.component.strokeLayer.appendChild(this.svgSurface._preview);
-            }
-            this.svgSurface._preview.setAttribute('d', previewD);
-            this.svgSurface._preview.setAttribute('stroke', curCol);
-            this.svgSurface._preview.setAttribute('stroke-width', String(curW));
-            this.svgSurface._preview.style.filter = 'none';
+            return;
           }
 
-          if (this.component.stageState.hasArrow && !isLoopClosing && this.strokePoints.length >= 2) {
-            const p0 = pointsForSpline[0], p1 = pointsForSpline[1];
-            const dHead = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) || 1;
-            const arrow = this.component.strokeManager.renderConcaveArrowhead(
-              p0, [(p1[0] - p0[0]) / dHead, (p1[1] - p0[1]) / dHead], curCol, 2.0, baseW, this.component.stageState.lineStyle
-            );
-            if (this.svgSurface._previewArrow) { this.svgSurface._previewArrow.remove(); this.svgSurface._previewArrow = null; }
-            if (this.svgSurface._previewArrowGlow) { this.svgSurface._previewArrowGlow.remove(); this.svgSurface._previewArrowGlow = null; }
-            if (arrow.glow) { this.svgSurface._previewArrowGlow = arrow.glow; this.component.glowLayer.appendChild(this.svgSurface._previewArrowGlow); }
-            this.svgSurface._previewArrow = arrow.foreground;
-            this.component.strokeLayer.appendChild(this.svgSurface._previewArrow);
-          } else {
-            if (this.svgSurface._previewArrow) { this.svgSurface._previewArrow.remove(); this.svgSurface._previewArrow = null; }
-            if (this.svgSurface._previewArrowGlow) { this.svgSurface._previewArrowGlow.remove(); this.svgSurface._previewArrowGlow = null; }
+          if (!isPaintMode) {
+            this.deadzoneCircle = makeElement('svg:circle', {
+              id: 'qa-deadzone-circle', cx: pt[0], cy: pt[1], r: '6',
+              fill: 'rgba(255, 255, 255, 0.15)', stroke: '#00f2fe', 'stroke-width': '1.2', 'stroke-dasharray': '2,2',
+              style: { pointerEvents: 'none' }
+            });
+            this.component.controlsLayer.appendChild(this.deadzoneCircle);
+
+            this.tipPointIndicator = makeElement('svg:circle', {
+              id: 'qa-tip-point', cx: pt[0], cy: pt[1], r: '3.5', fill: '#ffffff',
+              stroke: '#00e676', 'stroke-width': '1.5', style: { pointerEvents: 'none' }
+            });
+            this.component.controlsLayer.appendChild(this.tipPointIndicator);
           }
-        } catch (err) {
-          QuoraLogger.getInstance().log('error', 1, 'Error in onMouseMove: ' + err.message);
         }
+  onMouseMove(e) {
+    try {
+      const comp = this.component;
+      const st = comp.stageState;
+      const pt = this.getStagePt(e);
+      comp._lastStageMousePt = pt;
+
+      if (this._isDrawingExportRect && this._exportRectStart) {
+        const preview = document.getElementById('qa-export-rect-preview');
+        if (preview) {
+          preview.setAttribute('x', Math.min(this._exportRectStart[0], pt[0]));
+          preview.setAttribute('y', Math.min(this._exportRectStart[1], pt[1]));
+          preview.setAttribute('width', Math.abs(pt[0] - this._exportRectStart[0]));
+          preview.setAttribute('height', Math.abs(pt[1] - this._exportRectStart[1]));
+        }
+        return;
       }
 
+      if (this.isMarquee && this.marqueeStart) {
+        const box = document.getElementById('qa-marquee-box');
+        if (box) {
+          box.setAttribute('x', Math.min(this.marqueeStart[0], pt[0]));
+          box.setAttribute('y', Math.min(this.marqueeStart[1], pt[1]));
+          box.setAttribute('width', Math.abs(pt[0] - this.marqueeStart[0]));
+          box.setAttribute('height', Math.abs(pt[1] - this.marqueeStart[1]));
+        }
+        return;
+      }
+
+      if (this._pendingBend) {
+        const b = this._pendingBend;
+        const dx = pt[0] - b.startPt[0], dy = pt[1] - b.startPt[1];
+        if (Math.hypot(dx, dy) > 3) {
+          b.didDrag = true;
+          if (b.isWholeMove) {
+            b.curve.vertices.forEach((v, idx) => {
+              const orig = b.originalVertices[idx];
+              if (orig) { v.point[0] = Math.round(orig[0] + dx); v.point[1] = Math.round(orig[1] + dy); }
+            });
+          } else {
+            if (!b.inserted) {
+              comp.strokeManager.addKnotOnCurve(b.curve, b.segIdx);
+              comp.exposeBezierHandles(b.curve);
+              b.inserted = true;
+            }
+            const k = b.curve.vertices[comp._activeKnotIdx];
+            if (k) { k.point[0] = pt[0]; k.point[1] = pt[1]; }
+          }
+          comp.commitCurveGeometryUpdate();
+        }
+        return;
+      }
+
+      const isPaint = st.activeTool === 'paint';
+      let ring = document.getElementById('qa-paint-cursor-ring');
+      if (isPaint) {
+        if (!ring) {
+          ring = makeElement('svg:circle', { id: 'qa-paint-cursor-ring', fill: 'none', style: { pointerEvents: 'none' } });
+          comp.controlsLayer.appendChild(ring);
+        }
+        const isErase = st.brushMode === 'erase';
+        ring.setAttribute('cx', pt[0]);
+        ring.setAttribute('cy', pt[1]);
+        ring.setAttribute('r', String((st.brushSize || 32) / 2));
+        ring.setAttribute('stroke', isErase ? '#00f2fe' : '#f59e0b');
+        ring.setAttribute('stroke-width', '1.4');
+        ring.setAttribute('stroke-dasharray', isErase ? '4,3' : 'none');
+      } else if (ring) {
+        ring.remove();
+      }
+
+      if (!this.isDrawing && !comp._isDrawingActive && !comp.isInteracting() && !comp._penNodes) {
+        if (!isPaint) {
+          this.updateSpatialHover(pt);
+          if (comp.knotManager) {
+            comp.knotManager.updateHoveredDeleteTarget(pt);
+            const curve = comp.getActiveCurve();
+            if (curve) comp.knotManager.updateDynamicMidpointCandidate(curve, comp.controlsLayer, st);
+          }
+        }
+        return;
+      }
+      this.clearHoverHighlight();
+      if (!this.isDrawing) return;
+      if (isPaint) return this._handlePaintMove(pt);
+
+      const baseW = st.curveStrokeWidth || 3.2;
+      const z = st.cadStrokeMode ? (st.zoom || 1.0) : 1.0;
+      const isNeon = st.lineStyle === 'neon';
+      const curCol = st.currentColor || '#00e676';
+
+      if (e.shiftKey) {
+        this.hasExceededDeadzone = true;
+        if (this.deadzoneCircle) { this.deadzoneCircle.remove(); this.deadzoneCircle = null; }
+        if (this.cursorEraseCircle) this.cursorEraseCircle.style.display = 'none';
+        if (this.cuspMarkersGroup) this.cuspMarkersGroup.innerHTML = '';
+        this._prevCursorPt = pt;
+        this.strokePoints = [this.startPt, pt];
+        this.tetherState = { cuspIndices: [], inSlackRedirect: false, slackIncomingDir: null, cuspAngleDeg: 45 };
+        this._renderStrokePreview(`M ${this.startPt[0]} ${this.startPt[1]} L ${pt[0]} ${pt[1]}`, curCol, baseW, z, isNeon, false);
+        this._renderArrowPreview(st.hasArrow, this.startPt, pt, curCol, baseW, st.lineStyle);
+        return;
+      }
+
+      if (!this.hasExceededDeadzone && Math.hypot(pt[0] - this.startPt[0], pt[1] - this.startPt[1]) > 4) {
+        this.hasExceededDeadzone = true;
+        if (this.deadzoneCircle) { this.deadzoneCircle.remove(); this.deadzoneCircle = null; }
+      }
+      if (!this.hasExceededDeadzone) {
+        if (this.tipPointIndicator) {
+          this.tipPointIndicator.setAttribute('cx', this.startPt[0]);
+          this.tipPointIndicator.setAttribute('cy', this.startPt[1]);
+        }
+        this._prevCursorPt = pt;
+        return;
+      }
+
+      const tetherLen = st.tetherLength || 32;
+      const baseEraseR = st.eraseRadius || 20;
+      const eraseR = Math.max(8, Math.min(baseEraseR, Math.round(tetherLen * 0.62)));
+
+      if (!this.cursorEraseCircle) {
+        this.cursorEraseCircle = makeElement('svg:circle', {
+          id: 'qa-cursor-erase-circle', fill: 'rgba(255, 255, 255, 0.03)',
+          stroke: 'rgba(255, 255, 255, 0.5)', style: { pointerEvents: 'none' }
+        });
+        comp.controlsLayer.appendChild(this.cursorEraseCircle);
+      }
+      this.cursorEraseCircle.style.display = 'block';
+      this.cursorEraseCircle.setAttribute('cx', pt[0]);
+      this.cursorEraseCircle.setAttribute('cy', pt[1]);
+      this.cursorEraseCircle.setAttribute('r', String(eraseR));
+      this.cursorEraseCircle.setAttribute('stroke-width', String(1.2 / z));
+      this.cursorEraseCircle.setAttribute('stroke-dasharray', `${3 / z},${3 / z}`);
+
+      if (!this.activeTetherLine) {
+        this.activeTetherLine = makeElement('svg:line', { id: 'qa-drawstring-line', stroke: 'rgba(255, 255, 255, 0.85)', 'stroke-width': '1.8' });
+        comp.controlsLayer.appendChild(this.activeTetherLine);
+      }
+
+      if (e.ctrlKey || e.metaKey) {
+        comp._clutchActive = true;
+        const last = this.strokePoints[this.strokePoints.length - 1];
+        const newR = Math.max(12, Math.min(180, Math.hypot(pt[0] - last[0], pt[1] - last[1])));
+        st.tetherLength = Math.round(newR);
+        this.cursorEraseCircle.setAttribute('r', String(Math.max(8, Math.min(baseEraseR, Math.round(newR * 0.62)))));
+        this.cursorEraseCircle.setAttribute('stroke', 'rgba(255, 215, 0, 0.55)');
+        this.activeTetherLine.setAttribute('x1', last[0]);
+        this.activeTetherLine.setAttribute('y1', last[1]);
+        this.activeTetherLine.setAttribute('x2', pt[0]);
+        this.activeTetherLine.setAttribute('y2', pt[1]);
+        this.activeTetherLine.setAttribute('stroke', '#ffd700');
+        this.activeTetherLine.setAttribute('stroke-dasharray', '3,3');
+        this._prevCursorPt = pt;
+        comp.showKnotToast(`⏸️ Tether: ${Math.round(newR)}px (Hold Ctrl)`);
+        return;
+      }
+      comp._clutchActive = false;
+
+      const step = StudioGeometry.stepDrawstringTether(this.strokePoints, pt, tetherLen, eraseR, this._prevCursorPt, this.tetherState);
+      this._prevCursorPt = pt;
+      this.strokePoints = step.points;
+      Object.assign(this.tetherState, {
+        cuspIndices: step.cuspIndices,
+        inSlackRedirect: step.inSlackRedirect,
+        slackIncomingDir: step.slackIncomingDir
+      });
+
+      const { curTip, didRewind, isSlack } = step;
+      if (this.tipPointIndicator) {
+        this.tipPointIndicator.setAttribute('cx', curTip[0]);
+        this.tipPointIndicator.setAttribute('cy', curTip[1]);
+        this.tipPointIndicator.setAttribute('stroke', didRewind ? '#f59e0b' : '#00e676');
+      }
+
+      this.activeTetherLine.setAttribute('x1', curTip[0]);
+      this.activeTetherLine.setAttribute('y1', curTip[1]);
+      this.activeTetherLine.setAttribute('x2', pt[0]);
+      this.activeTetherLine.setAttribute('y2', pt[1]);
+      this.activeTetherLine.setAttribute('stroke', didRewind ? '#f59e0b' : (isSlack ? 'rgba(255, 255, 255, 0.55)' : 'rgba(255, 255, 255, 0.9)'));
+      this.activeTetherLine.setAttribute('stroke-dasharray', isSlack ? `${3 / z},${3 / z}` : 'none');
+
+      this.cursorEraseCircle.setAttribute('stroke', didRewind ? '#f59e0b' : 'rgba(255, 255, 255, 0.5)');
+      this.cursorEraseCircle.setAttribute('fill', didRewind ? 'rgba(245, 158, 11, 0.14)' : 'rgba(255, 255, 255, 0.03)');
+
+      this._updateCuspMarkers(step.cuspIndices, curTip, step.pendingCusp, 1 / (st.zoom || 1.0));
+
+      const isLoopClosing = this.strokePoints.length > 8 && Math.hypot(curTip[0] - this.startPt[0], curTip[1] - this.startPt[1]) < 24;
+      const ptsForSpline = isLoopClosing ? [...this.strokePoints, [this.startPt[0], this.startPt[1]]] : (this.strokePoints.length === 1 ? [curTip, curTip] : this.strokePoints);
+      const strokeColor = isLoopClosing ? '#00f2fe' : curCol;
+
+      this._renderStrokePreview(this.getSmoothPath(ptsForSpline), strokeColor, baseW, z, isNeon, isLoopClosing);
+      this._renderArrowPreview(st.hasArrow && !isLoopClosing && this.strokePoints.length >= 2, ptsForSpline[0], ptsForSpline[1], strokeColor, baseW, st.lineStyle);
+    } catch (err) {
+      QuoraLogger.getInstance().log('error', 1, 'Error in onMouseMove: ' + err.message);
+    }
+  }
   onMouseUp(e) {
         if (this._isDrawingExportRect && this._exportRectStart) {
           this._isDrawingExportRect = false;
@@ -970,6 +773,157 @@ class QuoraGestureMachine {
   getSmoothPath(pts) {
       return StudioGeometry.smoothPolylineToSvgD(pts);
     }
+
+  _renderStrokePreview(d, color, baseW, z, isNeon, isLoopClosing = false) {
+    const comp = this.component;
+    const svg = this.svgSurface;
+
+    if (isNeon) {
+      const coreTint = comp.strokeManager.getLuminousCoreColor(color);
+      if (!svg._previewGlow) {
+        svg._previewGlow = makeElement('svg:path', {
+          fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+          style: { pointerEvents: 'none', filter: 'url(#qa-neon-glow)', opacity: '0.92' }
+        });
+        comp.glowLayer.appendChild(svg._previewGlow);
+      }
+      svg._previewGlow.setAttribute('d', d);
+      svg._previewGlow.setAttribute('stroke', color);
+      svg._previewGlow.setAttribute('stroke-width', String((baseW + 10) / z));
+      svg._previewGlow.style.display = 'block';
+
+      if (!svg._preview) {
+        svg._preview = makeElement('svg:path', {
+          fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', style: { pointerEvents: 'none' }
+        });
+        comp.strokeLayer.appendChild(svg._preview);
+      }
+      svg._preview.setAttribute('d', d);
+      svg._preview.setAttribute('stroke', coreTint);
+      svg._preview.setAttribute('stroke-width', String(Math.max(2.0, baseW * 0.78) / z));
+      svg._preview.setAttribute('fill', 'none');
+      svg._preview.style.filter = 'url(#qa-neon-core)';
+      return;
+    }
+
+    if (svg._previewGlow) svg._previewGlow.style.display = 'none';
+    if (!svg._preview) {
+      svg._preview = makeElement('svg:path', {
+        'stroke-linecap': 'round', 'stroke-linejoin': 'round', style: { pointerEvents: 'none' }
+      });
+      comp.strokeLayer.appendChild(svg._preview);
+    }
+    svg._preview.setAttribute('d', d);
+    svg._preview.setAttribute('stroke', color);
+    svg._preview.setAttribute('stroke-width', String(baseW / z));
+    svg._preview.setAttribute('fill', isLoopClosing ? 'rgba(0, 242, 254, 0.08)' : 'none');
+    svg._preview.style.filter = 'none';
+  }
+
+  _renderArrowPreview(show, p0, p1, color, baseW, lineStyle) {
+      const comp = this.component;
+      const svg = this.svgSurface;
+      if (svg._previewArrow) { svg._previewArrow.remove(); svg._previewArrow = null; }
+      if (svg._previewArrowShadow) { svg._previewArrowShadow.remove(); svg._previewArrowShadow = null; }
+      if (svg._previewArrowGlow) { svg._previewArrowGlow.remove(); svg._previewArrowGlow = null; }
+      if (!show || !p0 || !p1) return;
+
+      const dHead = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) || 1;
+      const tangent = [(p1[0] - p0[0]) / dHead, (p1[1] - p0[1]) / dHead];
+      const arrowStyle = comp.stageState.arrowStyle || 'concave';
+      const arrow = comp.strokeManager.renderConcaveArrowhead(p0, tangent, color, 2.0, baseW, lineStyle, arrowStyle);
+      if (arrow.shadow) {
+        svg._previewArrowShadow = arrow.shadow;
+        comp.shadowLayer.appendChild(arrow.shadow);
+      }
+      if (arrow.glow) {
+        svg._previewArrowGlow = arrow.glow;
+        comp.glowLayer.appendChild(arrow.glow);
+      }
+      svg._previewArrow = arrow.foreground;
+      comp.strokeLayer.appendChild(arrow.foreground);
+    }
+  _updateCuspMarkers(cuspIndices, curTip, pendingCusp, invScale) {
+    if (!this.cuspMarkersGroup) {
+      this.cuspMarkersGroup = makeElement('svg:g', { id: 'qa-stroke-cusp-markers', style: { pointerEvents: 'none' } });
+      this.component.controlsLayer.appendChild(this.cuspMarkersGroup);
+    }
+    this.cuspMarkersGroup.innerHTML = '';
+
+    const addDiamond = (pt, size, fill, stroke, strokeW) => {
+      this.cuspMarkersGroup.appendChild(makeElement('svg:rect', {
+        x: pt[0] - size / 2, y: pt[1] - size / 2, width: size, height: size, rx: String(1.5 * invScale),
+        transform: `rotate(45, ${pt[0]}, ${pt[1]})`, fill, stroke, 'stroke-width': String(strokeW * invScale)
+      }));
+    };
+
+    cuspIndices.forEach(idx => {
+      const cp = this.strokePoints[idx];
+      if (cp) addDiamond(cp, 9 * invScale, '#f59e0b', '#ffffff', 1.5);
+    });
+    if (pendingCusp) addDiamond(curTip, 11 * invScale, 'rgba(245, 158, 11, 0.35)', '#ffd700', 1.8);
+  }
+
+  _handlePaintMove(pt) {
+    const comp = this.component;
+    const st = comp.stageState;
+    const mode = st.brushMode;
+
+    if (mode === 'erase') {
+      const plate = comp.hitTestImagePlate(pt) || st.activeImage || st.placedImages?.[0];
+      if (!plate) return;
+      const paintTether = st.paintTetherLength ?? 12;
+      let targetPt = pt;
+      if (paintTether > 0 && this._lastErasePt) {
+        const dist = Math.hypot(pt[0] - this._lastErasePt[0], pt[1] - this._lastErasePt[1]);
+        if (dist <= paintTether) return;
+        targetPt = [pt[0] - ((pt[0] - this._lastErasePt[0]) / dist) * paintTether, pt[1] - ((pt[1] - this._lastErasePt[1]) / dist) * paintTether];
+      }
+      comp.imageManager.eraseImagePlatePixels(
+        plate, targetPt[0], targetPt[1], (st.brushSize || 32) / 2, st.brushSoftness || 0,
+        this._lastErasePt?.[0] ?? null, this._lastErasePt?.[1] ?? null
+      );
+      this._lastErasePt = targetPt;
+      return;
+    }
+
+    if (mode === 'rect') return comp.previewBlockoutRect(this.strokePoints[0], pt);
+    if (mode === 'oval') return comp.previewBlockoutOval(this.strokePoints[0], pt);
+
+    const paintTether = st.paintTetherLength ?? 12;
+    const lastPt = this.strokePoints[this.strokePoints.length - 1];
+    const pDist = Math.hypot(pt[0] - lastPt[0], pt[1] - lastPt[1]);
+
+    if (paintTether > 0) {
+      if (pDist > paintTether) {
+        this.strokePoints.push([pt[0] - ((pt[0] - lastPt[0]) / pDist) * paintTether, pt[1] - ((pt[1] - lastPt[1]) / pDist) * paintTether]);
+      }
+      if (!this.activeTetherLine) {
+        this.activeTetherLine = makeElement('svg:line', {
+          id: 'qa-drawstring-line', stroke: 'rgba(245, 158, 11, 0.85)', 'stroke-width': '1.4', 'stroke-dasharray': '2,2'
+        });
+        comp.controlsLayer.appendChild(this.activeTetherLine);
+      }
+      const tip = this.strokePoints[this.strokePoints.length - 1];
+      this.activeTetherLine.setAttribute('x1', tip[0]);
+      this.activeTetherLine.setAttribute('y1', tip[1]);
+      this.activeTetherLine.setAttribute('x2', pt[0]);
+      this.activeTetherLine.setAttribute('y2', pt[1]);
+    } else {
+      this.strokePoints.push(pt);
+    }
+
+    const svg = this.svgSurface;
+    if (!svg._paintPreview) {
+      svg._paintPreview = makeElement('svg:path', {
+        stroke: st.brushColor, 'stroke-width': String(st.brushSize),
+        'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none',
+        ...(st.brushSoftness > 0 ? { filter: 'url(#qa-brush-blur)' } : {})
+      });
+      comp.paintLayer.appendChild(svg._paintPreview);
+    }
+    svg._paintPreview.setAttribute('d', this.getSmoothPath(this.strokePoints));
+  }
 }
 
 globalThis.QuoraGestureMachine = QuoraGestureMachine;

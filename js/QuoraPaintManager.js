@@ -21,65 +21,46 @@ class QuoraPaintManager {
 
   previewRect(paintLayer, p1, p2, color, softness = 0) {
     const x = Math.min(p1[0], p2[0]), y = Math.min(p1[1], p2[1]);
-    const w = Math.abs(p2[0] - p1[0]), h = Math.abs(p2[1] - p1[1]);
-    let preview = paintLayer.querySelector('#qa-rect-preview');
-    if (!preview) {
-      preview = makeElement('svg:rect', {
-        id: 'qa-rect-preview', fill: color, opacity: '0.9',
-        ...(softness > 0 ? { filter: 'url(#qa-brush-blur)' } : {})
-      });
-      paintLayer.appendChild(preview);
-    }
-    preview.setAttribute('x', x);
-    preview.setAttribute('y', y);
-    preview.setAttribute('width', w);
-    preview.setAttribute('height', h);
+    this._upsertPreview(paintLayer, 'qa-rect-preview', 'rect', { x, y, width: Math.abs(p2[0] - p1[0]), height: Math.abs(p2[1] - p1[1]) }, color, softness);
   }
 
   commitRect(paintLayer, stageState, p1, p2, color, softness = 0) {
-    const preview = paintLayer.querySelector('#qa-rect-preview');
-    if (preview) preview.remove();
     const x = Math.min(p1[0], p2[0]), y = Math.min(p1[1], p2[1]);
     const w = Math.abs(p2[0] - p1[0]), h = Math.abs(p2[1] - p1[1]);
-    if (w < 4 || h < 4) return;
-    const rectEl = makeElement('svg:rect', {
-      x, y, width: w, height: h, fill: color,
-      ...(softness > 0 ? { filter: 'url(#qa-brush-blur)' } : {})
-    });
-    paintLayer.appendChild(rectEl);
-    stageState.annotations.push({ type: 'paint', shape: 'rect', element: rectEl, bounds: { x, y, w, h } });
-    this.component.renderStage();
+    if (w >= 4 && h >= 4) this._commitShape(paintLayer, stageState, 'qa-rect-preview', 'rect', 'rect', { x, y, width: w, height: h }, { x, y, w, h }, color, softness);
+    else paintLayer.querySelector('#qa-rect-preview')?.remove();
   }
 
   previewOval(paintLayer, p1, p2, color, softness = 0) {
     const cx = (p1[0] + p2[0]) / 2, cy = (p1[1] + p2[1]) / 2;
-    const rx = Math.abs(p2[0] - p1[0]) / 2, ry = Math.abs(p2[1] - p1[1]) / 2;
-    let preview = paintLayer.querySelector('#qa-oval-preview');
-    if (!preview) {
-      preview = makeElement('svg:ellipse', {
-        id: 'qa-oval-preview', fill: color, opacity: '0.9',
-        ...(softness > 0 ? { filter: 'url(#qa-brush-blur)' } : {})
-      });
-      paintLayer.appendChild(preview);
-    }
-    preview.setAttribute('cx', cx);
-    preview.setAttribute('cy', cy);
-    preview.setAttribute('rx', rx);
-    preview.setAttribute('ry', ry);
+    this._upsertPreview(paintLayer, 'qa-oval-preview', 'ellipse', { cx, cy, rx: Math.abs(p2[0] - p1[0]) / 2, ry: Math.abs(p2[1] - p1[1]) / 2 }, color, softness);
   }
 
   commitOval(paintLayer, stageState, p1, p2, color, softness = 0) {
-    const preview = paintLayer.querySelector('#qa-oval-preview');
-    if (preview) preview.remove();
     const cx = (p1[0] + p2[0]) / 2, cy = (p1[1] + p2[1]) / 2;
     const rx = Math.abs(p2[0] - p1[0]) / 2, ry = Math.abs(p2[1] - p1[1]) / 2;
-    if (rx < 4 || ry < 4) return;
-    const ovalEl = makeElement('svg:ellipse', {
-      cx, cy, rx, ry, fill: color,
-      ...(softness > 0 ? { filter: 'url(#qa-brush-blur)' } : {})
+    if (rx >= 4 && ry >= 4) this._commitShape(paintLayer, stageState, 'qa-oval-preview', 'oval', 'ellipse', { cx, cy, rx, ry }, { cx, cy, rx, ry }, color, softness);
+    else paintLayer.querySelector('#qa-oval-preview')?.remove();
+  }
+  _upsertPreview(paintLayer, id, tag, attrs, color, softness) {
+    let el = paintLayer.querySelector(`#${id}`);
+    if (!el) {
+      el = makeElement(`svg:${tag}`, {
+        id, fill: color, opacity: '0.9',
+        ...(softness > 0 ? { filter: 'url(#qa-brush-blur)' } : {})
+      });
+      paintLayer.appendChild(el);
+    }
+    Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+  }
+
+  _commitShape(paintLayer, stageState, previewId, shape, tag, attrs, bounds, color, softness) {
+    paintLayer.querySelector(`#${previewId}`)?.remove();
+    const el = makeElement(`svg:${tag}`, {
+      ...attrs, fill: color, ...(softness > 0 ? { filter: 'url(#qa-brush-blur)' } : {})
     });
-    paintLayer.appendChild(ovalEl);
-    stageState.annotations.push({ type: 'paint', shape: 'oval', element: ovalEl, bounds: { cx, cy, rx, ry } });
+    paintLayer.appendChild(el);
+    stageState.annotations.push({ type: 'paint', shape, element: el, bounds });
     this.component.renderStage();
   }
 }

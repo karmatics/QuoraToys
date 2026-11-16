@@ -74,44 +74,45 @@ class QuoraAnnotationContent {
   }
 
   static manifest() {
-        return [
-          {
-            section: 'annotation_studio',
-            partLabel: 'Chapter 1 • Live Studio',
-            title: 'Interactive Annotation & Vector Canvas',
-            blocks: [
-              { id: 'comp_annotation', type: 'component', component: 'QuoraAnnotationComponent' }
-            ]
-          },
-          {
-            section: 'unified_recon',
-            partLabel: 'Chapter 1 • System Evolution',
-            title: 'The Unified Hybrid Pen & Ambient Canvas Architecture',
-            blocks: [
-              { id: 'p_living_plan_update', type: 'p' },
-              { id: 'sidebar_living_plan_roadmap', type: 'sidebar', kicker: 'Iteration Plan', title: 'Text, Glow, HUD & Export Architecture' },
-              { id: 'p_hybrid_pen_intro', type: 'p' },
-              { id: 'sidebar_hybrid_pen_mechanics', type: 'sidebar', kicker: 'Unified Input', title: 'Tether Backup-Erase, Slack Zone & Drawstring' },
-              { id: 'p_cusp_plan', type: 'p' },
-              { id: 'sidebar_cusp_plan', type: 'sidebar', kicker: 'Next Milestone', title: 'Slack-String Redirection & Persistent Cusp Plan' },
-              { id: 'p_pause_clutch_handrest', type: 'p' },
-              { id: 'sidebar_pause_clutch', type: 'sidebar', kicker: 'Control Key Clutch', title: 'Resting Hand & String Radius Tuning' },
-              { id: 'p_self_annotating_help', type: 'p' },
-              { id: 'sidebar_meta_help', type: 'sidebar', kicker: 'Meta-UI', title: 'Interactive Help with Native Vector Annotations' },
-              { id: 'sidebar_recon_decisions', type: 'sidebar', kicker: 'Forward Design', title: 'Ambient Canvas & Forward Roadmap' }
-            ]
-          },
-          {
-            section: 'annotation_techniques',
-            partLabel: 'Chapter 1 • Mathematical Engine',
-            title: 'Kinetic Drag-Lead & On-Curve Knot Relaxation',
-            blocks: [
-              { id: 'p_annot_intro_1', type: 'p' },
-              { id: 'sidebar_annot_features', type: 'sidebar', kicker: 'Ergonomics', title: 'Why Drawing in QuoraToys Feels Natural' }
-            ]
-          }
-        ];
-      }
+      return [
+        {
+          section: 'annotation_studio',
+          partLabel: 'Chapter 1 • Live Studio',
+          title: 'Interactive Annotation & Vector Canvas',
+          blocks: [
+            { id: 'comp_annotation', type: 'component', component: 'QuoraAnnotationComponent' }
+          ]
+        },
+        {
+          section: 'unified_recon',
+          partLabel: 'Chapter 1 • System Evolution',
+          title: 'The Unified Hybrid Pen & Ambient Canvas Architecture',
+          blocks: [
+            { id: 'p_living_plan_update', type: 'p' },
+            { id: 'sidebar_living_plan_roadmap', type: 'sidebar', kicker: 'Iteration Plan', title: 'Text, Glow, HUD & Export Architecture' },
+            { id: 'p_hybrid_pen_intro', type: 'p' },
+            { id: 'sidebar_hybrid_pen_mechanics', type: 'sidebar', kicker: 'Unified Input', title: 'Tether Backup-Erase, Slack Zone & Drawstring' },
+            { id: 'p_cusp_plan', type: 'p' },
+            { id: 'sidebar_cusp_plan', type: 'sidebar', kicker: 'Next Milestone', title: 'Slack-String Redirection & Persistent Cusp Plan' },
+            { id: 'p_pause_clutch_handrest', type: 'p' },
+            { id: 'sidebar_pause_clutch', type: 'sidebar', kicker: 'Control Key Clutch', title: 'Resting Hand & String Radius Tuning' },
+            { id: 'p_self_annotating_help', type: 'p' },
+            { id: 'sidebar_meta_help', type: 'sidebar', kicker: 'Meta-UI', title: 'Interactive Help with Native Vector Annotations' },
+            { id: 'p_interview_frontier', type: 'p' },
+            { id: 'sidebar_interview_frontier', type: 'sidebar', kicker: 'Active Design Interview', title: 'Where We Are Thinking of Going Next' }
+          ]
+        },
+        {
+          section: 'annotation_techniques',
+          partLabel: 'Chapter 1 • Mathematical Engine',
+          title: 'Kinetic Drag-Lead & On-Curve Knot Relaxation',
+          blocks: [
+            { id: 'p_annot_intro_1', type: 'p' },
+            { id: 'sidebar_annot_features', type: 'sidebar', kicker: 'Ergonomics', title: 'Why Drawing in QuoraToys Feels Natural' }
+          ]
+        }
+      ];
+    }
   static p_hybrid_pen_intro() {
     return [
       "In the unified ambient canvas, modal tool switching is completely eliminated. When the pen touches the canvas at $P_0$, a subtle circular deadzone radius ($R = 32\\text{px}$) appears with a fat white point indicator.",
@@ -210,21 +211,19 @@ class QuoraAnnotationContent {
   static p_living_plan_update() {
       return [
         "The annotation workflow follows a low-friction interaction model: clicking a curve or its subtle pale `Note…` box immediately focuses inline text editing, while pressing `Escape` commits the text and drops into Curve Command Mode (`A` arrow, `X` flip, `L` loop, `S` line, `Del` delete, Arrow keys to nudge, `Alt+Arrow` to cycle focus).",
-        "Typography and glow optics are decoupled for legibility: a crisp dark outline halo sits behind glowing strokes so colored text stays sharp over busy images, and all controls in the ribbon use explicit multi-option pills (`Ink | Neon`, `Off | Tip | Tail | Both`) rather than hidden single-button toggles."
+        "Line work and lettering follow a strict **Decoupled Optics** rule: every stroke primitive—curves, swept arrowheads, tight architectural darts, leader dots, highlight rings, and callout boxes—shares the identical Ink (`shadowLayer` + `strokeLayer`) or Neon (`glowLayer` + `qa-neon-glow` + luminous `strokeLayer` core) pipeline, while text lettering supports independent `textGlowMode` (`match`, `neon`, `halo`, `shadow`, `none`) so callouts remain razor-sharp over busy screenshots."
       ];
     }
 
   static sidebar_living_plan_roadmap() {
       return [
         "Living Iteration Plan & Implemented Milestones:\n" +
-        "• Explicit Ribbon UI: Segmented selectors for Style (`Ink | Neon`), Arrow (`Off | Tip | Tail | Both`), Text Size (`A- / A+`), and Stroke Width (`− / +`).\n" +
-        "• Subtle Pale-Box Editing: Matched DOM-to-SVG font metrics and line wrapping with `Escape` returning to keyboard command mode.\n" +
-        "• Readability-First Glow: Independent Text Glow Mode (`Neon | Halo | Shadow | None`), Dark Outline Halo, Blur, Spread, Opacity, and Core Saturation.\n" +
-        "• Custom Export Area (`📐 Export Area`): Draw and resize a custom export crop rectangle (or reset to tight auto-bounds) with preserved neon glow layers and Matte/Transparent PNG export.\n" +
-        "• Portable Settings Capture: `📋 Copy Settings` and `📥 Paste` export/import full JSON defaults."
+        "• Terminal Marker Triad (`arrowStyle`): Choose `Swept` (classic concave arrowhead), `Arch` (tight, narrow architectural drafting dart), or `● Dot` (architectural surface leader dot), all routed through the decoupled shadow/glow/core layer stack.\n" +
+        "• Unified Line-Work Optics: Highlight rings, frame boxes, curves, arrowheads, and dots all share the exact same Ink vs. Neon glow pipeline, while text glow/shadow remains independently tunable.\n" +
+        "• Zero-Friction Image Ingestion: Drag images from disk or browser tabs, paste screenshots straight from clipboard (`Ctrl+V`), composite multiple plates, and erase pixels via canvas `destination-out` alpha masking.\n" +
+        "• Custom Export Area (`📐 Export Area`) & Portable Settings (`📋 Copy Settings` / `📥 Paste`)."
       ];
     }
-
   static p_cusp_plan() {
         return [
           "When backing up into the slack/erase zone and pulling out in a substantially different direction, the user intends a sharp corner rather than a rounded turn. Currently, `CurveFitter.fit()` smooths the entire polyline into a single chain, and `UpdateControlPoints` only preserves sharp corners when a vertex has `isCusp = true`.",
@@ -241,6 +240,23 @@ class QuoraAnnotationContent {
           "• 4. Persistent Non-Collinear Knots (`UpdateControlPoints` + `QuoraKnotManager`): Mark the boundary `BezierVertex` with `isCusp = true` and preserve both wings' independent angle offsets during neighbor drags until the author explicitly straightens/rejoins the knot (`C` hotkey or context menu)."
         ];
       }
+
+  static p_interview_frontier() {
+      return [
+        "Building the best freeform drawing program ever invented means iterating rapidly between real-world sketching feel and architectural rigor. Right now, our clipboard workflow already enables a clever hybrid trick: you can copy your composite (images + vector curves + text) to the clipboard and paste it back as an alpha-editable plate whenever you want to erase *through* vector strokes.",
+        "To take the next leap forward—combining AccuDraw-level spatial precision with zero-friction freeform sketching—here are the active design questions on the table for the next iteration:"
+      ];
+    }
+
+  static sidebar_interview_frontier() {
+      return [
+        "Active Design Frontier (Open Questions & Next Bets):\n" +
+        "• 1. One-Click 'Flatten / Bake to Alpha Plate': Should we add a button that bakes the current images + vector curves directly onto a new alpha-erasable raster layer in place (eliminating the manual Copy-to-Clipboard -> Paste-Back roundtrip), OR keep a hybrid 'Vector-Eraser Mask' so curves stay editable underneath?\n" +
+        "• 2. AccuDraw-Inspired 2D Drafting Compass: When holding `Shift` (or tapping a key while dragging), should an AccuDraw-style HUD compass appear at the anchor knot with magnetic 0°/45°/90° axis lock and live distance/angle readouts for architectural diagramming?\n" +
+        "• 3. Variable-Weight Calligraphic Pressure & Taper: Should curves support velocity-based or scroll-wheel stroke tapering toward the arrow tip?\n" +
+        "• 4. Dot Leader Offset vs. Centered Dot: Currently the `● Dot` sits centered on the exact endpoint `P_0`. For architectural callouts, should it also have a subtle dark halo/gap around the dot when crossing busy edges?"
+      ];
+    }
 }
 
 // --- Chapter 2: In-Situ Bookmarklet Hub ---
@@ -364,51 +380,68 @@ class QuoraArchitectureContent {
   }
 
   static manifest() {
-    return [
-      {
-        section: 'arch_forensic_audit',
-        partLabel: 'Chapter 6 • Section A',
-        title: 'Forensic Self-Assessment & Defect Resolution',
-        blocks: [
-          { id: 'p_audit_intro', type: 'p' },
-          { id: 'sidebar_audit_items', type: 'sidebar', kicker: 'Technical Debt', title: 'Defects Addressed' },
-          { id: 'p_audit_resolutions', type: 'p' }
-        ]
-      },
-      {
-        section: 'unified_spec',
-        partLabel: 'Chapter 6 • Section B',
-        title: 'Next-Gen Specification: Layer Stack, Outbound Tangents & Split Knots',
-        blocks: [
-          { id: 'p_layer_stack_spec', type: 'p' },
-          { id: 'sidebar_layer_hierarchy', type: 'sidebar', kicker: 'Z-Order Hierarchy', title: 'The 8-Layer Composition Pipeline' },
-          { id: 'p_outbound_tangent_snap', type: 'p' },
-          { id: 'sidebar_counterfactual_math', type: 'sidebar', kicker: 'Vector Formulation', title: 'Counterfactual Baseline & Snap Equations' },
-          { id: 'p_de_casteljau_split_delete', type: 'p' },
-          { id: 'sidebar_de_casteljau', type: 'sidebar', kicker: 'Knot Dynamics', title: 'Knot Splitting & Removal Equations' }
-        ]
-      },
-      {
-        section: 'arch_math_engine',
-        partLabel: 'Chapter 6 • Section C',
-        title: 'Mathematical Formulations & Algorithmic Foundations',
-        blocks: [
-          { id: 'p_math_tether_and_knots', type: 'p' },
-          { id: 'sidebar_math_formulas', type: 'sidebar', kicker: 'Formulation Matrix', title: 'Core Vector Equations' }
-        ]
-      },
-      {
-        section: 'arch_roadmap',
-        partLabel: 'Chapter 6 • Section D',
-        title: 'The Implementation Roadmap',
-        blocks: [
-          { id: 'p_roadmap_overview', type: 'p' },
-          { id: 'sidebar_roadmap_steps', type: 'sidebar', kicker: 'Action Plan', title: 'Prioritized Implementation Checklist' }
-        ]
-      }
-    ];
-  }
-
+      return [
+        {
+          section: 'arch_forensic_audit',
+          partLabel: 'Chapter 6 • Section A',
+          title: 'Forensic Self-Assessment & Defect Resolution',
+          blocks: [
+            { id: 'p_audit_intro', type: 'p' },
+            { id: 'sidebar_audit_items', type: 'sidebar', kicker: 'Technical Debt', title: 'Defects Addressed' },
+            { id: 'p_audit_resolutions', type: 'p' }
+          ]
+        },
+        {
+          section: 'unified_spec',
+          partLabel: 'Chapter 6 • Section B',
+          title: 'Next-Gen Specification: Layer Stack, Outbound Tangents & Split Knots',
+          blocks: [
+            { id: 'p_layer_stack_spec', type: 'p' },
+            { id: 'sidebar_layer_hierarchy', type: 'sidebar', kicker: 'Z-Order Hierarchy', title: 'The 8-Layer Composition Pipeline' },
+            { id: 'p_outbound_tangent_snap', type: 'p' },
+            { id: 'sidebar_counterfactual_math', type: 'sidebar', kicker: 'Vector Formulation', title: 'Counterfactual Baseline & Snap Equations' },
+            { id: 'p_de_casteljau_split_delete', type: 'p' },
+            { id: 'sidebar_de_casteljau', type: 'sidebar', kicker: 'Knot Dynamics', title: 'Knot Splitting & Removal Equations' }
+          ]
+        },
+        {
+          section: 'arch_math_engine',
+          partLabel: 'Chapter 6 • Section C',
+          title: 'Mathematical Formulations & Algorithmic Foundations',
+          blocks: [
+            { id: 'p_math_tether_and_knots', type: 'p' },
+            { id: 'sidebar_math_formulas', type: 'sidebar', kicker: 'Formulation Matrix', title: 'Core Vector Equations' }
+          ]
+        },
+        {
+          section: 'arch_rust_port',
+          partLabel: 'Chapter 6 • Section D',
+          title: 'Clean-Room Implementation Blueprint (Rust / Native Vector Engine)',
+          blocks: [
+            { id: 'p_rust_port_blueprint', type: 'p' },
+            { id: 'sidebar_rust_schema', type: 'sidebar', kicker: 'Engine Portability', title: 'Canonical Data Model & Render Contract' }
+          ]
+        },
+        {
+          section: 'arch_luno_extensibility',
+          partLabel: 'Chapter 6 • Section E',
+          title: 'Live Browser Extensibility via Luno & IndexedDB',
+          blocks: [
+            { id: 'p_luno_indexeddb_extensibility', type: 'p' },
+            { id: 'sidebar_luno_extensibility_api', type: 'sidebar', kicker: 'Zero-Save Extension', title: 'Registry Hooks & Browser-Local Persistence' }
+          ]
+        },
+        {
+          section: 'arch_roadmap',
+          partLabel: 'Chapter 6 • Section F',
+          title: 'The Implementation Roadmap',
+          blocks: [
+            { id: 'p_roadmap_overview', type: 'p' },
+            { id: 'sidebar_roadmap_steps', type: 'sidebar', kicker: 'Action Plan', title: 'Prioritized Implementation Checklist' }
+          ]
+        }
+      ];
+    }
   static p_audit_intro() {
       return [
         "Building high-performance creative software requires transparency regarding where shortcuts were taken and how technical debt is systematically retired.",
@@ -530,6 +563,42 @@ class QuoraArchitectureContent {
       "• 2. Interactive SVG optical difference detection diagnostics."
     ];
   }
+
+  static p_rust_port_blueprint() {
+      return [
+        "Everything in this living specification is intentionally decoupled into pure state (`StudioEngine`), pure math (`StudioGeometry`, `CurveFitter`, `UpdateControlPoints`), and a stateless pass renderer (`StudioSvgRenderer`) so an engineer—or an AI coding agent—can port the entire drafting engine cleanly into another language or host, such as **Rust** targeting `vello`, `skia-safe`, or `lyon` inside an Adobe Illustrator clone.",
+        "Because all gesture physics, piecewise cusp splitting, counterfactual $C^1$ relaxation, and 8-layer compositing rules are expressed as deterministic functions over plain structs, a Rust port requires zero browser DOM assumptions. You implement the 5 core structs below, run the 4-stage gesture-to-spline solver, and execute the 8 render passes in strict Z-order."
+      ];
+    }
+
+  static sidebar_rust_schema() {
+      return [
+        "Clean-Room Rust / Native Vector Port Contract:\n" +
+        "• `struct BezierVertex { point: Vec2, cp_in: Vec2, cp_out: Vec2, curvature: f32, balance: f32, tangent_offset: f32, is_cusp: bool, is_explicit_tangent: bool, cusp_in_offset: f32, cusp_out_offset: f32 }`\n" +
+        "• `enum ArrowEnd { None, Tip, Tail, Both }` and `enum ArrowStyle { Concave, Architectural, Dot }`\n" +
+        "• `enum LineStyle { ClassicInk, NeonGlow }` and `enum TextGlowMode { Match, Neon, Halo, Shadow, None }`\n" +
+        "• Solver Pipeline: `step_drawstring_tether()` -> contiguous tip rewind inside `r_erase <= 0.62 * R` + turn-angle cusp tagging in slack zone -> `fit_polyline_with_cusps()` (Schneider cubic fit per smooth sub-chain) -> `beziers_to_vertices()` -> `UpdateControlPoints::run()` (8-iter counterfactual natural tangent baseline + relative offset preservation).\n" +
+        "• Terminal Geometry: `Concave` (`barb_len = 14 + 1.25*sw`, `spread = 8 + 0.95*sw`), `Architectural` (`barb_len = 15 + 1.35*sw`, `spread = 4.5 + 0.55*sw`, `waist_spread = 0.35*sw`), `Dot` (`circle(P_0, r = max(2.6, 1.15*sw + 1.2))`).\n" +
+        "• Render Pass Order (Back -> Front): 1. Matte/ImagePlates (with `destination-out` alpha masks) -> 2. Diff Lenses -> 3. Paint Masks -> 4. `glowLayer` (Gaussian blur on pure hue; curves, terminals, rings, boxes, text) -> 5. `shadowLayer` (+2,+2 offset dark keyline when ClassicInk) -> 6. `strokeLayer` (luminous core tint `0.7*white + 0.3*hue` for Neon, or pure color for ClassicInk) -> 7. `textLayer` (optional dark halo + text fill + 2-sided architectural bracket) -> 8. `controlsLayer` (knots, tangent rays, ephemeral UI)."
+      ];
+    }
+
+  static p_luno_indexeddb_extensibility() {
+      return [
+        "Because QuoraToys exposes `StudioEngine` as an extensible registry alongside this living documentation, creators do not need a local compiler or filesystem access to invent new tools, terminal markers, or export filters. Using **Luno** directly in the browser, anyone can patch methods or register new plugins on the fly.",
+        "To allow purely online, zero-install customization without saving files to disk, extensions can be persisted locally in the browser's **IndexedDB** (`quoratoys_extensions_db`) as versioned plugin modules (holding tool definitions, custom arrowhead geometry generators, and inspector panels) that hydrate automatically on boot and can be exported/shared as JSON or Luno HTML patch bundles."
+      ];
+    }
+
+  static sidebar_luno_extensibility_api() {
+      return [
+        "Browser-Live Extension API (Luno + IndexedDB Blueprint):\n" +
+        "• `engine.registerTool({ id, label, icon, shortcut, onPointerDown, onPointerMove, onPointerUp })` — adds a first-class tool to the studio rail.\n" +
+        "• `engine.registerCommand(id, { label, shortcut, execute })` — binds new keyboard/button actions with automatic undo snapshot hooks (`engine.pushHistory()`).\n" +
+        "• `engine.registerInspectorSection(id, { match, render })` — injects contextual controls into the floating inspector bar when matching items are selected.\n" +
+        "• Planned IndexedDB Plugin Store (`quoratoys_extensions_db`): Stores `{ id, name, code, enabled, updatedAt }` records in browser IndexedDB so custom Luno patches, arrowhead primitives, and user presets survive reloads completely offline/online with zero disk saves."
+      ];
+    }
 }
 
 // Global Exports

@@ -204,87 +204,113 @@ class StudioSvgRenderer {
     }
   }
 
-  _renderArrowhead(p0, exitVec, color, baseW, lineStyle, z, p) {
-    const geo = StudioGeometry.computeConcaveArrowPath(p0, exitVec, baseW, z);
-    const glowOp = p.curveGlowOpacity !== undefined ? p.curveGlowOpacity : 0.9;
-
-    if (lineStyle === 'neon') {
+  _renderArrowhead(p0, exitVec, color, baseW, lineStyle, z, p, arrowStyle = 'concave') {
+      const geo = StudioGeometry.computeTerminalMarker(p0, exitVec, baseW, z, arrowStyle);
+      const glowOp = p.curveGlowOpacity !== undefined ? p.curveGlowOpacity : 0.9;
       const coreTint = StudioGeometry.getLuminousCoreColor(color, p.textCoreSaturation ?? 0.3);
-      this.glowLayer.appendChild(makeElement('svg:path', {
-        d: geo.d, stroke: color, 'stroke-width': String(geo.glowWidth), fill: 'none',
-        'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-        style: { filter: 'url(#qcs-neon-glow)', opacity: String(glowOp) }
-      }));
-      this.strokeLayer.appendChild(makeElement('svg:path', {
-        d: geo.d, stroke: coreTint, 'stroke-width': String(geo.coreWidth), fill: 'none',
-        'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-        style: { filter: 'url(#qcs-neon-core)' }
-      }));
-    } else {
-      this.shadowLayer.appendChild(makeElement('svg:path', {
-        d: geo.d, transform: 'translate(2, 2)',
-        stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': String(geo.shadowWidth), fill: 'none',
-        'stroke-linecap': 'round', 'stroke-linejoin': 'round'
-      }));
-      this.strokeLayer.appendChild(makeElement('svg:path', {
-        d: geo.d, stroke: color, 'stroke-width': String(geo.effectiveWidth), fill: 'none',
-        'stroke-linecap': 'round', 'stroke-linejoin': 'round'
-      }));
+
+      if (geo.kind === 'circle') {
+        if (lineStyle === 'neon') {
+          this.glowLayer.appendChild(makeElement('svg:circle', {
+            cx: String(geo.cx), cy: String(geo.cy), r: String(geo.r + 2.5 / z),
+            fill: color, stroke: 'none',
+            style: { filter: 'url(#qcs-neon-glow)', opacity: String(glowOp) }
+          }));
+          this.strokeLayer.appendChild(makeElement('svg:circle', {
+            cx: String(geo.cx), cy: String(geo.cy), r: String(geo.r),
+            fill: coreTint, stroke: 'none',
+            style: { filter: 'url(#qcs-neon-core)' }
+          }));
+        } else {
+          this.shadowLayer.appendChild(makeElement('svg:circle', {
+            cx: String(geo.cx), cy: String(geo.cy), r: String(geo.r + 0.8 / z),
+            transform: 'translate(2, 2)',
+            fill: 'rgba(10, 15, 25, 0.95)', stroke: 'none'
+          }));
+          this.strokeLayer.appendChild(makeElement('svg:circle', {
+            cx: String(geo.cx), cy: String(geo.cy), r: String(geo.r),
+            fill: color, stroke: 'none'
+          }));
+        }
+        return;
+      }
+
+      if (lineStyle === 'neon') {
+        this.glowLayer.appendChild(makeElement('svg:path', {
+          d: geo.d, stroke: color, 'stroke-width': String(geo.glowWidth), fill: 'none',
+          'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+          style: { filter: 'url(#qcs-neon-glow)', opacity: String(glowOp) }
+        }));
+        this.strokeLayer.appendChild(makeElement('svg:path', {
+          d: geo.d, stroke: coreTint, 'stroke-width': String(geo.coreWidth), fill: 'none',
+          'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+          style: { filter: 'url(#qcs-neon-core)' }
+        }));
+      } else {
+        this.shadowLayer.appendChild(makeElement('svg:path', {
+          d: geo.d, transform: 'translate(2, 2)',
+          stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': String(geo.shadowWidth), fill: 'none',
+          'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+        }));
+        this.strokeLayer.appendChild(makeElement('svg:path', {
+          d: geo.d, stroke: color, 'stroke-width': String(geo.effectiveWidth), fill: 'none',
+          'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+        }));
+      }
     }
-  }
 
   _renderCurve(ann, z, p, isSelected) {
-    if (!ann.beziers || ann.beziers.length === 0) return;
-    const d = StudioGeometry.beziersToSvgD(ann.beziers, ann.isClosed);
-    const baseW = ann.strokeWidth || 3.2;
-    const sw = baseW / z;
-    const lineStyle = ann.lineStyle || 'classic';
-    const col = ann.color || '#00e676';
-    const glowPad = p.curveGlowWidth !== undefined ? p.curveGlowWidth : 10;
-    const glowOp = p.curveGlowOpacity !== undefined ? p.curveGlowOpacity : 0.9;
+      if (!ann.beziers || ann.beziers.length === 0) return;
+      const d = StudioGeometry.beziersToSvgD(ann.beziers, ann.isClosed);
+      const baseW = ann.strokeWidth || 3.2;
+      const sw = baseW / z;
+      const lineStyle = ann.lineStyle || 'classic';
+      const arrowStyle = ann.arrowStyle || this.engine.state.arrowStyle || 'concave';
+      const col = ann.color || '#00e676';
+      const glowPad = p.curveGlowWidth !== undefined ? p.curveGlowWidth : 10;
+      const glowOp = p.curveGlowOpacity !== undefined ? p.curveGlowOpacity : 0.9;
 
-    if (lineStyle === 'neon') {
-      const coreTint = StudioGeometry.getLuminousCoreColor(col, p.textCoreSaturation ?? 0.3);
-      this.glowLayer.appendChild(makeElement('svg:path', {
-        d, stroke: col, 'stroke-width': String((baseW + glowPad) / z),
-        'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none',
-        style: { filter: 'url(#qcs-neon-glow)', opacity: String(glowOp) }
-      }));
-      this.strokeLayer.appendChild(makeElement('svg:path', {
-        d, stroke: coreTint, 'stroke-width': String(Math.max(2.0, baseW * 0.78) / z),
-        'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none',
-        style: { filter: 'url(#qcs-neon-core)' }
-      }));
-    } else {
-      this.shadowLayer.appendChild(makeElement('svg:path', {
-        d, transform: 'translate(2, 2)',
-        stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': String((baseW + 2.3) / z),
-        'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none'
-      }));
-      this.strokeLayer.appendChild(makeElement('svg:path', {
-        d, stroke: col, 'stroke-width': String(sw),
-        'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none'
-      }));
-    }
-
-    if (!ann.isClosed && ann.beziers.length > 0) {
-      if (ann.arrowEnd === 'tip' || ann.arrowEnd === 'both') {
-        const p0 = ann.beziers[0][0], p1 = ann.beziers[0][1];
-        this._renderArrowhead(p0, StudioGeometry.normalize([p1[0] - p0[0], p1[1] - p0[1]]), col, baseW, lineStyle, z, p);
+      if (lineStyle === 'neon') {
+        const coreTint = StudioGeometry.getLuminousCoreColor(col, p.textCoreSaturation ?? 0.3);
+        this.glowLayer.appendChild(makeElement('svg:path', {
+          d, stroke: col, 'stroke-width': String((baseW + glowPad) / z),
+          'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none',
+          style: { filter: 'url(#qcs-neon-glow)', opacity: String(glowOp) }
+        }));
+        this.strokeLayer.appendChild(makeElement('svg:path', {
+          d, stroke: coreTint, 'stroke-width': String(Math.max(2.0, baseW * 0.78) / z),
+          'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none',
+          style: { filter: 'url(#qcs-neon-core)' }
+        }));
+      } else {
+        this.shadowLayer.appendChild(makeElement('svg:path', {
+          d, transform: 'translate(2, 2)',
+          stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': String((baseW + 2.3) / z),
+          'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none'
+        }));
+        this.strokeLayer.appendChild(makeElement('svg:path', {
+          d, stroke: col, 'stroke-width': String(sw),
+          'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none'
+        }));
       }
-      if (ann.arrowEnd === 'tail' || ann.arrowEnd === 'both') {
-        const last = ann.beziers[ann.beziers.length - 1];
-        const p2 = last[2], p3 = last[3];
-        this._renderArrowhead(p3, StudioGeometry.normalize([p2[0] - p3[0], p2[1] - p3[1]]), col, baseW, lineStyle, z, p);
+
+      if (!ann.isClosed && ann.beziers.length > 0) {
+        if (ann.arrowEnd === 'tip' || ann.arrowEnd === 'both') {
+          const p0 = ann.beziers[0][0], p1 = ann.beziers[0][1];
+          this._renderArrowhead(p0, StudioGeometry.normalize([p1[0] - p0[0], p1[1] - p0[1]]), col, baseW, lineStyle, z, p, arrowStyle);
+        }
+        if (ann.arrowEnd === 'tail' || ann.arrowEnd === 'both') {
+          const last = ann.beziers[ann.beziers.length - 1];
+          const p2 = last[2], p3 = last[3];
+          this._renderArrowhead(p3, StudioGeometry.normalize([p2[0] - p3[0], p2[1] - p3[1]]), col, baseW, lineStyle, z, p, arrowStyle);
+        }
+      }
+
+      const hasText = Boolean(ann.text && ann.text.trim() !== '');
+      if (hasText || (isSelected && !ann._isEditingText)) {
+        this._renderCurveText(ann, p, isSelected);
       }
     }
-
-    const hasText = Boolean(ann.text && ann.text.trim() !== '');
-    if (hasText || (isSelected && !ann._isEditingText)) {
-      this._renderCurveText(ann, p, isSelected);
-    }
-  }
-
   _renderCurveText(ann, p, isSelected) {
     const state = this.engine.state;
     const isAtTail = (ann.textEnd !== 'tip');
@@ -454,80 +480,26 @@ class StudioSvgRenderer {
   }
 
   _renderCircleCallout(ann, z, isSelected) {
-    const col = ann.color || '#00e676';
-    const sw = (ann.strokeWidth || 3.2) / z;
-    this.shadowLayer.appendChild(makeElement('svg:ellipse', {
-      cx: ann.cx + 2, cy: ann.cy + 2, rx: ann.rx, ry: ann.ry, fill: 'none',
-      stroke: 'rgba(10,15,25,0.95)', 'stroke-width': String(((ann.strokeWidth || 3.2) + 2) / z)
-    }));
-    if (ann.lineStyle === 'neon') {
-      this.glowLayer.appendChild(makeElement('svg:ellipse', {
-        cx: ann.cx, cy: ann.cy, rx: ann.rx, ry: ann.ry, fill: 'none', stroke: col,
-        'stroke-width': String(((ann.strokeWidth || 3.2) + 8) / z),
-        style: { filter: 'url(#qcs-neon-glow)', opacity: '0.85' }
-      }));
-    }
-    this.strokeLayer.appendChild(makeElement('svg:ellipse', {
-      cx: ann.cx, cy: ann.cy, rx: ann.rx, ry: ann.ry,
-      fill: isSelected ? 'rgba(0, 242, 254, 0.08)' : 'rgba(0, 242, 254, 0.02)',
-      stroke: col, 'stroke-width': String(sw)
-    }));
+    this._renderCalloutShape('ellipse', { cx: ann.cx, cy: ann.cy, rx: ann.rx, ry: ann.ry }, ann, z, isSelected);
   }
 
   _renderBoxCallout(ann, z, isSelected) {
-    const col = ann.color || '#00e676';
-    const sw = (ann.strokeWidth || 3.2) / z;
-    this.shadowLayer.appendChild(makeElement('svg:rect', {
-      x: ann.x + 2, y: ann.y + 2, width: ann.w, height: ann.h, rx: '6', fill: 'none',
-      stroke: 'rgba(10,15,25,0.95)', 'stroke-width': String(((ann.strokeWidth || 3.2) + 2) / z)
-    }));
-    if (ann.lineStyle === 'neon') {
-      this.glowLayer.appendChild(makeElement('svg:rect', {
-        x: ann.x, y: ann.y, width: ann.w, height: ann.h, rx: '6', fill: 'none', stroke: col,
-        'stroke-width': String(((ann.strokeWidth || 3.2) + 8) / z),
-        style: { filter: 'url(#qcs-neon-glow)', opacity: '0.85' }
-      }));
-    }
-    this.strokeLayer.appendChild(makeElement('svg:rect', {
-      x: ann.x, y: ann.y, width: ann.w, height: ann.h, rx: '6',
-      fill: isSelected ? 'rgba(0, 242, 254, 0.08)' : 'rgba(0, 242, 254, 0.02)',
-      stroke: col, 'stroke-width': String(sw)
-    }));
+    this._renderCalloutShape('rect', { x: ann.x, y: ann.y, width: ann.w, height: ann.h, rx: '6' }, ann, z, isSelected);
   }
-
   _renderCalloutGrips(ann, invScale) {
-    const bx = ann.type === 'circle_callout' ? ann.cx - ann.rx : ann.x;
-    const by = ann.type === 'circle_callout' ? ann.cy - ann.ry : ann.y;
-    const bw = ann.type === 'circle_callout' ? ann.rx * 2 : ann.w;
-    const bh = ann.type === 'circle_callout' ? ann.ry * 2 : ann.h;
+    const isCircle = ann.type === 'circle_callout';
+    const bx = isCircle ? ann.cx - ann.rx : ann.x;
+    const by = isCircle ? ann.cy - ann.ry : ann.y;
+    const bw = isCircle ? ann.rx * 2 : ann.w;
+    const bh = isCircle ? ann.ry * 2 : ann.h;
 
     this.controlsLayer.appendChild(makeElement('svg:rect', {
       x: bx, y: by, width: bw, height: bh, fill: 'none', stroke: '#00f2fe',
       'stroke-width': String(1.2 * invScale), 'stroke-dasharray': `${4 * invScale},${3 * invScale}`,
       style: { pointerEvents: 'none' }
     }));
-
-    const size = 9 * invScale;
-    const half = size / 2;
-    [
-      { id: 'nw', x: bx, y: by, cursor: 'nwse-resize' },
-      { id: 'ne', x: bx + bw, y: by, cursor: 'nesw-resize' },
-      { id: 'se', x: bx + bw, y: by + bh, cursor: 'nwse-resize' },
-      { id: 'sw', x: bx, y: by + bh, cursor: 'nesw-resize' }
-    ].forEach(c => {
-      const grip = makeElement('svg:rect', {
-        x: c.x - half, y: c.y - half, width: size, height: size, rx: String(2 * invScale),
-        fill: '#00f2fe', stroke: '#070a13', 'stroke-width': String(1.5 * invScale),
-        style: { cursor: c.cursor, pointerEvents: 'all' }
-      });
-      grip.addEventListener('mousedown', (e) => {
-        e.stopPropagation();
-        this.handlers.onCalloutGripMouseDown?.(ann, c.id, e);
-      });
-      this.controlsLayer.appendChild(grip);
-    });
+    this._renderCornerGrips(bx, by, bw, bh, invScale, (id, e) => this.handlers.onCalloutGripMouseDown?.(ann, id, e), 9);
   }
-
   _renderCurveControls(curve, invScale) {
       if (!curve.vertices) return;
       const activeIdx = this.engine.state.activeKnotIdx || 0;
@@ -653,6 +625,7 @@ class StudioSvgRenderer {
         });
       }
     }
+
   _renderImageControls(plate, invScale) {
     const border = makeElement('svg:rect', {
       x: plate.x, y: plate.y, width: plate.width, height: plate.height,
@@ -666,28 +639,8 @@ class StudioSvgRenderer {
       this.handlers.onImageMouseDown?.(plate, e);
     });
     this.controlsLayer.appendChild(border);
-
-    const gSize = 10 * invScale;
-    const half = gSize / 2;
-    [
-      { id: 'nw', x: plate.x, y: plate.y, cursor: 'nwse-resize' },
-      { id: 'ne', x: plate.x + plate.width, y: plate.y, cursor: 'nesw-resize' },
-      { id: 'se', x: plate.x + plate.width, y: plate.y + plate.height, cursor: 'nwse-resize' },
-      { id: 'sw', x: plate.x, y: plate.y + plate.height, cursor: 'nesw-resize' }
-    ].forEach(c => {
-      const grip = makeElement('svg:rect', {
-        x: c.x - half, y: c.y - half, width: gSize, height: gSize, rx: String(2 * invScale),
-        fill: '#00f2fe', stroke: '#fff', 'stroke-width': String(1.5 * invScale),
-        style: { cursor: c.cursor, pointerEvents: 'all' }
-      });
-      grip.addEventListener('mousedown', (e) => {
-        e.stopPropagation();
-        this.handlers.onImageGripMouseDown?.(plate, c.id, e);
-      });
-      this.controlsLayer.appendChild(grip);
-    });
+    this._renderCornerGrips(plate.x, plate.y, plate.width, plate.height, invScale, (id, e) => this.handlers.onImageGripMouseDown?.(plate, id, e), 10);
   }
-
   _renderExportBounds(rect, invScale) {
     const big = 10000;
     const maskPath = `M -${big} -${big} H ${big} V ${big} H -${big} Z M ${rect.x} ${rect.y} V ${rect.y + rect.height} H ${rect.x + rect.width} V ${rect.y} Z`;
@@ -735,11 +688,18 @@ class StudioSvgRenderer {
 
       if (spec.previewArrow) {
         const { p0, exitVec, color, strokeWidth } = spec.previewArrow;
-        const geo = StudioGeometry.computeConcaveArrowPath(p0, exitVec, strokeWidth, z);
-        this.transientLayer.appendChild(makeElement('svg:path', {
-          d: geo.d, stroke: color, 'stroke-width': String(geo.effectiveWidth),
-          fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
-        }));
+        const arrowStyle = spec.arrowStyle || this.engine.state.arrowStyle || 'concave';
+        const geo = StudioGeometry.computeTerminalMarker(p0, exitVec, strokeWidth, z, arrowStyle);
+        if (geo.kind === 'circle') {
+          this.transientLayer.appendChild(makeElement('svg:circle', {
+            cx: String(geo.cx), cy: String(geo.cy), r: String(geo.r), fill: color, stroke: 'none'
+          }));
+        } else {
+          this.transientLayer.appendChild(makeElement('svg:path', {
+            d: geo.d, stroke: color, 'stroke-width': String(geo.effectiveWidth),
+            fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+          }));
+        }
       }
 
       if (spec.tetherLine) {
@@ -880,6 +840,58 @@ class StudioSvgRenderer {
       img.src = url;
     });
   }
+
+  _renderCornerGrips(bx, by, bw, bh, invScale, onGripDown, baseSize = 9) {
+    const size = baseSize * invScale;
+    const half = size / 2;
+    [
+      { id: 'nw', x: bx, y: by, cursor: 'nwse-resize' },
+      { id: 'ne', x: bx + bw, y: by, cursor: 'nesw-resize' },
+      { id: 'se', x: bx + bw, y: by + bh, cursor: 'nwse-resize' },
+      { id: 'sw', x: bx, y: by + bh, cursor: 'nesw-resize' }
+    ].forEach(c => {
+      const grip = makeElement('svg:rect', {
+        x: c.x - half, y: c.y - half, width: size, height: size, rx: String(2 * invScale),
+        fill: '#00f2fe', stroke: '#070a13', 'stroke-width': String(1.5 * invScale),
+        style: { cursor: c.cursor, pointerEvents: 'all' }
+      });
+      grip.addEventListener('mousedown', (e) => { e.stopPropagation(); onGripDown?.(c.id, e); });
+      this.controlsLayer.appendChild(grip);
+    });
+  }
+
+  _renderCalloutShape(tag, attrs, ann, z, isSelected) {
+      const col = ann.color || '#00e676';
+      const baseW = ann.strokeWidth || 3.2;
+      const p = this.engine.state.prefs || {};
+      const glowPad = p.curveGlowWidth !== undefined ? p.curveGlowWidth : 10;
+      const glowOp = p.curveGlowOpacity !== undefined ? p.curveGlowOpacity : 0.9;
+      const isNeon = ann.lineStyle === 'neon';
+      const shAttrs = { ...attrs };
+      if (tag === 'ellipse') { shAttrs.cx += 2; shAttrs.cy += 2; }
+      else { shAttrs.x += 2; shAttrs.y += 2; }
+
+      if (isNeon) {
+        const coreTint = StudioGeometry.getLuminousCoreColor(col, p.textCoreSaturation ?? 0.3);
+        this.glowLayer.appendChild(makeElement(`svg:${tag}`, {
+          ...attrs, fill: 'none', stroke: col, 'stroke-width': String((baseW + glowPad) / z),
+          style: { filter: 'url(#qcs-neon-glow)', opacity: String(glowOp) }
+        }));
+        this.strokeLayer.appendChild(makeElement(`svg:${tag}`, {
+          ...attrs, fill: isSelected ? 'rgba(0, 242, 254, 0.08)' : 'rgba(0, 242, 254, 0.02)',
+          stroke: coreTint, 'stroke-width': String(Math.max(2.0, baseW * 0.78) / z),
+          style: { filter: 'url(#qcs-neon-core)' }
+        }));
+      } else {
+        this.shadowLayer.appendChild(makeElement(`svg:${tag}`, {
+          ...shAttrs, fill: 'none', stroke: 'rgba(10,15,25,0.95)', 'stroke-width': String((baseW + 2.3) / z)
+        }));
+        this.strokeLayer.appendChild(makeElement(`svg:${tag}`, {
+          ...attrs, fill: isSelected ? 'rgba(0, 242, 254, 0.08)' : 'rgba(0, 242, 254, 0.02)',
+          stroke: col, 'stroke-width': String(baseW / z)
+        }));
+      }
+    }
 }
 
 globalThis.StudioSvgRenderer = StudioSvgRenderer;

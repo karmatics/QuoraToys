@@ -456,6 +456,11 @@ class QuoraCleanStudioDialog {
             selItem?.arrowEnd || state.arrowMode,
             (v) => this.engine.runCommand('style.setArrowMode', v)
           ));
+          this.inspectorBar.appendChild(addSeg(
+            [{ id: 'concave', label: 'Swept' }, { id: 'architectural', label: 'Arch' }, { id: 'dot', label: '● Dot' }],
+            selItem?.arrowStyle || state.arrowStyle || 'concave',
+            (v) => this.engine.runCommand('style.setArrowStyle', v)
+          ));
         }
 
         this.inspectorBar.appendChild(makeElement('div', { className: 'qcs-seg' }, [
@@ -522,341 +527,250 @@ class QuoraCleanStudioDialog {
   }
 
   _registerBuiltInTools() {
-      const e = this.engine;
+    const eng = this.engine;
+    const st = eng.state;
+    const rectFromPts = (a, b) => ({
+      x: Math.min(a[0], b[0]), y: Math.min(a[1], b[1]),
+      w: Math.abs(b[0] - a[0]), h: Math.abs(b[1] - a[1])
+    });
+    const ellipseFromPts = (a, b) => ({
+      cx: (a[0] + b[0]) / 2, cy: (a[1] + b[1]) / 2,
+      rx: Math.abs(b[0] - a[0]) / 2, ry: Math.abs(b[1] - a[1]) / 2
+    });
 
-      e.registerTool({
-        id: 'select', label: 'Select', icon: '↖', shortcut: 'V', order: 10, cursor: 'default',
-        description: 'Select, move, reshape, or double-click to edit',
+    eng.registerTool({
+      id: 'select', label: 'Select', icon: '↖', shortcut: 'V', order: 10, cursor: 'default',
+      description: 'Select, move, reshape, or double-click to edit',
+      onPointerDown: (pt, ev, ctx) => {
+        const hit = StudioGeometry.findNearestAnnotation(
+          st.annotations, pt, 18 / (st.zoom || 1),
+          (t, s, f) => this.renderer.measureTextBounds(t, s, f)
+        );
+        if (hit) {
+          if (hit.part === 'curve' && hit.segIdx !== undefined && hit.item.vertices?.length) {
+            st.activeKnotIdx = hit.t < 0.5 ? hit.segIdx : Math.min(hit.item.vertices.length - 1, hit.segIdx + 1);
+          }
+          eng.selectItem(hit.item);
+          Object.assign(ctx, { mode: 'drag_item', item: hit.item, startPt: pt, snap: eng._captureSnapshot('Move Item'), orig: eng._cloneAnnotation(hit.item), didMove: false });
+          return;
+        }
+        const plate = StudioGeometry.hitTestImagePlate(st.placedImages, pt);
+        if (plate) {
+          eng.selectImage(plate);
+          Object.assign(ctx, { mode: 'drag_image', plate, startPt: pt, ox: plate.x, oy: plate.y, snap: eng._captureSnapshot('Move Image'), didMove: false });
+          return;
+        }
+        eng.deselectAll();
+        Object.assign(ctx, { mode: 'pan_bg', sx: ev.clientX, sy: ev.clientY, px: st.panX, py: st.panY });
+      },
+      onPointerMove: (pt, ev, ctx) => {
+        if (ctx.mode === 'drag_item' && ctx.item) {
+          const dx = Math.round(pt[0] - ctx.startPt[0]), dy = Math.round(pt[1] - ctx.startPt[1]);
+          if (Math.hypot(dx, dy) > 2) ctx.didMove = true;
+          if (ctx.item.type === 'curve') {
+            ctx.item.vertices.forEach((v, i) => {
+              const ov = ctx.orig.vertices[i];
+              if (ov) { v.point[0] = ov.point[0] + dx; v.point[1] = ov.point[1] + dy; }
+            });
+            eng.recomputeCurve(ctx.item);
+          } else if (ctx.item.type === 'circle_callout') {
+            ctx.item.cx = ctx.orig.cx + dx; ctx.item.cy = ctx.orig.cy + dy;
+          } else {
+            ctx.item.x = ctx.orig.x + dx; ctx.item.y = ctx.orig.y + dy;
+          }
+          this.renderer.render();
+        } else if (ctx.mode === 'drag_image' && ctx.plate) {
+          const dx = Math.round(pt[0] - ctx.startPt[0]), dy = Math.round(pt[1] - ctx.startPt[1]);
+          if (Math.hypot(dx, dy) > 2) ctx.didMove = true;
+          ctx.plate.x = ctx.ox + dx; ctx.plate.y = ctx.oy + dy;
+          this.renderer.render();
+        } else if (ctx.mode === 'pan_bg') {
+          st.panX = Math.round(ctx.px + (ev.clientX - ctx.sx));
+          st.panY = Math.round(ctx.py + (ev.clientY - ctx.sy));
+          this._applyViewportTransform();
+        }
+      },
+      onPointerUp: (pt, ev, ctx) => {
+        if ((ctx.mode === 'drag_item' || ctx.mode === 'drag_image') && ctx.didMove) eng.commitSnapshot(ctx.snap);
+      }
+    });
+
+    const registerSplineTool = (id, label, icon, shortcut, order, forceArrow = false) => {
+      eng.registerTool({
+        id, label, icon, shortcut, order, cursor: 'crosshair',
+        description: forceArrow ? 'Draw crisp pointer arrow' : 'Drawstring spline (back up to erase or redirect for sharp cusp)',
         onPointerDown: (pt, ev, ctx) => {
-          const hit = StudioGeometry.findNearestAnnotation(
-            e.state.annotations, pt, 18 / (e.state.zoom || 1),
-            (t, s, f) => this.renderer.measureTextBounds(t, s, f)
-          );
-          if (hit) {
-            if (hit.part === 'curve' && hit.segIdx !== undefined && hit.item.vertices?.length) {
-              const maxIdx = hit.item.vertices.length - 1;
-              e.state.activeKnotIdx = hit.t < 0.5 ? hit.segIdx : Math.min(maxIdx, hit.segIdx + 1);
-            }
-            e.selectItem(hit.item);
-            ctx.mode = 'drag_item'; ctx.item = hit.item; ctx.startPt = pt;
-            ctx.snapshot = e._captureSnapshot('Move Item');
-            ctx.origState = e._cloneAnnotation(hit.item);
-            ctx.didMove = false;
-            return;
-          }
-          const plate = StudioGeometry.hitTestImagePlate(e.state.placedImages, pt);
-          if (plate) {
-            e.selectImage(plate);
-            ctx.mode = 'drag_image'; ctx.plate = plate; ctx.startPt = pt;
-            ctx.origX = plate.x; ctx.origY = plate.y;
-            ctx.snapshot = e._captureSnapshot('Move Image');
-            ctx.didMove = false;
-            return;
-          }
-          e.deselectAll();
-          ctx.mode = 'pan_bg'; ctx.startClientX = ev.clientX; ctx.startClientY = ev.clientY;
-          ctx.origPanX = e.state.panX; ctx.origPanY = e.state.panY;
+          eng.deselectAll();
+          Object.assign(ctx, {
+            startPt: pt, prevCursorPt: pt, points: [pt], hasExceededDeadzone: false,
+            tetherState: { cuspIndices: [], inSlackRedirect: false, slackIncomingDir: null, cuspAngleDeg: 45 }
+          });
+          if (forceArrow) eng.runCommand('style.setArrowMode', st.arrowMode === 'none' ? 'tip' : st.arrowMode);
         },
         onPointerMove: (pt, ev, ctx) => {
-          if (ctx.mode === 'drag_item' && ctx.item) {
-            const dx = Math.round(pt[0] - ctx.startPt[0]);
-            const dy = Math.round(pt[1] - ctx.startPt[1]);
-            if (Math.hypot(dx, dy) > 2) ctx.didMove = true;
-            if (ctx.item.type === 'curve') {
-              ctx.item.vertices.forEach((v, i) => {
-                const ov = ctx.origState.vertices[i];
-                if (ov) { v.point[0] = ov.point[0] + dx; v.point[1] = ov.point[1] + dy; }
-              });
-              e.recomputeCurve(ctx.item);
-            } else if (ctx.item.type === 'circle_callout') {
-              ctx.item.cx = ctx.origState.cx + dx; ctx.item.cy = ctx.origState.cy + dy;
-            } else {
-              ctx.item.x = ctx.origState.x + dx; ctx.item.y = ctx.origState.y + dy;
-            }
-            this.renderer.render();
-          } else if (ctx.mode === 'drag_image' && ctx.plate) {
-            const dx = Math.round(pt[0] - ctx.startPt[0]);
-            const dy = Math.round(pt[1] - ctx.startPt[1]);
-            if (Math.hypot(dx, dy) > 2) ctx.didMove = true;
-            ctx.plate.x = ctx.origX + dx; ctx.plate.y = ctx.origY + dy;
-            this.renderer.render();
-          } else if (ctx.mode === 'pan_bg') {
-            e.state.panX = Math.round(ctx.origPanX + (ev.clientX - ctx.startClientX));
-            e.state.panY = Math.round(ctx.origPanY + (ev.clientY - ctx.startClientY));
-            this._applyViewportTransform();
-          }
-        },
-        onPointerUp: (pt, ev, ctx) => {
-          if ((ctx.mode === 'drag_item' || ctx.mode === 'drag_image') && ctx.didMove && ctx.snapshot) {
-            e._undoStack.push(ctx.snapshot); e._redoStack = [];
-            e.emit('history:change', { canUndo: e.canUndo(), canRedo: e.canRedo() });
-          }
-        }
-      });
-
-      const registerSplineTool = (id, label, icon, shortcut, order, forceArrow = false) => {
-        e.registerTool({
-          id, label, icon, shortcut, order, cursor: 'crosshair',
-          description: forceArrow ? 'Draw crisp pointer arrow' : 'Drawstring spline (back up to erase or redirect for sharp cusp)',
-          onPointerDown: (pt, ev, ctx) => {
-            e.deselectAll();
-            ctx.startPt = pt; ctx.prevCursorPt = pt; ctx.points = [pt];
-            ctx.hasExceededDeadzone = false;
+          const rend = this.renderer;
+          if (ev.shiftKey) {
+            ctx.hasExceededDeadzone = true;
+            ctx.points = [ctx.startPt, pt];
             ctx.tetherState = { cuspIndices: [], inSlackRedirect: false, slackIncomingDir: null, cuspAngleDeg: 45 };
-            if (forceArrow) e.runCommand('style.setArrowMode', e.state.arrowMode === 'none' ? 'tip' : e.state.arrowMode);
-          },
-          onPointerMove: (pt, ev, ctx) => {
-            const st = e.state;
-            if (ev.shiftKey) {
-              ctx.hasExceededDeadzone = true;
-              ctx.points = [ctx.startPt, pt];
-              ctx.tetherState = { cuspIndices: [], inSlackRedirect: false, slackIncomingDir: null, cuspAngleDeg: 45 };
-              this.renderer.renderTransient({
-                previewPathD: `M ${ctx.startPt[0]} ${ctx.startPt[1]} L ${pt[0]} ${pt[1]}`,
-                color: st.currentColor, strokeWidth: st.strokeWidth, lineStyle: st.lineStyle,
-                previewArrow: st.hasArrow ? {
-                  p0: ctx.startPt,
-                  exitVec: StudioGeometry.normalize([pt[0] - ctx.startPt[0], pt[1] - ctx.startPt[1]]),
-                  color: st.currentColor, strokeWidth: st.strokeWidth
-                } : null
-              });
-              return;
-            }
-
-            if (!ctx.hasExceededDeadzone && StudioGeometry.dist(pt, ctx.startPt) > 4) {
-              ctx.hasExceededDeadzone = true;
-            }
-            if (!ctx.hasExceededDeadzone) {
-              ctx.prevCursorPt = pt;
-              this.renderer.renderTransient({ tipIndicator: { pt: ctx.startPt, didRewind: false } });
-              return;
-            }
-
-            const tetherLen = st.tetherLength || 32;
-            const eraseR = Math.max(8, Math.min(st.eraseRadius || 20, Math.round(tetherLen * 0.62)));
-            const step = StudioGeometry.stepDrawstringTether(ctx.points, pt, tetherLen, eraseR, ctx.prevCursorPt, ctx.tetherState);
-            ctx.points = step.points;
-            ctx.prevCursorPt = pt;
-            ctx.tetherState.cuspIndices = step.cuspIndices;
-            ctx.tetherState.inSlackRedirect = step.inSlackRedirect;
-            ctx.tetherState.slackIncomingDir = step.slackIncomingDir;
-
-            const isLoopClosing = (ctx.points.length > 8 && StudioGeometry.dist(step.curTip, ctx.startPt) < 24);
-            const ptsForPreview = isLoopClosing ? [...ctx.points, ctx.startPt] : (ctx.points.length === 1 ? [step.curTip, step.curTip] : ctx.points);
-
-            this.renderer.renderTransient({
-              previewPathD: StudioGeometry.smoothPolylineToSvgD(ptsForPreview),
-              color: isLoopClosing ? '#00f2fe' : st.currentColor,
-              strokeWidth: st.strokeWidth,
-              lineStyle: st.lineStyle,
-              isLoopClosing,
-              tetherLine: { from: step.curTip, to: pt, isSlack: step.isSlack, didRewind: step.didRewind },
-              tipIndicator: { pt: step.curTip, didRewind: step.didRewind },
-              eraseCircle: { pt, r: eraseR, didRewind: step.didRewind },
-              cuspPoints: step.cuspIndices.map(idx => ctx.points[idx]).filter(Boolean),
-              pendingCuspPt: step.pendingCusp ? step.curTip : null,
-              previewArrow: (st.hasArrow && !isLoopClosing && ctx.points.length >= 2) ? {
-                p0: ptsForPreview[0],
-                exitVec: StudioGeometry.normalize([ptsForPreview[1][0] - ptsForPreview[0][0], ptsForPreview[1][1] - ptsForPreview[0][1]]),
+            rend.renderTransient({
+              previewPathD: `M ${ctx.startPt[0]} ${ctx.startPt[1]} L ${pt[0]} ${pt[1]}`,
+              color: st.currentColor, strokeWidth: st.strokeWidth, lineStyle: st.lineStyle,
+              previewArrow: st.hasArrow ? {
+                p0: ctx.startPt, exitVec: StudioGeometry.normalize([pt[0] - ctx.startPt[0], pt[1] - ctx.startPt[1]]),
                 color: st.currentColor, strokeWidth: st.strokeWidth
               } : null
             });
-          },
-          onPointerUp: (pt, ev, ctx) => {
-            this.renderer.clearTransient();
-            if (!ctx.hasExceededDeadzone || ctx.points.length < 2) return;
-            const pts = [...ctx.points];
-            const isLoopClosing = (pts.length > 8 && StudioGeometry.dist(pts[pts.length - 1], ctx.startPt) < 24);
-            if (isLoopClosing) pts[pts.length - 1] = [ctx.startPt[0], ctx.startPt[1]];
-
-            const fitted = StudioGeometry.fitPolylineWithCusps(pts, ctx.tetherState?.cuspIndices || []);
-            if (fitted.beziers && fitted.beziers.length > 0) {
-              e.addCurveFromBeziers(fitted.beziers, {
-                isClosed: isLoopClosing,
-                arrowEnd: isLoopClosing ? 'none' : e.state.arrowMode,
-                cuspVertexIndices: fitted.vertexCuspIndices
-              });
-              if (fitted.vertexCuspIndices.length > 0) {
-                e.emit('toast', `◆ Locked ${fitted.vertexCuspIndices.length} cusp corner(s)`);
-              }
-            }
+            return;
           }
-        });
-      };
 
-      registerSplineTool('curve', 'Curve', '🪢', 'D', 20, false);
-      registerSplineTool('arrow', 'Arrow', '➔', 'A', 30, true);
+          if (!ctx.hasExceededDeadzone && StudioGeometry.dist(pt, ctx.startPt) > 4) ctx.hasExceededDeadzone = true;
+          if (!ctx.hasExceededDeadzone) {
+            ctx.prevCursorPt = pt;
+            return rend.renderTransient({ tipIndicator: { pt: ctx.startPt, didRewind: false } });
+          }
 
-      e.registerTool({
-        id: 'circle', label: 'Ring', icon: '⭕', shortcut: 'O', order: 40, cursor: 'crosshair',
-        onPointerDown: (pt, ev, ctx) => { ctx.startPt = pt; },
-        onPointerMove: (pt, ev, ctx) => {
-          if (!ctx.startPt) return;
-          this.renderer.renderTransient({
-            shapeEllipse: {
-              cx: (ctx.startPt[0] + pt[0]) / 2, cy: (ctx.startPt[1] + pt[1]) / 2,
-              rx: Math.abs(pt[0] - ctx.startPt[0]) / 2, ry: Math.abs(pt[1] - ctx.startPt[1]) / 2,
-              stroke: e.state.currentColor
-            }
+          const tetherLen = st.tetherLength || 32;
+          const eraseR = Math.max(8, Math.min(st.eraseRadius || 20, Math.round(tetherLen * 0.62)));
+          const step = StudioGeometry.stepDrawstringTether(ctx.points, pt, tetherLen, eraseR, ctx.prevCursorPt, ctx.tetherState);
+          ctx.points = step.points;
+          ctx.prevCursorPt = pt;
+          Object.assign(ctx.tetherState, { cuspIndices: step.cuspIndices, inSlackRedirect: step.inSlackRedirect, slackIncomingDir: step.slackIncomingDir });
+
+          const isLoopClosing = ctx.points.length > 8 && StudioGeometry.dist(step.curTip, ctx.startPt) < 24;
+          const ptsForPreview = isLoopClosing ? [...ctx.points, ctx.startPt] : (ctx.points.length === 1 ? [step.curTip, step.curTip] : ctx.points);
+
+          rend.renderTransient({
+            previewPathD: StudioGeometry.smoothPolylineToSvgD(ptsForPreview),
+            color: isLoopClosing ? '#00f2fe' : st.currentColor,
+            strokeWidth: st.strokeWidth, lineStyle: st.lineStyle, isLoopClosing,
+            tetherLine: { from: step.curTip, to: pt, isSlack: step.isSlack, didRewind: step.didRewind },
+            tipIndicator: { pt: step.curTip, didRewind: step.didRewind },
+            eraseCircle: { pt, r: eraseR, didRewind: step.didRewind },
+            cuspPoints: step.cuspIndices.map(idx => ctx.points[idx]).filter(Boolean),
+            pendingCuspPt: step.pendingCusp ? step.curTip : null,
+            previewArrow: (st.hasArrow && !isLoopClosing && ctx.points.length >= 2) ? {
+              p0: ptsForPreview[0],
+              exitVec: StudioGeometry.normalize([ptsForPreview[1][0] - ptsForPreview[0][0], ptsForPreview[1][1] - ptsForPreview[0][1]]),
+              color: st.currentColor, strokeWidth: st.strokeWidth
+            } : null
           });
         },
         onPointerUp: (pt, ev, ctx) => {
           this.renderer.clearTransient();
-          const rx = Math.round(Math.abs(pt[0] - ctx.startPt[0]) / 2);
-          const ry = Math.round(Math.abs(pt[1] - ctx.startPt[1]) / 2);
-          if (rx < 5 || ry < 5) return;
-          e.pushHistory('Add Ring');
-          const rec = {
-            id: 'circle_' + Date.now(), type: 'circle_callout',
-            cx: Math.round((ctx.startPt[0] + pt[0]) / 2), cy: Math.round((ctx.startPt[1] + pt[1]) / 2),
-            rx, ry, color: e.state.currentColor, strokeWidth: e.state.strokeWidth, lineStyle: e.state.lineStyle
-          };
-          e.state.annotations.push(rec);
-          e.selectItem(rec);
-        }
-      });
+          if (!ctx.hasExceededDeadzone || ctx.points.length < 2) return;
+          const pts = [...ctx.points];
+          const isLoopClosing = pts.length > 8 && StudioGeometry.dist(pts[pts.length - 1], ctx.startPt) < 24;
+          if (isLoopClosing) pts[pts.length - 1] = [ctx.startPt[0], ctx.startPt[1]];
 
-      e.registerTool({
-        id: 'rect', label: 'Box', icon: '◻', shortcut: 'R', order: 50, cursor: 'crosshair',
-        onPointerDown: (pt, ev, ctx) => { ctx.startPt = pt; },
-        onPointerMove: (pt, ev, ctx) => {
-          if (!ctx.startPt) return;
-          this.renderer.renderTransient({
-            shapeRect: {
-              x: Math.min(ctx.startPt[0], pt[0]), y: Math.min(ctx.startPt[1], pt[1]),
-              w: Math.abs(pt[0] - ctx.startPt[0]), h: Math.abs(pt[1] - ctx.startPt[1]),
-              stroke: e.state.currentColor
-            }
-          });
-        },
-        onPointerUp: (pt, ev, ctx) => {
-          this.renderer.clearTransient();
-          const w = Math.round(Math.abs(pt[0] - ctx.startPt[0]));
-          const h = Math.round(Math.abs(pt[1] - ctx.startPt[1]));
-          if (w < 6 || h < 6) return;
-          e.pushHistory('Add Box');
-          const rec = {
-            id: 'box_' + Date.now(), type: 'box_callout',
-            x: Math.round(Math.min(ctx.startPt[0], pt[0])), y: Math.round(Math.min(ctx.startPt[1], pt[1])),
-            w, h, color: e.state.currentColor, strokeWidth: e.state.strokeWidth, lineStyle: e.state.lineStyle
-          };
-          e.state.annotations.push(rec);
-          e.selectItem(rec);
-        }
-      });
-
-      e.registerTool({
-        id: 'text', label: 'Text', icon: '💬', shortcut: 'T', order: 60, cursor: 'text',
-        onPointerDown: (pt) => this._openInlineText(null, pt, 'left')
-      });
-
-      e.registerTool({
-        id: 'paint', label: 'Mask', icon: '🖌️', shortcut: 'B', order: 70, cursor: 'crosshair',
-        onPointerDown: (pt, ev, ctx) => {
-          ctx.startPt = pt; ctx.points = [pt]; ctx.mode = e.state.brushMode;
-          if (ctx.mode === 'erase') {
-            const plate = StudioGeometry.hitTestImagePlate(e.state.placedImages, pt) || e.getSelectedImage() || e.state.placedImages[0];
-            ctx.plate = plate; ctx.prevErasePt = pt;
-            if (plate) {
-              e.pushHistory('Erase Image Alpha');
-              this._eraseImagePixels(plate, pt[0], pt[1], e.state.brushSize / 2);
-            } else {
-              e.emit('toast', 'Add an image first to erase alpha');
-            }
-          }
-        },
-        onPointerMove: (pt, ev, ctx) => {
-          if (!ctx.startPt) return;
-          if (ctx.mode === 'erase' && ctx.plate) {
-            this._eraseImagePixels(ctx.plate, pt[0], pt[1], e.state.brushSize / 2, ctx.prevErasePt[0], ctx.prevErasePt[1]);
-            ctx.prevErasePt = pt;
-            this.renderer.renderTransient({ paintRing: { pt, r: e.state.brushSize / 2, isErase: true } });
-          } else if (ctx.mode === 'rect') {
-            this.renderer.renderTransient({
-              shapeRect: {
-                x: Math.min(ctx.startPt[0], pt[0]), y: Math.min(ctx.startPt[1], pt[1]),
-                w: Math.abs(pt[0] - ctx.startPt[0]), h: Math.abs(pt[1] - ctx.startPt[1]),
-                fill: e.state.brushColor, stroke: '#f59e0b'
-              }
+          const fitted = StudioGeometry.fitPolylineWithCusps(pts, ctx.tetherState?.cuspIndices || []);
+          if (fitted.beziers?.length) {
+            eng.addCurveFromBeziers(fitted.beziers, {
+              isClosed: isLoopClosing, arrowEnd: isLoopClosing ? 'none' : st.arrowMode, cuspVertexIndices: fitted.vertexCuspIndices
             });
-          } else if (ctx.mode === 'oval') {
-            this.renderer.renderTransient({
-              shapeEllipse: {
-                cx: (ctx.startPt[0] + pt[0]) / 2, cy: (ctx.startPt[1] + pt[1]) / 2,
-                rx: Math.abs(pt[0] - ctx.startPt[0]) / 2, ry: Math.abs(pt[1] - ctx.startPt[1]) / 2,
-                fill: e.state.brushColor, stroke: '#f59e0b'
-              }
-            });
-          } else {
-            ctx.points.push(pt);
-            this.renderer.renderTransient({
-              previewPathD: StudioGeometry.smoothPolylineToSvgD(ctx.points),
-              color: e.state.brushColor, strokeWidth: e.state.brushSize, lineStyle: 'classic'
-            });
-          }
-        },
-        onPointerUp: (pt, ev, ctx) => {
-          this.renderer.clearTransient();
-          if (!ctx.startPt || ctx.mode === 'erase') return;
-          e.pushHistory('Paint Mask');
-          if (ctx.mode === 'rect') {
-            const w = Math.abs(pt[0] - ctx.startPt[0]), h = Math.abs(pt[1] - ctx.startPt[1]);
-            if (w > 4 && h > 4) {
-              e.state.annotations.push({
-                id: 'paint_' + Date.now(), type: 'paint', shape: 'rect',
-                color: e.state.brushColor, softness: e.state.brushSoftness,
-                bounds: { x: Math.min(ctx.startPt[0], pt[0]), y: Math.min(ctx.startPt[1], pt[1]), w, h }
-              });
-            }
-          } else if (ctx.mode === 'oval') {
-            const rx = Math.abs(pt[0] - ctx.startPt[0]) / 2, ry = Math.abs(pt[1] - ctx.startPt[1]) / 2;
-            if (rx > 4 && ry > 4) {
-              e.state.annotations.push({
-                id: 'paint_' + Date.now(), type: 'paint', shape: 'oval',
-                color: e.state.brushColor, softness: e.state.brushSoftness,
-                bounds: { cx: (ctx.startPt[0] + pt[0]) / 2, cy: (ctx.startPt[1] + pt[1]) / 2, rx, ry }
-              });
-            }
-          } else if (ctx.points.length >= 2) {
-            e.state.annotations.push({
-              id: 'paint_' + Date.now(), type: 'paint', shape: 'freehand',
-              points: ctx.points, color: e.state.brushColor, width: e.state.brushSize, softness: e.state.brushSoftness
-            });
-          }
-          e.emit('state:change');
-        }
-      });
-
-      e.registerTool({
-        id: 'exportArea', label: 'Crop', icon: '📐', shortcut: 'E', order: 80, cursor: 'crosshair',
-        onPointerDown: (pt, ev, ctx) => { ctx.startPt = pt; },
-        onPointerMove: (pt, ev, ctx) => {
-          if (!ctx.startPt) return;
-          this.renderer.renderTransient({
-            shapeRect: {
-              x: Math.min(ctx.startPt[0], pt[0]), y: Math.min(ctx.startPt[1], pt[1]),
-              w: Math.abs(pt[0] - ctx.startPt[0]), h: Math.abs(pt[1] - ctx.startPt[1]),
-              stroke: '#ffd700', fill: 'rgba(255,215,0,0.1)', dashed: true
-            }
-          });
-        },
-        onPointerUp: (pt, ev, ctx) => {
-          this.renderer.clearTransient();
-          const w = Math.round(Math.abs(pt[0] - ctx.startPt[0]));
-          const h = Math.round(Math.abs(pt[1] - ctx.startPt[1]));
-          if (w > 20 && h > 20) {
-            e.pushHistory('Set Export Area');
-            e.state.exportRect = {
-              x: Math.round(Math.min(ctx.startPt[0], pt[0])),
-              y: Math.round(Math.min(ctx.startPt[1], pt[1])),
-              width: w, height: h
-            };
-            e.runCommand('tool.set', 'select');
-            e.emit('toast', `📐 Export Area: ${w}×${h}px`);
+            if (fitted.vertexCuspIndices.length) eng.emit('toast', `◆ Locked ${fitted.vertexCuspIndices.length} cusp corner(s)`);
           }
         }
       });
-    }
+    };
+
+    registerSplineTool('curve', 'Curve', '🪢', 'D', 20, false);
+    registerSplineTool('arrow', 'Arrow', '➔', 'A', 30, true);
+
+    eng.registerTool({
+      id: 'circle', label: 'Ring', icon: '⭕', shortcut: 'O', order: 40, cursor: 'crosshair',
+      onPointerDown: (pt, ev, ctx) => { ctx.startPt = pt; },
+      onPointerMove: (pt, ev, ctx) => ctx.startPt && this.renderer.renderTransient({ shapeEllipse: { ...ellipseFromPts(ctx.startPt, pt), stroke: st.currentColor } }),
+      onPointerUp: (pt, ev, ctx) => {
+        this.renderer.clearTransient();
+        const b = ellipseFromPts(ctx.startPt, pt);
+        if (b.rx < 5 || b.ry < 5) return;
+        eng.pushHistory('Add Ring');
+        const rec = { id: 'circle_' + Date.now(), type: 'circle_callout', cx: Math.round(b.cx), cy: Math.round(b.cy), rx: Math.round(b.rx), ry: Math.round(b.ry), color: st.currentColor, strokeWidth: st.strokeWidth, lineStyle: st.lineStyle };
+        st.annotations.push(rec);
+        eng.selectItem(rec);
+      }
+    });
+
+    eng.registerTool({
+      id: 'rect', label: 'Box', icon: '◻', shortcut: 'R', order: 50, cursor: 'crosshair',
+      onPointerDown: (pt, ev, ctx) => { ctx.startPt = pt; },
+      onPointerMove: (pt, ev, ctx) => ctx.startPt && this.renderer.renderTransient({ shapeRect: { ...rectFromPts(ctx.startPt, pt), stroke: st.currentColor } }),
+      onPointerUp: (pt, ev, ctx) => {
+        this.renderer.clearTransient();
+        const b = rectFromPts(ctx.startPt, pt);
+        if (b.w < 6 || b.h < 6) return;
+        eng.pushHistory('Add Box');
+        const rec = { id: 'box_' + Date.now(), type: 'box_callout', x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.w), h: Math.round(b.h), color: st.currentColor, strokeWidth: st.strokeWidth, lineStyle: st.lineStyle };
+        st.annotations.push(rec);
+        eng.selectItem(rec);
+      }
+    });
+
+    eng.registerTool({
+      id: 'text', label: 'Text', icon: '💬', shortcut: 'T', order: 60, cursor: 'text',
+      onPointerDown: (pt) => this._openInlineText(null, pt, 'left')
+    });
+
+    eng.registerTool({
+      id: 'paint', label: 'Mask', icon: '🖌️', shortcut: 'B', order: 70, cursor: 'crosshair',
+      onPointerDown: (pt, ev, ctx) => {
+        Object.assign(ctx, { startPt: pt, points: [pt], mode: st.brushMode });
+        if (ctx.mode !== 'erase') return;
+        const plate = StudioGeometry.hitTestImagePlate(st.placedImages, pt) || eng.getSelectedImage() || st.placedImages[0];
+        ctx.plate = plate; ctx.prevErasePt = pt;
+        if (plate) { eng.pushHistory('Erase Image Alpha'); this._eraseImagePixels(plate, pt[0], pt[1], st.brushSize / 2); }
+        else eng.emit('toast', 'Add an image first to erase alpha');
+      },
+      onPointerMove: (pt, ev, ctx) => {
+        if (!ctx.startPt) return;
+        const rend = this.renderer;
+        if (ctx.mode === 'erase' && ctx.plate) {
+          this._eraseImagePixels(ctx.plate, pt[0], pt[1], st.brushSize / 2, ctx.prevErasePt[0], ctx.prevErasePt[1]);
+          ctx.prevErasePt = pt;
+          return rend.renderTransient({ paintRing: { pt, r: st.brushSize / 2, isErase: true } });
+        }
+        if (ctx.mode === 'rect') return rend.renderTransient({ shapeRect: { ...rectFromPts(ctx.startPt, pt), fill: st.brushColor, stroke: '#f59e0b' } });
+        if (ctx.mode === 'oval') return rend.renderTransient({ shapeEllipse: { ...ellipseFromPts(ctx.startPt, pt), fill: st.brushColor, stroke: '#f59e0b' } });
+        ctx.points.push(pt);
+        rend.renderTransient({ previewPathD: StudioGeometry.smoothPolylineToSvgD(ctx.points), color: st.brushColor, strokeWidth: st.brushSize, lineStyle: 'classic' });
+      },
+      onPointerUp: (pt, ev, ctx) => {
+        this.renderer.clearTransient();
+        if (!ctx.startPt || ctx.mode === 'erase') return;
+        const id = 'paint_' + Date.now();
+        const base = { id, type: 'paint', color: st.brushColor, softness: st.brushSoftness };
+        if (ctx.mode === 'rect') {
+          const b = rectFromPts(ctx.startPt, pt);
+          if (b.w > 4 && b.h > 4) { eng.pushHistory('Paint Mask'); st.annotations.push({ ...base, shape: 'rect', bounds: b }); }
+        } else if (ctx.mode === 'oval') {
+          const b = ellipseFromPts(ctx.startPt, pt);
+          if (b.rx > 4 && b.ry > 4) { eng.pushHistory('Paint Mask'); st.annotations.push({ ...base, shape: 'oval', bounds: b }); }
+        } else if (ctx.points.length >= 2) {
+          eng.pushHistory('Paint Mask');
+          st.annotations.push({ ...base, shape: 'freehand', points: ctx.points, width: st.brushSize });
+        }
+        eng.emit('state:change');
+      }
+    });
+
+    eng.registerTool({
+      id: 'exportArea', label: 'Crop', icon: '📐', shortcut: 'E', order: 80, cursor: 'crosshair',
+      onPointerDown: (pt, ev, ctx) => { ctx.startPt = pt; },
+      onPointerMove: (pt, ev, ctx) => ctx.startPt && this.renderer.renderTransient({
+        shapeRect: { ...rectFromPts(ctx.startPt, pt), stroke: '#ffd700', fill: 'rgba(255,215,0,0.1)', dashed: true }
+      }),
+      onPointerUp: (pt, ev, ctx) => {
+        this.renderer.clearTransient();
+        const b = rectFromPts(ctx.startPt, pt);
+        if (b.w <= 20 || b.h <= 20) return;
+        eng.pushHistory('Set Export Area');
+        st.exportRect = { x: Math.round(b.x), y: Math.round(b.y), width: Math.round(b.w), height: Math.round(b.h) };
+        eng.runCommand('tool.set', 'select');
+        eng.emit('toast', `📐 Export Area: ${Math.round(b.w)}×${Math.round(b.h)}px`);
+      }
+    });
+  }
   _subscribeEngine() {
     this._unsubs = [
       this.engine.on('state:change', () => {
@@ -1077,37 +991,34 @@ class QuoraCleanStudioDialog {
     }
 
   _handleKnotDrag(curve, idx, e) {
-      this.engine.state.activeKnotIdx = idx;
-      this.engine.selectItem(curve);
-      const knot = curve.vertices[idx];
-      if (!knot) return;
-      const snap = this.engine._captureSnapshot('Move Knot');
-      const startClientX = e.clientX, startClientY = e.clientY;
-      const origX = knot.point[0], origY = knot.point[1];
-      let moved = false;
+    const eng = this.engine, rend = this.renderer;
+    eng.state.activeKnotIdx = idx;
+    eng.selectItem(curve);
+    const knot = curve.vertices[idx];
+    if (!knot) return;
 
-      const onMove = (ev) => {
-        const z = this.engine.state.zoom || 1.0;
-        const dx = (ev.clientX - startClientX) / z;
-        const dy = (ev.clientY - startClientY) / z;
+    const snap = eng._captureSnapshot('Move Knot');
+    const sx = e.clientX, sy = e.clientY, ox = knot.point[0], oy = knot.point[1];
+    let moved = false;
+
+    this._trackDrag(
+      (ev) => {
+        const z = eng.state.zoom || 1.0;
+        const dx = (ev.clientX - sx) / z, dy = (ev.clientY - sy) / z;
         if (Math.hypot(dx, dy) > 2) moved = true;
-        knot.point[0] = Math.round(origX + dx);
-        knot.point[1] = Math.round(origY + dy);
-        this.engine.recomputeCurve(curve);
-        this.renderer.render();
-      };
-      const onUp = () => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
-        if (moved) {
-          this.engine._undoStack.push(snap);
-          this.engine._redoStack = [];
-          this.engine.emit('history:change', { canUndo: this.engine.canUndo(), canRedo: this.engine.canRedo() });
-        }
-      };
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
-    }
+        knot.point[0] = Math.round(ox + dx);
+        knot.point[1] = Math.round(oy + dy);
+        eng.recomputeCurve(curve);
+        rend.render();
+      },
+      () => {
+        if (!moved) return;
+        eng._undoStack.push(snap);
+        eng._redoStack = [];
+        eng.emit('history:change', { canUndo: eng.canUndo(), canRedo: eng.canRedo() });
+      }
+    );
+  }
   _handleMidpointSplitDrag(curve, segIdx, e) {
     this.engine.runCommand('curve.splitAt', { curve, segIdx, t: 0.5 });
     this._handleKnotDrag(curve, segIdx + 1, e);
@@ -1143,143 +1054,128 @@ class QuoraCleanStudioDialog {
   }
 
   _handleTextBadgeDrag(ann, e) {
-    this.engine.selectItem(ann);
-    const snap = this.engine._captureSnapshot('Move Text');
+    const eng = this.engine, rend = this.renderer;
+    eng.selectItem(ann);
+    const snap = eng._captureSnapshot('Move Text');
     const sx = e.clientX, sy = e.clientY;
-    let moved = false;
     const isCurve = ann.type === 'curve';
     const isTail = isCurve && ann.textEnd !== 'tip';
     const knot = isCurve ? (isTail ? ann.vertices[ann.vertices.length - 1] : ann.vertices[0]) : null;
-    const origX = isCurve ? knot.point[0] : ann.x;
-    const origY = isCurve ? knot.point[1] : ann.y;
+    const ox = isCurve ? knot.point[0] : ann.x;
+    const oy = isCurve ? knot.point[1] : ann.y;
+    let moved = false;
 
-    const onMove = (ev) => {
-      const z = this.engine.state.zoom || 1.0;
-      const dx = (ev.clientX - sx) / z, dy = (ev.clientY - sy) / z;
-      if (Math.hypot(dx, dy) > 4) moved = true;
-      if (moved) {
+    this._trackDrag(
+      (ev) => {
+        const z = eng.state.zoom || 1.0;
+        const dx = (ev.clientX - sx) / z, dy = (ev.clientY - sy) / z;
+        if (Math.hypot(dx, dy) <= 4 && !moved) return;
+        moved = true;
         if (isCurve) {
-          knot.point[0] = Math.round(origX + dx); knot.point[1] = Math.round(origY + dy);
-          this.engine.recomputeCurve(ann);
+          knot.point[0] = Math.round(ox + dx); knot.point[1] = Math.round(oy + dy);
+          eng.recomputeCurve(ann);
         } else {
-          ann.x = Math.round(origX + dx); ann.y = Math.round(origY + dy);
+          ann.x = Math.round(ox + dx); ann.y = Math.round(oy + dy);
         }
-        this.renderer.render();
+        rend.render();
+      },
+      () => {
+        if (moved) {
+          eng._undoStack.push(snap);
+          eng._redoStack = [];
+          eng.emit('history:change', { canUndo: eng.canUndo(), canRedo: eng.canRedo() });
+        } else {
+          const anchor = isCurve ? (isTail ? ann.beziers[ann.beziers.length - 1][3] : ann.beziers[0][0]) : [ann.x, ann.y];
+          this._openInlineText(ann, anchor, null);
+        }
       }
-    };
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      if (moved) {
-        this.engine._undoStack.push(snap);
-        this.engine._redoStack = [];
-        this.engine.emit('history:change', { canUndo: this.engine.canUndo(), canRedo: this.engine.canRedo() });
-      } else {
-        const anchor = isCurve ? (isTail ? ann.beziers[ann.beziers.length - 1][3] : ann.beziers[0][0]) : [ann.x, ann.y];
-        this._openInlineText(ann, anchor, null);
-      }
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    );
   }
 
   _handleImageDrag(plate, e) {
-    this.engine.selectImage(plate);
-    const snap = this.engine._captureSnapshot('Move Image');
+    const eng = this.engine, rend = this.renderer;
+    eng.selectImage(plate);
+    const snap = eng._captureSnapshot('Move Image');
     const sx = e.clientX, sy = e.clientY, ox = plate.x, oy = plate.y;
     let moved = false;
-    const onMove = (ev) => {
-      const z = this.engine.state.zoom || 1.0;
-      const dx = (ev.clientX - sx) / z, dy = (ev.clientY - sy) / z;
-      if (Math.hypot(dx, dy) > 2) moved = true;
-      plate.x = Math.round(ox + dx); plate.y = Math.round(oy + dy);
-      this.renderer.render();
-    };
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      if (moved) {
-        this.engine._undoStack.push(snap);
-        this.engine._redoStack = [];
-        this.engine.emit('history:change', { canUndo: this.engine.canUndo(), canRedo: this.engine.canRedo() });
+
+    this._trackDrag(
+      (ev) => {
+        const z = eng.state.zoom || 1.0;
+        const dx = (ev.clientX - sx) / z, dy = (ev.clientY - sy) / z;
+        if (Math.hypot(dx, dy) > 2) moved = true;
+        plate.x = Math.round(ox + dx);
+        plate.y = Math.round(oy + dy);
+        rend.render();
+      },
+      () => {
+        if (!moved) return;
+        eng._undoStack.push(snap);
+        eng._redoStack = [];
+        eng.emit('history:change', { canUndo: eng.canUndo(), canRedo: eng.canRedo() });
       }
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    );
   }
 
   _handleImageResize(plate, cornerId, e) {
-    const snap = this.engine._captureSnapshot('Resize Image');
-    const startX = e.clientX, startW = plate.width, startH = plate.height, px = plate.x, py = plate.y;
-    const onMove = (ev) => {
-      const z = this.engine.state.zoom || 1.0;
-      const dx = (ev.clientX - startX) / z;
-      if (cornerId === 'se') {
-        plate.width = Math.max(40, Math.round(startW + dx));
-        plate.height = Math.round(plate.width / plate.aspect);
-      } else if (cornerId === 'nw') {
-        const nw = Math.max(40, Math.round(startW - dx));
+    const eng = this.engine, rend = this.renderer;
+    const snap = eng._captureSnapshot('Resize Image');
+    const startX = e.clientX, sw = plate.width, sh = plate.height, px = plate.x, py = plate.y;
+
+    this._trackDrag(
+      (ev) => {
+        const dx = (ev.clientX - startX) / (eng.state.zoom || 1.0);
+        const nw = Math.max(40, Math.round(cornerId.includes('e') ? sw + dx : sw - dx));
         const nh = Math.round(nw / plate.aspect);
-        plate.x = px + startW - nw; plate.y = py + startH - nh;
-        plate.width = nw; plate.height = nh;
-      } else if (cornerId === 'ne') {
-        const nw = Math.max(40, Math.round(startW + dx));
-        const nh = Math.round(nw / plate.aspect);
-        plate.y = py + startH - nh; plate.width = nw; plate.height = nh;
-      } else if (cornerId === 'sw') {
-        const nw = Math.max(40, Math.round(startW - dx));
-        const nh = Math.round(nw / plate.aspect);
-        plate.x = px + startW - nw; plate.width = nw; plate.height = nh;
+        plate.x = cornerId.includes('w') ? px + sw - nw : px;
+        plate.y = cornerId.includes('n') ? py + sh - nh : py;
+        plate.width = nw;
+        plate.height = nh;
+        rend.render();
+      },
+      () => {
+        eng._undoStack.push(snap);
+        eng._redoStack = [];
+        eng.emit('history:change', { canUndo: eng.canUndo(), canRedo: eng.canRedo() });
       }
-      this.renderer.render();
-    };
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      this.engine._undoStack.push(snap);
-      this.engine._redoStack = [];
-      this.engine.emit('history:change', { canUndo: this.engine.canUndo(), canRedo: this.engine.canRedo() });
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    );
   }
 
   _handleCalloutResize(ann, cornerId, e) {
-    const snap = this.engine._captureSnapshot('Resize Callout');
+    const eng = this.engine, rend = this.renderer;
+    const snap = eng._captureSnapshot('Resize Callout');
     const sx = e.clientX, sy = e.clientY;
-    const bx = ann.type === 'circle_callout' ? ann.cx - ann.rx : ann.x;
-    const by = ann.type === 'circle_callout' ? ann.cy - ann.ry : ann.y;
-    const bw = ann.type === 'circle_callout' ? ann.rx * 2 : ann.w;
-    const bh = ann.type === 'circle_callout' ? ann.ry * 2 : ann.h;
+    const isCircle = ann.type === 'circle_callout';
+    const bx = isCircle ? ann.cx - ann.rx : ann.x;
+    const by = isCircle ? ann.cy - ann.ry : ann.y;
+    const bw = isCircle ? ann.rx * 2 : ann.w;
+    const bh = isCircle ? ann.ry * 2 : ann.h;
 
-    const onMove = (ev) => {
-      const z = this.engine.state.zoom || 1.0;
-      const dx = (ev.clientX - sx) / z, dy = (ev.clientY - sy) / z;
-      let nx = bx, ny = by, nw = bw, nh = bh;
-      if (cornerId.includes('e')) nw = Math.max(16, Math.round(bw + dx));
-      if (cornerId.includes('s')) nh = Math.max(16, Math.round(bh + dy));
-      if (cornerId.includes('w')) { nw = Math.max(16, Math.round(bw - dx)); nx = bx + (bw - nw); }
-      if (cornerId.includes('n')) { nh = Math.max(16, Math.round(bh - dy)); ny = by + (bh - nh); }
+    this._trackDrag(
+      (ev) => {
+        const z = eng.state.zoom || 1.0;
+        const dx = (ev.clientX - sx) / z, dy = (ev.clientY - sy) / z;
+        let nx = bx, ny = by, nw = bw, nh = bh;
+        if (cornerId.includes('e')) nw = Math.max(16, Math.round(bw + dx));
+        if (cornerId.includes('s')) nh = Math.max(16, Math.round(bh + dy));
+        if (cornerId.includes('w')) { nw = Math.max(16, Math.round(bw - dx)); nx = bx + (bw - nw); }
+        if (cornerId.includes('n')) { nh = Math.max(16, Math.round(bh - dy)); ny = by + (bh - nh); }
 
-      if (ann.type === 'circle_callout') {
-        ann.cx = Math.round(nx + nw / 2); ann.cy = Math.round(ny + nh / 2);
-        ann.rx = Math.round(nw / 2); ann.ry = Math.round(nh / 2);
-      } else {
-        ann.x = Math.round(nx); ann.y = Math.round(ny); ann.w = nw; ann.h = nh;
+        if (isCircle) {
+          ann.cx = Math.round(nx + nw / 2); ann.cy = Math.round(ny + nh / 2);
+          ann.rx = Math.round(nw / 2); ann.ry = Math.round(nh / 2);
+        } else {
+          ann.x = Math.round(nx); ann.y = Math.round(ny); ann.w = nw; ann.h = nh;
+        }
+        rend.render();
+      },
+      () => {
+        eng._undoStack.push(snap);
+        eng._redoStack = [];
+        eng.emit('history:change', { canUndo: eng.canUndo(), canRedo: eng.canRedo() });
       }
-      this.renderer.render();
-    };
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      this.engine._undoStack.push(snap);
-      this.engine._redoStack = [];
-      this.engine.emit('history:change', { canUndo: this.engine.canUndo(), canRedo: this.engine.canRedo() });
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    );
   }
-
   _openInlineText(item, anchorPt, forcedEdge = null) {
     if (this._activeEditorCommit) this._activeEditorCommit();
     const state = this.engine.state;
@@ -1473,30 +1369,33 @@ class QuoraCleanStudioDialog {
     }
 
   _handleTangentDrag(curve, knotIdx, side, e) {
-      const vertices = curve.vertices;
-      const v = vertices[knotIdx];
-      if (!v) return;
-      const snap = this.engine._captureSnapshot('Adjust Tangency');
-      const isStart = knotIdx === 0;
-      const isTail = knotIdx === vertices.length - 1;
-      const isInterior = !isStart && !isTail;
-      const pt = v.point;
+    const eng = this.engine, rend = this.renderer;
+    const vertices = curve.vertices;
+    const v = vertices[knotIdx];
+    if (!v) return;
 
-      if (isInterior && !v.isCusp && e.altKey) {
-        StudioGeometry.setVertexCuspState(vertices, knotIdx, true);
-        this.engine.recomputeCurve(curve);
-        this.renderer.render();
-        this._showToast('◆ Broke smooth knot into cusp');
-      }
+    const snap = eng._captureSnapshot('Adjust Tangency');
+    const isStart = knotIdx === 0;
+    const isInterior = !isStart && knotIdx !== vertices.length - 1;
+    const pt = v.point;
 
-      let snappedToSmooth = false;
-      let collinearSmoothDir = null;
-      let moved = false;
+    if (isInterior && !v.isCusp && e.altKey) {
+      StudioGeometry.setVertexCuspState(vertices, knotIdx, true);
+      eng.recomputeCurve(curve);
+      rend.render();
+      this._showToast('◆ Broke smooth knot into cusp');
+    }
 
-      const onMove = (ev) => {
+    let snappedToSmooth = false;
+    let collinearSmoothDir = null;
+    let moved = false;
+
+    this._trackDrag(
+      (ev) => {
         moved = true;
         const mPt = this._getStagePt(ev);
         const cursorAngle = Math.atan2(mPt[1] - pt[1], mPt[0] - pt[0]);
+        const r = 64 / (eng.state.zoom || 1);
 
         if (isInterior && v.isCusp) {
           const otherCp = side === 'in' ? v.controlPoints[1] : v.controlPoints[0];
@@ -1514,12 +1413,10 @@ class QuoraCleanStudioDialog {
             const natOut = v._naturalOutTangent || [1, 0];
             v.cuspOutAngleOffset = StudioGeometry.normalizeAngle(finalAngle - Math.atan2(natOut[1], natOut[0]));
           }
-          this.engine.recomputeCurve(curve);
-          this.renderer.render();
-
+          eng.recomputeCurve(curve);
+          rend.render();
           if (snappedToSmooth) {
-            const r = 64 / (this.engine.state.zoom || 1);
-            this.renderer.renderTransient({
+            rend.renderTransient({
               collinearGuide: {
                 p1: [pt[0] - collinearSmoothDir[0] * r, pt[1] - collinearSmoothDir[1] * r],
                 p2: [pt[0] + collinearSmoothDir[0] * r, pt[1] + collinearSmoothDir[1] * r],
@@ -1527,7 +1424,7 @@ class QuoraCleanStudioDialog {
               }
             });
           } else {
-            this.renderer.clearTransient();
+            rend.clearTransient();
           }
           return;
         }
@@ -1536,53 +1433,43 @@ class QuoraCleanStudioDialog {
           ? UpdateControlPoints.computeCounterfactualTangent(vertices, knotIdx)
           : [1, 0];
         const natRay = isStart ? [-natBase[0], -natBase[1]] : natBase;
-        const natAngle = Math.atan2(natRay[1], natRay[0]);
-        let delta = StudioGeometry.normalizeAngle(cursorAngle - natAngle);
+        let delta = StudioGeometry.normalizeAngle(cursorAngle - Math.atan2(natRay[1], natRay[0]));
         const isNaturalSnap = Math.abs(delta) < 0.087;
-        if (isNaturalSnap) {
-          delta = 0;
-          v.isExplicitTangent = false;
-        } else {
-          v.isExplicitTangent = true;
-        }
-        v.tangentAngleOffset = delta;
-        this.engine.recomputeCurve(curve);
-        this.renderer.render();
+        v.isExplicitTangent = !isNaturalSnap;
+        v.tangentAngleOffset = isNaturalSnap ? 0 : delta;
+        eng.recomputeCurve(curve);
+        rend.render();
 
         if (isNaturalSnap) {
-          const r = 60 / (this.engine.state.zoom || 1);
-          this.renderer.renderTransient({
-            collinearGuide: {
-              p1: [pt[0], pt[1]],
-              p2: [pt[0] + natRay[0] * r, pt[1] + natRay[1] * r],
-              label: '⚡ 0° NATURAL', pt
-            }
+          rend.renderTransient({
+            collinearGuide: { p1: [pt[0], pt[1]], p2: [pt[0] + natRay[0] * r, pt[1] + natRay[1] * r], label: '⚡ 0° NATURAL', pt }
           });
         } else {
-          this.renderer.clearTransient();
+          rend.clearTransient();
         }
-      };
-
-      const onUp = () => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
-        this.renderer.clearTransient();
+      },
+      () => {
+        rend.clearTransient();
         if (isInterior && v.isCusp && snappedToSmooth && collinearSmoothDir) {
           StudioGeometry.setVertexCuspState(vertices, knotIdx, false, collinearSmoothDir);
-          this.engine.recomputeCurve(curve);
+          eng.recomputeCurve(curve);
           this._showToast('● Snapped 0° Smooth Point');
         }
-        if (moved) {
-          this.engine._undoStack.push(snap);
-          this.engine._redoStack = [];
-          this.engine.emit('history:change', { canUndo: this.engine.canUndo(), canRedo: this.engine.canRedo() });
-        }
-        this.engine.emit('state:change');
-      };
-
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
-    }
+        if (moved) eng.commitSnapshot(snap);
+        eng.emit('state:change');
+      }
+    );
+  }
+  _trackDrag(onMove, onUp) {
+    const handleMove = (ev) => onMove(ev);
+    const handleUp = (ev) => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+      if (onUp) onUp(ev);
+    };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+  }
 }
 
 globalThis.QuoraCleanStudioDialog = QuoraCleanStudioDialog;

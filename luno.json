@@ -1,6 +1,6 @@
 {
   "name": "QuoraToys",
-  "version": "2.9.5",
+  "version": "2.9.8",
   "description": "QuoraToys: Interactive visual solvers, kinetic vector annotations, living documentation, and in-situ browser tools",
   "type": "luno-web-app",
   "mainClass": "QuoraToysApp",
@@ -31,6 +31,7 @@
     "js/QuoraTextManager.js",
     "js/QuoraKnotManager.js",
     "js/QuoraInSituHUD.js",
+    "js/QuoraControlPanel.js",
     "js/QuoraToys.js",
     "js/QuoraToysContent.js",
     "js/QuoraAnnotationComponent.js",
@@ -45,7 +46,13 @@
     "UITools.js",
     "DocumentReader.js",
     "SidePanel.js",
-    "ColorPicker.js"
+    "ColorPicker.js",
+    "DictationWidget.js",
+    "SupabaseCommentsAdapter.js",
+    "CadPlanDataRegistry.js",
+    "CadPlanItemNotes.js",
+    "CadPlanDocumentEditor.js",
+    "CadPlanAardvark.js"
   ],
   "styles": [
     "css/basicsWithDialogBox.css"

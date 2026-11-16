@@ -4,99 +4,101 @@
  * Tool / Command / Inspector registries. Zero DOM dependencies.
  */
 class StudioEngine {
+
   constructor(initialPrefs = null) {
-    this._listeners = new Map();
-    this._tools = new Map();
-    this._commands = new Map();
-    this._inspectorSections = new Map();
-    this._undoStack = [];
-    this._redoStack = [];
-    this._maxHistory = 60;
+      this._listeners = new Map();
+      this._tools = new Map();
+      this._commands = new Map();
+      this._inspectorSections = new Map();
+      this._undoStack = [];
+      this._redoStack = [];
+      this._maxHistory = 60;
 
-    const prefs = this._loadPrefs(initialPrefs);
+      const prefs = this._loadPrefs(initialPrefs);
 
-    this.state = {
-      activeTool: 'curve',
-      lineStyle: prefs.lineStyle,
-      arrowMode: prefs.arrowMode,
-      hasArrow: prefs.arrowMode !== 'none',
-      currentColor: prefs.currentColor,
-      strokeWidth: prefs.curveStrokeWidth,
-      fontFamily: prefs.fontFamily,
-      fontSize: prefs.fontSize,
-      boxStyle: prefs.boxStyle,
-      tetherLength: prefs.tetherLength,
-      eraseRadius: prefs.eraseRadius,
-      brushMode: 'freehand',
-      brushColor: '#000000',
-      brushSize: 32,
-      brushSoftness: 0,
-      paintTetherLength: prefs.paintTetherLength,
-      canvasBgMode: 'matte',
-      canvasBgColor: prefs.canvasBgColor,
-      cadStrokeMode: prefs.cadStrokeMode,
-      zoom: 1.0,
-      panX: 0,
-      panY: 0,
-      minZoom: 0.15,
-      maxZoom: 6.0,
-      padding: 45,
-      prefs,
-      placedImages: [],
-      annotations: [],
-      diffCallouts: [],
-      exportRect: null,
-      selectedItemId: null,
-      selectedImageId: null,
-      activeKnotIdx: 0,
-      selectedKnotIndices: []
-    };
+      this.state = {
+        activeTool: 'curve',
+        lineStyle: prefs.lineStyle,
+        arrowMode: prefs.arrowMode,
+        arrowStyle: prefs.arrowStyle || 'concave',
+        hasArrow: prefs.arrowMode !== 'none',
+        currentColor: prefs.currentColor,
+        strokeWidth: prefs.curveStrokeWidth,
+        fontFamily: prefs.fontFamily,
+        fontSize: prefs.fontSize,
+        boxStyle: prefs.boxStyle,
+        tetherLength: prefs.tetherLength,
+        eraseRadius: prefs.eraseRadius,
+        brushMode: 'freehand',
+        brushColor: '#000000',
+        brushSize: 32,
+        brushSoftness: 0,
+        paintTetherLength: prefs.paintTetherLength,
+        canvasBgMode: 'matte',
+        canvasBgColor: prefs.canvasBgColor,
+        cadStrokeMode: prefs.cadStrokeMode,
+        zoom: 1.0,
+        panX: 0,
+        panY: 0,
+        minZoom: 0.15,
+        maxZoom: 6.0,
+        padding: 45,
+        prefs,
+        placedImages: [],
+        annotations: [],
+        diffCallouts: [],
+        exportRect: null,
+        selectedItemId: null,
+        selectedImageId: null,
+        activeKnotIdx: 0,
+        selectedKnotIndices: []
+      };
 
-    this._registerCoreCommands();
-  }
+      this._registerCoreCommands();
+    }
 
   _loadPrefs(override = null) {
-    const defaults = {
-      prefsVersion: 2,
-      fontSize: 20,
-      fontFamily: "'Architects Daughter', cursive, sans-serif",
-      boxStyle: 'bracket',
-      textGlowMode: 'match',
-      textGlowBlur: 5.5,
-      textGlowSpread: 3.5,
-      textGlowIntensity: 1.8,
-      textGlowOpacity: 0.92,
-      textReadabilityHalo: false,
-      textCoreSaturation: 0.30,
-      textBoxBgEnabled: false,
-      textBoxBgColor: '#090d16',
-      textBoxBgOpacity: 0.55,
-      textBoxBgBlur: 4.0,
-      lineStyle: 'classic',
-      curveStrokeWidth: 3.2,
-      arrowMode: 'tip',
-      currentColor: '#00e676',
-      curveGlowBlur: 6.0,
-      curveGlowWidth: 10.0,
-      curveGlowOpacity: 0.90,
-      borderStrokeWidth: 2.4,
-      axisThreshold: 15,
-      cadStrokeMode: true,
-      tetherLength: 32,
-      eraseRadius: 20,
-      paintTetherLength: 12,
-      exportMultiplier: 2,
-      exportBgMode: 'matte',
-      canvasBgColor: '#090d16'
-    };
+      const defaults = {
+        prefsVersion: 2,
+        fontSize: 20,
+        fontFamily: "'Architects Daughter', cursive, sans-serif",
+        boxStyle: 'bracket',
+        textGlowMode: 'match',
+        textGlowBlur: 5.5,
+        textGlowSpread: 3.5,
+        textGlowIntensity: 1.8,
+        textGlowOpacity: 0.92,
+        textReadabilityHalo: false,
+        textCoreSaturation: 0.30,
+        textBoxBgEnabled: false,
+        textBoxBgColor: '#090d16',
+        textBoxBgOpacity: 0.55,
+        textBoxBgBlur: 4.0,
+        lineStyle: 'classic',
+        curveStrokeWidth: 3.2,
+        arrowMode: 'tip',
+        arrowStyle: 'concave',
+        currentColor: '#00e676',
+        curveGlowBlur: 6.0,
+        curveGlowWidth: 10.0,
+        curveGlowOpacity: 0.90,
+        borderStrokeWidth: 2.4,
+        axisThreshold: 15,
+        cadStrokeMode: true,
+        tetherLength: 32,
+        eraseRadius: 20,
+        paintTetherLength: 12,
+        exportMultiplier: 2,
+        exportBgMode: 'matte',
+        canvasBgColor: '#090d16'
+      };
 
-    let saved = {};
-    try {
-      saved = JSON.parse(localStorage.getItem('quoratoys_prefs_v1') || '{}');
-    } catch (e) {}
-    return { ...defaults, ...saved, ...(override || {}) };
-  }
-
+      let saved = {};
+      try {
+        saved = JSON.parse(localStorage.getItem('quoratoys_prefs_v1') || '{}');
+      } catch (e) {}
+      return { ...defaults, ...saved, ...(override || {}) };
+    }
   savePrefs() {
     try {
       localStorage.setItem('quoratoys_prefs_v1', JSON.stringify(this.state.prefs));
@@ -173,29 +175,29 @@ class StudioEngine {
   }
 
   selectItem(item) {
-    this.state.selectedItemId = item ? item.id : null;
-    if (item) {
-      this.state.selectedImageId = null;
-      if (item.type === 'curve') {
-        if (item.color) this.state.currentColor = item.color;
-        if (item.strokeWidth) this.state.strokeWidth = item.strokeWidth;
-        if (item.lineStyle) this.state.lineStyle = item.lineStyle;
-        if (item.arrowEnd) {
-          this.state.arrowMode = item.arrowEnd;
-          this.state.hasArrow = item.arrowEnd !== 'none';
+      this.state.selectedItemId = item ? item.id : null;
+      if (item) {
+        this.state.selectedImageId = null;
+        if (item.type === 'curve') {
+          if (item.color) this.state.currentColor = item.color;
+          if (item.strokeWidth) this.state.strokeWidth = item.strokeWidth;
+          if (item.lineStyle) this.state.lineStyle = item.lineStyle;
+          if (item.arrowEnd) {
+            this.state.arrowMode = item.arrowEnd;
+            this.state.hasArrow = item.arrowEnd !== 'none';
+          }
+          if (item.arrowStyle) this.state.arrowStyle = item.arrowStyle;
+          if (item.fontSize) this.state.fontSize = item.fontSize;
+          if (item.boxStyle) this.state.boxStyle = item.boxStyle;
+          const maxIdx = Math.max(0, (item.vertices?.length || 1) - 1);
+          this.state.activeKnotIdx = Math.min(this.state.activeKnotIdx || 0, maxIdx);
+        } else if (item.fontSize) {
+          this.state.fontSize = item.fontSize;
         }
-        if (item.fontSize) this.state.fontSize = item.fontSize;
-        if (item.boxStyle) this.state.boxStyle = item.boxStyle;
-        const maxIdx = Math.max(0, (item.vertices?.length || 1) - 1);
-        this.state.activeKnotIdx = Math.min(this.state.activeKnotIdx || 0, maxIdx);
-      } else if (item.fontSize) {
-        this.state.fontSize = item.fontSize;
       }
+      this.emit('selection:change', item);
+      this.emit('state:change');
     }
-    this.emit('selection:change', item);
-    this.emit('state:change');
-  }
-
   selectImage(plate) {
     this.state.selectedImageId = plate ? plate.id : null;
     if (plate) this.state.selectedItemId = null;
@@ -262,12 +264,8 @@ class StudioEngine {
   }
 
   pushHistory(label = 'Edit') {
-    this._undoStack.push(this._captureSnapshot(label));
-    if (this._undoStack.length > this._maxHistory) this._undoStack.shift();
-    this._redoStack = [];
-    this.emit('history:change', { canUndo: this.canUndo(), canRedo: this.canRedo() });
+    this.commitSnapshot(this._captureSnapshot(label));
   }
-
   canUndo() { return this._undoStack.length > 0; }
   canRedo() { return this._redoStack.length > 0; }
 
@@ -316,6 +314,7 @@ class StudioEngine {
       this.pushHistory('Draw Curve');
       const vertices = StudioGeometry.beziersToVertices(beziers, overrides.cuspVertexIndices || []);
       const arrowMode = overrides.arrowEnd !== undefined ? overrides.arrowEnd : this.state.arrowMode;
+      const arrowStyle = overrides.arrowStyle || this.state.arrowStyle || 'concave';
       const record = {
         id: 'curve_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5),
         type: 'curve',
@@ -325,6 +324,7 @@ class StudioEngine {
         strokeWidth: overrides.strokeWidth || this.state.strokeWidth,
         lineStyle: overrides.lineStyle || this.state.lineStyle,
         arrowEnd: arrowMode,
+        arrowStyle,
         textEnd: arrowMode === 'tail' ? 'tip' : 'tail',
         isClosed: !!overrides.isClosed,
         text: overrides.text || '',
@@ -411,6 +411,24 @@ class StudioEngine {
             else if (mode === 'tail') sel.textEnd = 'tip';
           }
           eng.emit('state:change');
+          return true;
+        }
+      });
+
+      this.registerCommand('style.setArrowStyle', {
+        label: 'Set Arrowhead Tip Style', category: 'style',
+        execute: (eng, style) => {
+          const valid = ['concave', 'architectural', 'dot'].includes(style) ? style : 'concave';
+          eng.state.arrowStyle = valid;
+          eng.state.prefs.arrowStyle = valid;
+          eng.savePrefs();
+          const sel = eng.getSelectedItem();
+          if (sel && sel.type === 'curve') {
+            eng.pushHistory('Change Tip Style');
+            sel.arrowStyle = valid;
+          }
+          eng.emit('state:change');
+          eng.emit('toast', valid === 'dot' ? '● Leader Dot' : (valid === 'architectural' ? 'Architectural Dart' : 'Swept Arrow'));
           return true;
         }
       });
@@ -716,6 +734,14 @@ class StudioEngine {
       this.emit('toast', '↺ Knot reset to smooth baseline');
       return true;
     }
+
+  commitSnapshot(snap) {
+    if (!snap) return;
+    this._undoStack.push(snap);
+    if (this._undoStack.length > this._maxHistory) this._undoStack.shift();
+    this._redoStack = [];
+    this.emit('history:change', { canUndo: this.canUndo(), canRedo: this.canRedo() });
+  }
 }
 
 globalThis.StudioEngine = StudioEngine;

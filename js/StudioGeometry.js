@@ -327,35 +327,9 @@ class StudioGeometry {
     ]);
   }
 
-  static computeConcaveArrowPath(p0, exitTangent, strokeWidth = 3.2, zoomScale = 1.0) {
-    const z = Math.max(0.1, zoomScale || 1.0);
-    const ux = exitTangent[0];
-    const uy = exitTangent[1];
-    const nx = -uy;
-    const ny = ux;
-
-    const sw = Math.max(1.5, Math.min(12, strokeWidth || 3.2));
-    const barbLen = Math.round((14 + sw * 1.25) / Math.sqrt(z));
-    const barbSpread = Math.round((8 + sw * 0.95) / Math.sqrt(z));
-    const waistBack = Math.round((6 + sw * 0.6) / Math.sqrt(z));
-    const waistSpread = Math.max(2, (sw * 0.75) / Math.sqrt(z));
-
-    const b1 = [p0[0] + ux * barbLen + nx * barbSpread, p0[1] + uy * barbLen + ny * barbSpread];
-    const b2 = [p0[0] + ux * barbLen - nx * barbSpread, p0[1] + uy * barbLen - ny * barbSpread];
-    const c1 = [p0[0] + ux * waistBack + nx * waistSpread, p0[1] + uy * waistBack + ny * waistSpread];
-    const c2 = [p0[0] + ux * waistBack - nx * waistSpread, p0[1] + uy * waistBack - ny * waistSpread];
-
-    const d = `M ${b1[0]} ${b1[1]} Q ${c1[0]} ${c1[1]} ${p0[0]} ${p0[1]} M ${p0[0]} ${p0[1]} Q ${c2[0]} ${c2[1]} ${b2[0]} ${b2[1]}`;
-
-    return {
-      d,
-      effectiveWidth: sw / z,
-      shadowWidth: (sw + 2.4) / z,
-      glowWidth: (sw + 10) / z,
-      coreWidth: 2.5 / z
-    };
-  }
-
+  static computeConcaveArrowPath(p0, exitTangent, strokeWidth = 3.2, zoomScale = 1.0, arrowStyle = 'concave') {
+      return StudioGeometry.computeTerminalMarker(p0, exitTangent, strokeWidth, zoomScale, arrowStyle);
+    }
   static evalCubicBezier(seg, t) {
     if (typeof CurveFitter !== 'undefined' && typeof CurveFitter.bezier_q === 'function') {
       return CurveFitter.bezier_q(seg, t);
@@ -825,6 +799,59 @@ class StudioGeometry {
         v.isExplicitTangent = false;
       }
       return true;
+    }
+
+  static computeTerminalMarker(p0, exitTangent, strokeWidth = 3.2, zoomScale = 1.0, arrowStyle = 'concave') {
+      const z = Math.max(0.1, zoomScale || 1.0);
+      const ux = exitTangent[0];
+      const uy = exitTangent[1];
+      const nx = -uy;
+      const ny = ux;
+      const sw = Math.max(1.5, Math.min(12, strokeWidth || 3.2));
+
+      if (arrowStyle === 'dot') {
+        const r = Math.max(2.6, (sw * 1.15 + 1.2) / Math.sqrt(z));
+        return {
+          kind: 'circle',
+          cx: p0[0],
+          cy: p0[1],
+          r,
+          effectiveWidth: sw / z,
+          shadowWidth: (sw + 2.4) / z,
+          glowWidth: r * 2 + 10 / z,
+          coreWidth: r
+        };
+      }
+
+      const isArch = arrowStyle === 'architectural';
+      const barbLen = isArch
+        ? Math.round((15 + sw * 1.35) / Math.sqrt(z))
+        : Math.round((14 + sw * 1.25) / Math.sqrt(z));
+      const barbSpread = isArch
+        ? Math.round((4.5 + sw * 0.55) / Math.sqrt(z))
+        : Math.round((8 + sw * 0.95) / Math.sqrt(z));
+      const waistBack = isArch
+        ? Math.round((8 + sw * 0.7) / Math.sqrt(z))
+        : Math.round((6 + sw * 0.6) / Math.sqrt(z));
+      const waistSpread = isArch
+        ? Math.max(1.2, (sw * 0.35) / Math.sqrt(z))
+        : Math.max(2, (sw * 0.75) / Math.sqrt(z));
+
+      const b1 = [p0[0] + ux * barbLen + nx * barbSpread, p0[1] + uy * barbLen + ny * barbSpread];
+      const b2 = [p0[0] + ux * barbLen - nx * barbSpread, p0[1] + uy * barbLen - ny * barbSpread];
+      const c1 = [p0[0] + ux * waistBack + nx * waistSpread, p0[1] + uy * waistBack + ny * waistSpread];
+      const c2 = [p0[0] + ux * waistBack - nx * waistSpread, p0[1] + uy * waistBack - ny * waistSpread];
+
+      const d = `M ${b1[0]} ${b1[1]} Q ${c1[0]} ${c1[1]} ${p0[0]} ${p0[1]} M ${p0[0]} ${p0[1]} Q ${c2[0]} ${c2[1]} ${b2[0]} ${b2[1]}`;
+
+      return {
+        kind: 'path',
+        d,
+        effectiveWidth: sw / z,
+        shadowWidth: (sw + 2.4) / z,
+        glowWidth: (sw + 10) / z,
+        coreWidth: 2.5 / z
+      };
     }
 }
 

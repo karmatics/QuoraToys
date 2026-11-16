@@ -314,129 +314,87 @@ class QuoraInSituHUD {
     }
 
   renderTransientCursorDial(controlsLayer, centerPt, curveRecord, callbacks = {}) {
-      // Insulate the dial inside its own dedicated layer so controlsLayer.innerHTML = '' NEVER wipes it!
-      const targetLayer = this.component.hudDialLayer || controlsLayer;
+    const comp = this.component;
+    const st = comp.stageState;
+    const targetLayer = comp.hudDialLayer || controlsLayer;
 
-      let dial = document.getElementById('qa-transient-cursor-dial');
-      if (!dial) {
-        dial = makeElement('svg:g', {
-          id: 'qa-transient-cursor-dial',
-          className: 'qa-radial-dial-node',
-          style: { transition: 'opacity 0.2s ease', pointerEvents: 'auto' }
-        });
-        targetLayer.appendChild(dial);
-      }
-
-      dial.innerHTML = '';
-      const z = this.component.stageState.zoom || 1.0;
-      const invScale = 1 / z;
-      const r = 56 * invScale;
-      const curColor = (curveRecord?.color || this.component.stageState.currentColor || '#00e676').toLowerCase();
-
-      // Glowing background dial ring
-      const ringBackdrop = makeElement('svg:circle', {
-        cx: centerPt[0], cy: centerPt[1], r: String(r),
-        fill: 'rgba(9, 13, 22, 0.96)', stroke: '#00f2fe', 'stroke-width': String(1.5 * invScale),
-        style: { filter: 'drop-shadow(0 8px 28px rgba(0,0,0,0.9))' }
+    let dial = document.getElementById('qa-transient-cursor-dial');
+    if (!dial) {
+      dial = makeElement('svg:g', {
+        id: 'qa-transient-cursor-dial', className: 'qa-radial-dial-node',
+        style: { transition: 'opacity 0.2s ease', pointerEvents: 'auto' }
       });
-      dial.appendChild(ringBackdrop);
-
-      // Center dismissal dot (Click to close)
-      const centerDot = makeElement('svg:circle', {
-        cx: centerPt[0], cy: centerPt[1], r: String(7.0 * invScale), fill: '#ffd700', stroke: '#ffffff', 'stroke-width': String(1.5 * invScale),
-        style: { cursor: 'pointer' },
-        title: 'Click or press Esc to close dial',
-        onclick: (e) => {
-          e.stopPropagation();
-          this.hideTransientCursorDial();
-        }
-      });
-      dial.appendChild(centerDot);
-
-      // 4 Cardinal Action Nodes
-      const actions = [
-        { id: 'arrow', label: '🏹', title: 'Cycle Arrowhead [A]', angle: -Math.PI / 2, fn: callbacks.onToggleArrow },
-        { id: 'text', label: '💬', title: 'Attach Text Callout [T]', angle: 0, fn: callbacks.onAttachText },
-        { id: 'swap', label: '⇄', title: 'Swap Terminals [X]', angle: Math.PI / 2, fn: callbacks.onSwapEnds },
-        { id: 'loop', label: '🔄', title: 'Toggle Loop Ring [L]', angle: Math.PI, fn: () => this.component.toggleLoopMode() }
-      ];
-
-      actions.forEach(act => {
-        const bX = centerPt[0] + Math.cos(act.angle) * (r - 16 * invScale);
-        const bY = centerPt[1] + Math.sin(act.angle) * (r - 16 * invScale);
-
-        const nodeG = makeElement('svg:g', {
-          className: 'qa-radial-dial-node',
-          style: { cursor: 'pointer' },
-          title: act.title,
-          onmousedown: (e) => {
-            e.stopPropagation();
-            if (act.fn) act.fn();
-          }
-        });
-
-        nodeG.appendChild(makeElement('svg:circle', {
-          cx: bX, cy: bY, r: String(11 * invScale), fill: 'rgba(15, 23, 42, 0.95)',
-          stroke: '#00f2fe', 'stroke-width': String(1.2 * invScale)
-        }));
-
-        nodeG.appendChild(makeElement('svg:text', {
-          x: bX, y: bY + 3.5 * invScale, fill: '#ffffff', 'font-size': `${10.5 * invScale}px`,
-          'text-anchor': 'middle', style: { pointerEvents: 'none' }
-        }, act.label));
-
-        dial.appendChild(nodeG);
-      });
-
-      // Outer Color Jewel Dots Ring
-      const palette = [
-        { hex: '#00f2fe', title: 'Cyan (1)' },
-        { hex: '#00e676', title: 'Green (2)' },
-        { hex: '#ffd700', title: 'Gold (3)' },
-        { hex: '#ff2d55', title: 'Coral (4)' },
-        { hex: '#c084fc', title: 'Purple (5)' },
-        { hex: '#ffffff', title: 'White (6)' }
-      ];
-      const outerR = r + 16 * invScale;
-
-      palette.forEach((item, i) => {
-        const angle = (i * (Math.PI / 3)) - (Math.PI / 2);
-        const pX = centerPt[0] + Math.cos(angle) * outerR;
-        const pY = centerPt[1] + Math.sin(angle) * outerR;
-        const isSelected = (item.hex.toLowerCase() === curColor);
-
-        const jewelG = makeElement('svg:g', {
-          className: 'qa-radial-dial-node',
-          style: { cursor: 'pointer' },
-          title: `Set Color: ${item.title}`,
-          onmousedown: (e) => {
-            e.stopPropagation();
-            this.component.stageState.currentColor = item.hex;
-            this.component.updatePaletteHighlight();
-            if (curveRecord) {
-              curveRecord.color = item.hex;
-              this.component.commitCurveGeometryUpdate();
-            }
-            this.component.renderStage();
-            this.renderTransientCursorDial(controlsLayer, centerPt, curveRecord, callbacks);
-            this.component.showKnotToast(`Color: ${item.hex}`);
-          }
-        });
-
-        const swatch = makeElement('svg:circle', {
-          cx: pX, cy: pY, r: String((isSelected ? 7.5 : 6.0) * invScale),
-          fill: item.hex, stroke: isSelected ? '#ffffff' : '#090d16',
-          'stroke-width': String((isSelected ? 2.2 : 1.5) * invScale),
-          style: { filter: isSelected ? `drop-shadow(0 0 8px ${item.hex})` : 'drop-shadow(0 2px 4px rgba(0,0,0,0.8))' }
-        });
-        jewelG.appendChild(swatch);
-        dial.appendChild(jewelG);
-      });
-
-      dial.style.display = 'block';
-      dial.style.opacity = '1';
+      targetLayer.appendChild(dial);
     }
 
+    const inv = 1 / (st.zoom || 1.0);
+    const r = 56 * inv;
+    const curColor = (curveRecord?.color || st.currentColor || '#00e676').toLowerCase();
+    const [cx, cy] = centerPt;
+
+    const actions = [
+      ['🏹', 'Cycle Arrowhead [A]', -Math.PI / 2, callbacks.onToggleArrow],
+      ['💬', 'Attach Text Callout [T]', 0, callbacks.onAttachText],
+      ['⇄', 'Swap Terminals [X]', Math.PI / 2, callbacks.onSwapEnds],
+      ['🔄', 'Toggle Loop Ring [L]', Math.PI, () => comp.toggleLoopMode()]
+    ];
+
+    const palette = [
+      ['#00f2fe', 'Cyan (1)'], ['#00e676', 'Green (2)'], ['#ffd700', 'Gold (3)'],
+      ['#ff2d55', 'Coral (4)'], ['#c084fc', 'Purple (5)'], ['#ffffff', 'White (6)']
+    ];
+
+    dial.innerHTML = '';
+    dial.append(
+      makeElement('svg:circle', {
+        cx, cy, r: String(r), fill: 'rgba(9, 13, 22, 0.96)', stroke: '#00f2fe', 'stroke-width': String(1.5 * inv),
+        style: { filter: 'drop-shadow(0 8px 28px rgba(0,0,0,0.9))' }
+      }),
+      makeElement('svg:circle', {
+        cx, cy, r: String(7.0 * inv), fill: '#ffd700', stroke: '#ffffff', 'stroke-width': String(1.5 * inv),
+        style: { cursor: 'pointer' }, title: 'Click or press Esc to close dial',
+        onclick: (e) => { e.stopPropagation(); this.hideTransientCursorDial(); }
+      }),
+      ...actions.map(([label, title, angle, fn]) => {
+        const bX = cx + Math.cos(angle) * (r - 16 * inv);
+        const bY = cy + Math.sin(angle) * (r - 16 * inv);
+        return makeElement('svg:g', {
+          className: 'qa-radial-dial-node', style: { cursor: 'pointer' }, title,
+          onmousedown: (e) => { e.stopPropagation(); if (fn) fn(); }
+        }, [
+          makeElement('svg:circle', { cx: bX, cy: bY, r: String(11 * inv), fill: 'rgba(15, 23, 42, 0.95)', stroke: '#00f2fe', 'stroke-width': String(1.2 * inv) }),
+          makeElement('svg:text', { x: bX, y: bY + 3.5 * inv, fill: '#ffffff', 'font-size': `${10.5 * inv}px`, 'text-anchor': 'middle', style: { pointerEvents: 'none' } }, label)
+        ]);
+      }),
+      ...palette.map(([hex, title], i) => {
+        const angle = (i * (Math.PI / 3)) - (Math.PI / 2);
+        const pX = cx + Math.cos(angle) * (r + 16 * inv);
+        const pY = cy + Math.sin(angle) * (r + 16 * inv);
+        const isSelected = hex.toLowerCase() === curColor;
+        return makeElement('svg:g', {
+          className: 'qa-radial-dial-node', style: { cursor: 'pointer' }, title: `Set Color: ${title}`,
+          onmousedown: (e) => {
+            e.stopPropagation();
+            st.currentColor = hex;
+            comp.updatePaletteHighlight();
+            if (curveRecord) { curveRecord.color = hex; comp.commitCurveGeometryUpdate(); }
+            comp.renderStage();
+            this.renderTransientCursorDial(controlsLayer, centerPt, curveRecord, callbacks);
+            comp.showKnotToast(`Color: ${hex}`);
+          }
+        }, [
+          makeElement('svg:circle', {
+            cx: pX, cy: pY, r: String((isSelected ? 7.5 : 6.0) * inv),
+            fill: hex, stroke: isSelected ? '#ffffff' : '#090d16', 'stroke-width': String((isSelected ? 2.2 : 1.5) * inv),
+            style: { filter: isSelected ? `drop-shadow(0 0 8px ${hex})` : 'drop-shadow(0 2px 4px rgba(0,0,0,0.8))' }
+          })
+        ]);
+      })
+    );
+
+    dial.style.display = 'block';
+    dial.style.opacity = '1';
+  }
   hideTransientCursorDial() {
       const dial = document.getElementById('qa-transient-cursor-dial');
       if (dial) dial.remove();

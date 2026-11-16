@@ -4,326 +4,137 @@ class QuoraTextManager {
   }
 
   renderCurveAttachedTextSvg(ann, textBadgesLayer, stageState) {
-        const beziers = ann.beziers;
-        if (!beziers || beziers.length === 0) return;
+      const beziers = ann.beziers;
+      if (!beziers || beziers.length === 0) return;
 
-        if (ann._textElements) {
-          Object.values(ann._textElements).forEach(el => { if (el && el.remove) el.remove(); });
-          ann._textElements = null;
-        }
+      if (ann._textElements) {
+        Object.values(ann._textElements).forEach(el => el?.remove?.());
+        ann._textElements = null;
+      }
 
-        const isSelectedCurve = (ann === stageState.selectedItem);
-        const hasText = Boolean(ann.text && ann.text.trim() !== '');
-        const isEditing = Boolean(ann._isEditingText);
+      const isSelected = ann === stageState.selectedItem;
+      const hasText = Boolean(ann.text && ann.text.trim() !== '');
+      const isEditing = Boolean(ann._isEditingText);
+      if (!hasText && !isSelected && !isEditing) return;
 
-        if (!hasText && !isSelectedCurve && !isEditing) return;
+      const comp = this.component;
+      const p = stageState.prefs || {};
+      const isAtTail = ann.textEnd !== 'tip';
+      const termSeg = isAtTail ? beziers[beziers.length - 1] : beziers[0];
+      const anchorPt = isAtTail ? termSeg[3] : termSeg[0];
+      const exitVec = isAtTail
+        ? [termSeg[3][0] - termSeg[2][0], termSeg[3][1] - termSeg[2][1]]
+        : [termSeg[0][0] - termSeg[1][0], termSeg[0][1] - termSeg[1][1]];
 
-        const isAtTail = (ann.textEnd !== 'tip');
-        const termSeg = isAtTail ? beziers[beziers.length - 1] : beziers[0];
-        const anchorPt = isAtTail ? termSeg[3] : termSeg[0];
-        const exitVec = isAtTail
-          ? [termSeg[3][0] - termSeg[2][0], termSeg[3][1] - termSeg[2][1]]
-          : [termSeg[0][0] - termSeg[1][0], termSeg[0][1] - termSeg[1][1]];
+      const fontS = ann.fontSize || stageState.fontSize || p.fontSize || 20;
+      const fontF = ann.fontFamily || stageState.fontFamily || p.fontFamily || "'Architects Daughter', cursive, sans-serif";
+      const boxStyle = ann.boxStyle || stageState.boxStyle || p.boxStyle || 'bracket';
+      const col = ann.color || '#00e676';
+      const manualCardinal = (ann.manualEdge && ['left', 'right', 'top', 'bottom'].includes(ann.connectEdge)) ? ann.connectEdge : null;
+      const targetKnot = isAtTail ? ann.vertices[ann.vertices.length - 1] : ann.vertices[0];
 
-        const p = stageState.prefs || {};
-        const fontS = ann.fontSize || stageState.fontSize || p.fontSize || 20;
-        const fontF = ann.fontFamily || stageState.fontFamily || p.fontFamily || "'Architects Daughter', cursive, sans-serif";
-        const boxStyle = ann.boxStyle || stageState.boxStyle || p.boxStyle || 'bracket';
-        const col = ann.color || '#00e676';
-        const isNeon = (ann.lineStyle === 'neon');
-        const coreTint = isNeon ? this.component.strokeManager.getLuminousCoreColor(col) : col;
-        const manualCardinal = (ann.manualEdge && ['left', 'right', 'top', 'bottom'].includes(ann.connectEdge)) ? ann.connectEdge : null;
-
-        if (!hasText && !isEditing) {
-          const ghostSize = Math.min(14, Math.max(11, Math.round(fontS * 0.65)));
-          const ghostBounds = this.measureTextBounds('Note…', ghostSize, fontF);
-          const ghostW = Math.max(64, ghostBounds.maxW + 16);
-          const ghostH = Math.max(24, ghostBounds.lineHeight + 8);
-          const ghostPlacement = this.computeTextPlacement(anchorPt, exitVec, ghostW, ghostH, manualCardinal);
-
-          const ghostG = makeElement('svg:g', {
-            className: 'qa-curve-attached-label qa-ghost-text-placeholder',
-            style: { cursor: 'text', userSelect: 'none', opacity: '0.68', transition: 'opacity 0.15s ease' },
-            title: 'Click to type note • Drag to move curve end'
+      // Default drag = move the WHOLE entity (curve + arrowheads + text).
+      // Alt/Meta drag = move only the attached endpoint (reshape the curve).
+      const startKnotDrag = () => ({
+        whole: !comp._dragAlt,
+        x: targetKnot.point[0],
+        y: targetKnot.point[1],
+        pts: ann.vertices.map(v => [v.point[0], v.point[1]])
+      });
+      const moveKnotDrag = (dx, dy, orig) => {
+        if (orig.whole) {
+          ann.vertices.forEach((v, i) => {
+            v.point[0] = Math.round(orig.pts[i][0] + dx);
+            v.point[1] = Math.round(orig.pts[i][1] + dy);
           });
+        } else {
+          targetKnot.point[0] = Math.round(orig.x + dx);
+          targetKnot.point[1] = Math.round(orig.y + dy);
+          targetKnot.isExplicitTangent = false;
+          targetKnot.tangentAngleOffset = 0;
+        }
+        comp.commitCurveGeometryUpdate();
+      };
+      const endKnotDrag = () => {
+        comp.commitCurveGeometryUpdate();
+        comp.exposeBezierHandles(ann);
+        comp.renderStage();
+      };
 
-          ghostG.addEventListener('mouseenter', () => { ghostG.style.opacity = '1'; });
-          ghostG.addEventListener('mouseleave', () => { ghostG.style.opacity = '0.68'; });
+      if (!hasText && !isEditing) {
+        const ghostSize = Math.min(14, Math.max(11, Math.round(fontS * 0.65)));
+        const gb = this.measureTextBounds('Note…', ghostSize, fontF);
+        const gw = Math.max(64, gb.maxW + 16);
+        const gh = Math.max(24, gb.lineHeight + 8);
+        const gp = this.computeTextPlacement(anchorPt, exitVec, gw, gh, manualCardinal);
+        const gx = gp.textAnchorType === 'end' ? (gp.posX + gw - 8) : (gp.textAnchorType === 'middle' ? (gp.posX + gw / 2) : (gp.posX + 8));
 
-          ghostG.appendChild(makeElement('svg:rect', {
-            x: ghostPlacement.posX, y: ghostPlacement.posY, width: ghostW, height: ghostH, rx: '5',
+        const ghostG = makeElement('svg:g', {
+          className: 'qa-curve-attached-label qa-ghost-text-placeholder',
+          style: { cursor: 'text', userSelect: 'none', opacity: '0.68', transition: 'opacity 0.15s ease' },
+          title: 'Click to type note • Drag to move whole entity • Alt+drag to reshape end',
+          onmouseenter: () => { ghostG.style.opacity = '1'; },
+          onmouseleave: () => { ghostG.style.opacity = '0.68'; }
+        }, [
+          makeElement('svg:rect', {
+            x: gp.posX, y: gp.posY, width: gw, height: gh, rx: '5',
             fill: 'rgba(248, 250, 252, 0.07)', stroke: 'rgba(255, 255, 255, 0.22)',
             'stroke-width': '1', 'stroke-dasharray': '3,2'
-          }));
-
-          if (ghostPlacement.dBracket) {
-            ghostG.appendChild(makeElement('svg:path', {
-              d: ghostPlacement.dBracket, fill: 'none', stroke: col, 'stroke-width': '1.6',
-              'stroke-opacity': '0.7', 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
-            }));
-          }
-
-          const gx = ghostPlacement.textAnchorType === 'end'
-            ? (ghostPlacement.posX + ghostW - 8)
-            : (ghostPlacement.textAnchorType === 'middle' ? (ghostPlacement.posX + ghostW / 2) : (ghostPlacement.posX + 8));
-
-          ghostG.appendChild(makeElement('svg:text', {
-            x: gx, y: ghostPlacement.posY + 4 + ghostSize * 0.88, fill: 'rgba(248, 250, 252, 0.58)',
+          }),
+          gp.dBracket ? makeElement('svg:path', {
+            d: gp.dBracket, fill: 'none', stroke: col, 'stroke-width': '1.6',
+            'stroke-opacity': '0.7', 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+          }) : null,
+          makeElement('svg:text', {
+            x: gx, y: gp.posY + 4 + ghostSize * 0.88, fill: 'rgba(248, 250, 252, 0.58)',
             'font-family': fontF, 'font-size': `${ghostSize}px`, 'font-style': 'italic', 'font-weight': '600',
-            'text-anchor': ghostPlacement.textAnchorType
-          }, 'Note…'));
+            'text-anchor': gp.textAnchorType
+          }, 'Note…')
+        ].filter(Boolean));
 
-          let draggingGhost = false;
-          let didDragGhost = false;
-          let gStartX = 0, gStartY = 0;
-
-          ghostG.addEventListener('mousedown', (e) => {
-            if (e.button === 2) return;
-            e.preventDefault();
-            e.stopPropagation();
-            draggingGhost = true;
-            didDragGhost = false;
-            gStartX = e.clientX;
-            gStartY = e.clientY;
-            const targetKnot = isAtTail ? ann.vertices[ann.vertices.length - 1] : ann.vertices[0];
-            const origX = targetKnot.point[0];
-            const origY = targetKnot.point[1];
-
-            const onMove = (ev) => {
-              if (!draggingGhost) return;
-              if (Math.hypot(ev.clientX - gStartX, ev.clientY - gStartY) > 4) {
-                didDragGhost = true;
-                window.getSelection()?.removeAllRanges();
-                const z = stageState.zoom || 1.0;
-                targetKnot.point[0] = Math.round(origX + (ev.clientX - gStartX) / z);
-                targetKnot.point[1] = Math.round(origY + (ev.clientY - gStartY) / z);
-                targetKnot.isExplicitTangent = false;
-                targetKnot.tangentAngleOffset = 0;
-                this.component.commitCurveGeometryUpdate();
-              }
-            };
-
-            const onUp = () => {
-              draggingGhost = false;
-              window.removeEventListener('mousemove', onMove);
-              window.removeEventListener('mouseup', onUp);
-              if (!didDragGhost) this.promptInlineTailText(ann, anchorPt, manualCardinal);
-              else {
-                this.component.commitCurveGeometryUpdate();
-                this.component.exposeBezierHandles(ann);
-              }
-            };
-
-            window.addEventListener('mousemove', onMove);
-            window.addEventListener('mouseup', onUp);
-          });
-
-          textBadgesLayer.appendChild(ghostG);
-          ann._textElements = { ghost: ghostG };
-          return;
-        }
-
-        const bounds = this.measureTextBounds(ann.text || '', fontS, fontF);
-        const padX = boxStyle !== 'none' ? 8 : 4;
-        const padY = boxStyle !== 'none' ? 4 : 2;
-        const boxW = (isEditing && ann._liveEditSize) ? ann._liveEditSize.width : (bounds.maxW + padX * 2);
-        const boxH = (isEditing && ann._liveEditSize) ? ann._liveEditSize.height : (bounds.totalH + padY * 2);
-
-        const placement = this.computeTextPlacement(anchorPt, exitVec, boxW, boxH, manualCardinal);
-        ann.connectEdge = placement.connectEdge;
-
-        const { posX, posY, textAnchorType, dBracket } = placement;
-        let textAnchorX = posX + padX;
-        if (textAnchorType === 'end') textAnchorX = posX + boxW - padX;
-        else if (textAnchorType === 'middle') textAnchorX = posX + boxW / 2;
-
-        const showBackdrop = Boolean(p.textBoxBgEnabled && (p.textBoxBgOpacity === undefined || p.textBoxBgOpacity > 0.02));
-        const bgColor = p.textBoxBgColor || '#090d16';
-        const bgOpacity = p.textBoxBgOpacity !== undefined ? p.textBoxBgOpacity : 0.55;
-        const bgBlur = p.textBoxBgBlur !== undefined ? p.textBoxBgBlur : 4.0;
-        const borderW = p.borderStrokeWidth || 2.4;
-
-        const glowMode = p.textGlowMode || 'match';
-        const useNeonText = (glowMode === 'neon') || (glowMode === 'match' && isNeon);
-        const useShadowText = (glowMode === 'shadow') || (glowMode === 'match' && !isNeon);
-        const useHalo = Boolean((p.textReadabilityHalo === true) || glowMode === 'halo');
-        const glowSpread = p.textGlowSpread !== undefined ? p.textGlowSpread : 3.5;
-        const glowOpacity = p.textGlowOpacity !== undefined ? p.textGlowOpacity : 0.92;
-        const textFill = useNeonText ? coreTint : col;
-        const curveGlowPad = p.curveGlowWidth !== undefined ? p.curveGlowWidth : 10.0;
-
-        const textElementsMap = {};
-
-        if (useShadowText) {
-          const shadowG = makeElement('svg:g', { transform: 'translate(2, 2)', style: { pointerEvents: 'none' } });
-          if (boxStyle === 'bracket' && dBracket) {
-            shadowG.appendChild(makeElement('svg:path', {
-              d: dBracket, fill: 'none', stroke: 'rgba(10, 15, 25, 0.95)',
-              'stroke-width': String(borderW + 2.0), 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
-            }));
-          } else if (boxStyle === 'box' || boxStyle === 'pill') {
-            shadowG.appendChild(makeElement('svg:rect', {
-              x: posX, y: posY, width: boxW, height: boxH, rx: boxStyle === 'pill' ? '18' : '5',
-              fill: 'none', stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': String(borderW + 2.0)
-            }));
-          }
-          if (!isEditing) {
-            const txtShadow = makeElement('svg:text', {
-              x: textAnchorX, y: posY + padY + fontS * 0.88, fill: 'rgba(10, 15, 25, 0.92)',
-              'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold', 'text-anchor': textAnchorType
-            });
-            bounds.lines.forEach((l, i) => {
-              txtShadow.appendChild(makeElement('svg:tspan', { x: textAnchorX, dy: i === 0 ? '0' : `${bounds.lineHeight}px` }, l));
-            });
-            shadowG.appendChild(txtShadow);
-          }
-          this.component.shadowLayer.appendChild(shadowG);
-          textElementsMap.shadow = shadowG;
-        }
-
-        if (useNeonText) {
-          const glowG = makeElement('svg:g', { style: { pointerEvents: 'none', opacity: String(glowOpacity) } });
-          if (boxStyle === 'bracket' && dBracket) {
-            glowG.appendChild(makeElement('svg:path', {
-              d: dBracket, fill: 'none', stroke: col, 'stroke-width': String(borderW + curveGlowPad),
-              'stroke-linecap': 'round', 'stroke-linejoin': 'round', style: { filter: 'url(#qa-neon-glow)' }
-            }));
-          } else if (boxStyle === 'box' || boxStyle === 'pill') {
-            glowG.appendChild(makeElement('svg:rect', {
-              x: posX, y: posY, width: boxW, height: boxH, rx: boxStyle === 'pill' ? '18' : '5',
-              fill: 'none', stroke: col, 'stroke-width': String(borderW + curveGlowPad), style: { filter: 'url(#qa-neon-glow)' }
-            }));
-          }
-          if (!isEditing) {
-            const txtGlow = makeElement('svg:text', {
-              x: textAnchorX, y: posY + padY + fontS * 0.88, fill: col,
-              stroke: glowSpread > 0 ? col : 'none', 'stroke-width': String(glowSpread), 'stroke-linejoin': 'round',
-              'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold', 'text-anchor': textAnchorType,
-              style: { filter: 'url(#qa-text-glow)' }
-            });
-            bounds.lines.forEach((l, i) => {
-              txtGlow.appendChild(makeElement('svg:tspan', { x: textAnchorX, dy: i === 0 ? '0' : `${bounds.lineHeight}px` }, l));
-            });
-            glowG.appendChild(txtGlow);
-          }
-          this.component.glowLayer.appendChild(glowG);
-          textElementsMap.glow = glowG;
-        }
-
-        const g = makeElement('svg:g', {
-          className: 'qa-curve-attached-label',
-          style: { cursor: 'move', userSelect: 'none' },
-          title: 'Click to edit text • Drag to reposition'
+        this._bindTextDrag(ghostG, stageState, startKnotDrag, moveKnotDrag, endKnotDrag, () => {
+          this.promptInlineTailText(ann, anchorPt, manualCardinal);
         });
-
-        if (showBackdrop) {
-          g.appendChild(makeElement('svg:rect', {
-            x: posX - 3, y: posY - 2, width: boxW + 6, height: boxH + 4, rx: boxStyle === 'pill' ? '20' : '8',
-            fill: bgColor, 'fill-opacity': String(bgOpacity), stroke: 'none',
-            ...(bgBlur > 0 ? { style: { filter: 'url(#qa-text-bg-blur)', pointerEvents: 'none' } } : { style: { pointerEvents: 'none' } })
-          }));
-        }
-
-        g.appendChild(makeElement('svg:rect', {
-          x: posX, y: posY, width: boxW, height: boxH, rx: boxStyle === 'pill' ? '18' : '5',
-          fill: 'rgba(255, 255, 255, 0.001)', stroke: 'none'
-        }));
-
-        if (boxStyle === 'bracket' && dBracket) {
-          g.appendChild(makeElement('svg:path', {
-            d: dBracket, fill: 'none', stroke: textFill, 'stroke-width': String(borderW),
-            'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-            ...(useNeonText ? { style: { filter: 'url(#qa-neon-core)' } } : {})
-          }));
-        } else if (boxStyle === 'box' || boxStyle === 'pill') {
-          g.appendChild(makeElement('svg:rect', {
-            x: posX, y: posY, width: boxW, height: boxH, rx: boxStyle === 'pill' ? '18' : '5',
-            fill: 'none', stroke: textFill, 'stroke-width': String(borderW),
-            ...(useNeonText ? { style: { filter: 'url(#qa-neon-core)' } } : {})
-          }));
-        }
-
-        if (!isEditing) {
-          if (useHalo) {
-            const txtHalo = makeElement('svg:text', {
-              x: textAnchorX, y: posY + padY + fontS * 0.88,
-              fill: 'rgba(7, 10, 19, 0.90)', stroke: 'rgba(7, 10, 19, 0.90)', 'stroke-width': '2.8',
-              'stroke-linejoin': 'round', 'font-family': fontF, 'font-size': `${fontS}px`,
-              'font-weight': 'bold', 'text-anchor': textAnchorType, style: { pointerEvents: 'none' }
-            });
-            bounds.lines.forEach((l, i) => {
-              txtHalo.appendChild(makeElement('svg:tspan', { x: textAnchorX, dy: i === 0 ? '0' : `${bounds.lineHeight}px` }, l));
-            });
-            g.appendChild(txtHalo);
-          }
-
-          const txt = makeElement('svg:text', {
-            x: textAnchorX, y: posY + padY + fontS * 0.88, fill: textFill,
-            'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold', 'text-anchor': textAnchorType,
-            ...(useNeonText ? { style: { filter: 'url(#qa-neon-core)' } } : {})
-          });
-          bounds.lines.forEach((l, i) => {
-            txt.appendChild(makeElement('svg:tspan', { x: textAnchorX, dy: i === 0 ? '0' : `${bounds.lineHeight}px` }, l));
-          });
-          g.appendChild(txt);
-        }
-
-        let isDraggingBadge = false;
-        let didDragBadge = false;
-        let startMouseX = 0, startMouseY = 0;
-
-        g.addEventListener('mousedown', (e) => {
-          if (e.button === 2) return;
-          e.preventDefault();
-          e.stopPropagation();
-          isDraggingBadge = true;
-          didDragBadge = false;
-          this.component.selectItem(ann);
-          this.component._activeKnotIdx = isAtTail ? (ann.vertices.length - 1) : 0;
-
-          const staleRay = document.getElementById('qa-outbound-tangent-ray');
-          if (staleRay) staleRay.remove();
-
-          startMouseX = e.clientX;
-          startMouseY = e.clientY;
-          const targetKnot = isAtTail ? ann.vertices[ann.vertices.length - 1] : ann.vertices[0];
-          const origX = targetKnot.point[0];
-          const origY = targetKnot.point[1];
-
-          const onBadgeDragMove = (ev) => {
-            if (!isDraggingBadge) return;
-            if (Math.hypot(ev.clientX - startMouseX, ev.clientY - startMouseY) > 4) {
-              didDragBadge = true;
-              window.getSelection()?.removeAllRanges();
-              const z = stageState.zoom || 1.0;
-              targetKnot.point[0] = Math.round(origX + (ev.clientX - startMouseX) / z);
-              targetKnot.point[1] = Math.round(origY + (ev.clientY - startMouseY) / z);
-              targetKnot.isExplicitTangent = false;
-              targetKnot.tangentAngleOffset = 0;
-              this.component.commitCurveGeometryUpdate();
-            }
-          };
-
-          const onBadgeDragUp = () => {
-            isDraggingBadge = false;
-            window.removeEventListener('mousemove', onBadgeDragMove);
-            window.removeEventListener('mouseup', onBadgeDragUp);
-            if (!didDragBadge) this.promptInlineTailText(ann, anchorPt, manualCardinal);
-            else {
-              this.component.commitCurveGeometryUpdate();
-              this.component.exposeBezierHandles(ann);
-              this.component.renderStage();
-            }
-          };
-
-          window.addEventListener('mousemove', onBadgeDragMove);
-          window.addEventListener('mouseup', onBadgeDragUp);
-        });
-
-        textBadgesLayer.appendChild(g);
-        textElementsMap.fg = g;
-        ann._textElements = textElementsMap;
+        textBadgesLayer.appendChild(ghostG);
+        ann._textElements = { ghost: ghostG };
+        return;
       }
+
+      const bounds = this.measureTextBounds(ann.text || '', fontS, fontF);
+      const padX = boxStyle !== 'none' ? 8 : 4;
+      const padY = boxStyle !== 'none' ? 4 : 2;
+      const boxW = (isEditing && ann._liveEditSize) ? ann._liveEditSize.width : (bounds.maxW + padX * 2);
+      const boxH = (isEditing && ann._liveEditSize) ? ann._liveEditSize.height : (bounds.totalH + padY * 2);
+      const pl = this.computeTextPlacement(anchorPt, exitVec, boxW, boxH, manualCardinal);
+      ann.connectEdge = pl.connectEdge;
+
+      let textAnchorX = pl.posX + padX;
+      if (pl.textAnchorType === 'end') textAnchorX = pl.posX + boxW - padX;
+      else if (pl.textAnchorType === 'middle') textAnchorX = pl.posX + boxW / 2;
+
+      const layers = this._buildStyledTextLayers({
+        p, col, isNeon: ann.lineStyle === 'neon', isEditing, bounds,
+        posX: pl.posX, posY: pl.posY, boxW, boxH, padY, textAnchorX,
+        textAnchorType: pl.textAnchorType, boxStyle, dBracket: pl.dBracket,
+        fontS, fontF, className: 'qa-curve-attached-label', drawSelectionRect: false
+      });
+
+      this._bindTextDrag(
+        layers.fg, stageState,
+        () => {
+          comp.selectItem(ann);
+          comp._activeKnotIdx = isAtTail ? (ann.vertices.length - 1) : 0;
+          document.getElementById('qa-outbound-tangent-ray')?.remove();
+          return startKnotDrag();
+        },
+        moveKnotDrag,
+        endKnotDrag,
+        () => this.promptInlineTailText(ann, anchorPt, manualCardinal)
+      );
+
+      textBadgesLayer.appendChild(layers.fg);
+      ann._textElements = layers;
+    }
   promptInlineTailText(curveRecord, anchorPt, forcedEdge = null, initialText = '') {
       if (this.component._commitActiveInlineEditor) {
         this.component._commitActiveInlineEditor();
@@ -640,211 +451,52 @@ class QuoraTextManager {
   wrapTextLines(text, maxCharsPerLine) {
       return StudioGeometry.wrapTextLines(text, maxCharsPerLine);
     }
+
   renderDirectTextBadgeSvg(ann, textBadgesLayer, stageState) {
-      if (ann._badgeElements) {
-        Object.values(ann._badgeElements).forEach(el => { if (el && el.remove) el.remove(); });
-        ann._badgeElements = null;
-      }
-
-      const p = stageState.prefs || {};
-      const fontS = ann.fontSize || stageState.fontSize || p.fontSize || 20;
-      const fontF = ann.fontFamily || stageState.fontFamily || p.fontFamily || "'Architects Daughter', cursive, sans-serif";
-      const boxStyle = ann.boxStyle || stageState.boxStyle || p.boxStyle || 'bracket';
-      const isEditing = Boolean(ann._isEditingText);
-
-      const bounds = this.measureTextBounds(ann.text || '', fontS, fontF);
-      const padX = boxStyle !== 'none' ? 8 : 4;
-      const padY = boxStyle !== 'none' ? 4 : 2;
-      const boxW = (isEditing && ann._liveEditSize) ? ann._liveEditSize.width : (bounds.maxW + padX * 2);
-      const boxH = (isEditing && ann._liveEditSize) ? ann._liveEditSize.height : (bounds.totalH + padY * 2);
-
-      const col = ann.color || '#00e676';
-      const isSelected = (stageState.selectedItem === ann);
-      const isNeon = (ann.lineStyle === 'neon');
-      const coreTint = isNeon ? this.component.strokeManager.getLuminousCoreColor(col) : col;
-
-      const showBackdrop = Boolean(p.textBoxBgEnabled && (p.textBoxBgOpacity === undefined || p.textBoxBgOpacity > 0.02));
-      const bgColor = p.textBoxBgColor || '#090d16';
-      const bgOpacity = p.textBoxBgOpacity !== undefined ? p.textBoxBgOpacity : 0.55;
-      const bgBlur = p.textBoxBgBlur !== undefined ? p.textBoxBgBlur : 4.0;
-      const borderW = p.borderStrokeWidth || 2.4;
-
-      const glowMode = p.textGlowMode || 'match';
-      const useNeonText = (glowMode === 'neon') || (glowMode === 'match' && isNeon);
-      const useShadowText = (glowMode === 'shadow') || (glowMode === 'match' && !isNeon);
-      const useHalo = Boolean((p.textReadabilityHalo === true) || glowMode === 'halo');
-      const glowSpread = p.textGlowSpread !== undefined ? p.textGlowSpread : 3.5;
-      const glowOpacity = p.textGlowOpacity !== undefined ? p.textGlowOpacity : 0.92;
-      const textFill = useNeonText ? coreTint : col;
-      const curveGlowPad = p.curveGlowWidth !== undefined ? p.curveGlowWidth : 10.0;
-
-      const bD = `M ${ann.x} ${ann.y} L ${ann.x} ${ann.y + boxH} L ${ann.x + boxW} ${ann.y + boxH}`;
-      const badgeElementsMap = {};
-
-      if (useShadowText) {
-        const shadowG = makeElement('svg:g', { transform: 'translate(2, 2)', style: { pointerEvents: 'none' } });
-        if (boxStyle === 'bracket') {
-          shadowG.appendChild(makeElement('svg:path', {
-            d: bD, fill: 'none', stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': String(borderW + 2.0), 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
-          }));
-        } else if (boxStyle === 'box' || boxStyle === 'pill') {
-          shadowG.appendChild(makeElement('svg:rect', {
-            x: ann.x, y: ann.y, width: boxW, height: boxH, rx: boxStyle === 'pill' ? '18' : '5',
-            fill: 'none', stroke: 'rgba(10, 15, 25, 0.95)', 'stroke-width': String(borderW + 2.0)
-          }));
-        }
-        if (!isEditing) {
-          const txtShadow = makeElement('svg:text', {
-            x: ann.x + padX, y: ann.y + padY + fontS * 0.88, fill: 'rgba(10, 15, 25, 0.92)',
-            'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold'
-          });
-          bounds.lines.forEach((l, i) => {
-            txtShadow.appendChild(makeElement('svg:tspan', { x: ann.x + padX, dy: i === 0 ? '0' : `${bounds.lineHeight}px` }, l));
-          });
-          shadowG.appendChild(txtShadow);
-        }
-        this.component.shadowLayer.appendChild(shadowG);
-        badgeElementsMap.shadow = shadowG;
-      }
-
-      if (useNeonText) {
-        const glowG = makeElement('svg:g', { style: { pointerEvents: 'none', opacity: String(glowOpacity) } });
-        if (boxStyle === 'bracket') {
-          glowG.appendChild(makeElement('svg:path', {
-            d: bD, fill: 'none', stroke: col, 'stroke-width': String(borderW + curveGlowPad), 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-            style: { filter: 'url(#qa-neon-glow)' }
-          }));
-        } else if (boxStyle === 'box' || boxStyle === 'pill') {
-          glowG.appendChild(makeElement('svg:rect', {
-            x: ann.x, y: ann.y, width: boxW, height: boxH, rx: boxStyle === 'pill' ? '18' : '5',
-            fill: 'none', stroke: col, 'stroke-width': String(borderW + curveGlowPad), style: { filter: 'url(#qa-neon-glow)' }
-          }));
-        }
-        if (!isEditing) {
-          const txtGlow = makeElement('svg:text', {
-            x: ann.x + padX, y: ann.y + padY + fontS * 0.88, fill: col,
-            stroke: glowSpread > 0 ? col : 'none', 'stroke-width': String(glowSpread), 'stroke-linejoin': 'round',
-            'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold',
-            style: { filter: 'url(#qa-text-glow)' }
-          });
-          bounds.lines.forEach((l, i) => {
-            txtGlow.appendChild(makeElement('svg:tspan', { x: ann.x + padX, dy: i === 0 ? '0' : `${bounds.lineHeight}px` }, l));
-          });
-          glowG.appendChild(txtGlow);
-        }
-        this.component.glowLayer.appendChild(glowG);
-        badgeElementsMap.glow = glowG;
-      }
-
-      const g = makeElement('svg:g', {
-        id: `badge-${ann.id}`,
-        className: 'qa-movable-text-badge',
-        style: { cursor: 'move', userSelect: 'none' },
-        title: 'Click to edit text • Drag to move'
-      });
-
-      if (showBackdrop) {
-        g.appendChild(makeElement('svg:rect', {
-          x: ann.x - 3, y: ann.y - 2, width: boxW + 6, height: boxH + 4, rx: boxStyle === 'pill' ? '20' : '8',
-          fill: bgColor, 'fill-opacity': String(bgOpacity), stroke: 'none',
-          ...(bgBlur > 0 ? { style: { filter: 'url(#qa-text-bg-blur)', pointerEvents: 'none' } } : { style: { pointerEvents: 'none' } })
-        }));
-      }
-
-      g.appendChild(makeElement('svg:rect', {
-        x: ann.x, y: ann.y, width: boxW, height: boxH, rx: boxStyle === 'pill' ? '18' : '5',
-        fill: 'rgba(255, 255, 255, 0.001)', stroke: 'none'
-      }));
-
-      if (isSelected && !isEditing) {
-        g.appendChild(makeElement('svg:rect', {
-          x: ann.x - 3, y: ann.y - 3, width: boxW + 6, height: boxH + 6, rx: '6',
-          fill: 'none', stroke: '#00f2fe', 'stroke-width': '1.5', 'stroke-dasharray': '3,3',
-          style: { filter: 'drop-shadow(0 0 6px #00f2fe)', pointerEvents: 'none' }
-        }));
-      }
-
-      if (boxStyle === 'bracket') {
-        g.appendChild(makeElement('svg:path', {
-          d: bD, fill: 'none', stroke: textFill, 'stroke-width': String(borderW),
-          'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-          ...(useNeonText ? { style: { filter: 'url(#qa-neon-core)' } } : {})
-        }));
-      } else if (boxStyle === 'box' || boxStyle === 'pill') {
-        g.appendChild(makeElement('svg:rect', {
-          x: ann.x, y: ann.y, width: boxW, height: boxH, rx: boxStyle === 'pill' ? '18' : '5',
-          fill: 'none', stroke: textFill, 'stroke-width': String(borderW),
-          ...(useNeonText ? { style: { filter: 'url(#qa-neon-core)' } } : {})
-        }));
-      }
-
-      if (!isEditing) {
-        if (useHalo) {
-          const txtHalo = makeElement('svg:text', {
-            x: ann.x + padX, y: ann.y + padY + fontS * 0.88,
-            fill: 'rgba(7, 10, 19, 0.90)', stroke: 'rgba(7, 10, 19, 0.90)', 'stroke-width': '2.8',
-            'stroke-linejoin': 'round', 'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold',
-            style: { pointerEvents: 'none' }
-          });
-          bounds.lines.forEach((l, i) => {
-            txtHalo.appendChild(makeElement('svg:tspan', { x: ann.x + padX, dy: i === 0 ? '0' : `${bounds.lineHeight}px` }, l));
-          });
-          g.appendChild(txtHalo);
-        }
-
-        const txt = makeElement('svg:text', {
-          x: ann.x + padX, y: ann.y + padY + fontS * 0.88, fill: textFill,
-          'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold',
-          ...(useNeonText ? { style: { filter: 'url(#qa-neon-core)' } } : {})
-        });
-        bounds.lines.forEach((l, i) => {
-          txt.appendChild(makeElement('svg:tspan', { x: ann.x + padX, dy: i === 0 ? '0' : `${bounds.lineHeight}px` }, l));
-        });
-        g.appendChild(txt);
-      }
-
-      let isDrag = false;
-      let didDrag = false;
-      let sX = 0, sY = 0;
-      let initialX = ann.x, initialY = ann.y;
-
-      g.addEventListener('mousedown', (e) => {
-        if (e.button === 2) return;
-        e.preventDefault();
-        e.stopPropagation();
-        this.component.selectItem(ann);
-        isDrag = true;
-        didDrag = false;
-        sX = e.clientX; sY = e.clientY;
-        initialX = ann.x; initialY = ann.y;
-
-        const onM = (ev) => {
-          if (!isDrag) return;
-          if (Math.hypot(ev.clientX - sX, ev.clientY - sY) > 4) {
-            didDrag = true;
-            window.getSelection()?.removeAllRanges();
-            const z = stageState.zoom || 1.0;
-            ann.x = Math.round(initialX + (ev.clientX - sX) / z);
-            ann.y = Math.round(initialY + (ev.clientY - sY) / z);
-            this.component.renderStage();
-          }
-        };
-        const onU = () => {
-          isDrag = false;
-          window.removeEventListener('mousemove', onM);
-          window.removeEventListener('mouseup', onU);
-          if (!didDrag) this.promptInlineTailText(ann, [ann.x, ann.y], 'left');
-          else this.component.renderStage();
-        };
-        window.addEventListener('mousemove', onM);
-        window.addEventListener('mouseup', onU);
-      });
-
-      textBadgesLayer.appendChild(g);
-      badgeElementsMap.fg = g;
-      ann._badgeElements = badgeElementsMap;
+    if (ann._badgeElements) {
+      Object.values(ann._badgeElements).forEach(el => el?.remove?.());
+      ann._badgeElements = null;
     }
 
+    const p = stageState.prefs || {};
+    const fontS = ann.fontSize || stageState.fontSize || p.fontSize || 20;
+    const fontF = ann.fontFamily || stageState.fontFamily || p.fontFamily || "'Architects Daughter', cursive, sans-serif";
+    const boxStyle = ann.boxStyle || stageState.boxStyle || p.boxStyle || 'bracket';
+    const isEditing = Boolean(ann._isEditingText);
+
+    const bounds = this.measureTextBounds(ann.text || '', fontS, fontF);
+    const padX = boxStyle !== 'none' ? 8 : 4;
+    const padY = boxStyle !== 'none' ? 4 : 2;
+    const boxW = (isEditing && ann._liveEditSize) ? ann._liveEditSize.width : (bounds.maxW + padX * 2);
+    const boxH = (isEditing && ann._liveEditSize) ? ann._liveEditSize.height : (bounds.totalH + padY * 2);
+    const bD = `M ${ann.x} ${ann.y} L ${ann.x} ${ann.y + boxH} L ${ann.x + boxW} ${ann.y + boxH}`;
+
+    const layers = this._buildStyledTextLayers({
+      p, col: ann.color || '#00e676', isNeon: ann.lineStyle === 'neon', isEditing, bounds,
+      posX: ann.x, posY: ann.y, boxW, boxH, padY, textAnchorX: ann.x + padX,
+      textAnchorType: 'start', boxStyle, dBracket: bD, fontS, fontF,
+      id: `badge-${ann.id}`, className: 'qa-movable-text-badge',
+      drawSelectionRect: stageState.selectedItem === ann && !isEditing
+    });
+
+    this._bindTextDrag(
+      layers.fg, stageState,
+      () => {
+        this.component.selectItem(ann);
+        return { x: ann.x, y: ann.y };
+      },
+      (dx, dy, orig) => {
+        ann.x = Math.round(orig.x + dx);
+        ann.y = Math.round(orig.y + dy);
+        this.component.renderStage();
+      },
+      () => this.component.renderStage(),
+      () => this.promptInlineTailText(ann, [ann.x, ann.y], 'left')
+    );
+
+    textBadgesLayer.appendChild(layers.fg);
+    ann._badgeElements = layers;
+  }
   computeTextPlacement(anchorPt, exitVec, boxW, boxH, forcedEdge = null) {
       const threshold = this.component?.stageState?.prefs?.axisThreshold ?? 15;
       return StudioGeometry.computeTextBoxPlacement(anchorPt, exitVec, boxW, boxH, forcedEdge, threshold);
@@ -898,6 +550,145 @@ class QuoraTextManager {
       const totalH = Math.max(lineHeight, lines.length * lineHeight);
       return { lines, maxW, totalH, lineHeight };
     }
+
+  _bindTextDrag(targetEl, st, onBeforeDrag, onDragDelta, onDone, onClickOnly) {
+      let dragging = false;
+      let didDrag = false;
+      let startX = 0, startY = 0;
+
+      targetEl.addEventListener('mousedown', (e) => {
+        if (e.button === 2) return;
+        e.preventDefault();
+        e.stopPropagation();
+        // Alt/Meta = reshape just the attached endpoint; otherwise the whole entity moves
+        this.component._dragAlt = Boolean(e.altKey || e.metaKey);
+        dragging = true;
+        didDrag = false;
+        startX = e.clientX;
+        startY = e.clientY;
+        const orig = onBeforeDrag ? onBeforeDrag() : null;
+
+        const onMove = (ev) => {
+          if (!dragging) return;
+          if (!didDrag && Math.hypot(ev.clientX - startX, ev.clientY - startY) <= 4) return;
+          didDrag = true;
+          window.getSelection()?.removeAllRanges();
+          const z = st.zoom || 1.0;
+          onDragDelta((ev.clientX - startX) / z, (ev.clientY - startY) / z, orig);
+        };
+
+        const onUp = () => {
+          dragging = false;
+          window.removeEventListener('mousemove', onMove);
+          window.removeEventListener('mouseup', onUp);
+          if (!didDrag) onClickOnly();
+          else if (onDone) onDone();
+        };
+
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+      });
+    }
+  _buildStyledTextLayers(cfg) {
+    const comp = this.component;
+    const {
+      p, col, isNeon, isEditing, bounds, posX, posY, boxW, boxH,
+      padY, textAnchorX, textAnchorType, boxStyle, dBracket, fontS, fontF,
+      id, className, drawSelectionRect
+    } = cfg;
+
+    const coreTint = isNeon ? comp.strokeManager.getLuminousCoreColor(col) : col;
+    const glowMode = p.textGlowMode || 'match';
+    const useNeon = glowMode === 'neon' || (glowMode === 'match' && isNeon);
+    const useShadow = glowMode === 'shadow' || (glowMode === 'match' && !isNeon);
+    const useHalo = Boolean(p.textReadabilityHalo === true || glowMode === 'halo');
+    const textFill = useNeon ? coreTint : col;
+    const borderW = p.borderStrokeWidth || 2.4;
+    const glowSpread = p.textGlowSpread !== undefined ? p.textGlowSpread : 3.5;
+    const glowOpacity = p.textGlowOpacity !== undefined ? p.textGlowOpacity : 0.92;
+    const curveGlowPad = p.curveGlowWidth !== undefined ? p.curveGlowWidth : 10.0;
+    const radius = boxStyle === 'pill' ? '18' : '5';
+    const textY = posY + padY + fontS * 0.88;
+
+    const makeSvgText = (attrs) => makeElement(
+      'svg:text',
+      { x: textAnchorX, y: textY, 'font-family': fontF, 'font-size': `${fontS}px`, 'font-weight': 'bold', 'text-anchor': textAnchorType, ...attrs },
+      bounds.lines.map((l, i) => makeElement('svg:tspan', { x: textAnchorX, dy: i === 0 ? '0' : `${bounds.lineHeight}px` }, l))
+    );
+
+    const makeFrame = (stroke, width, extra = {}) => {
+      if (boxStyle === 'bracket' && dBracket) {
+        return makeElement('svg:path', {
+          d: dBracket, fill: 'none', stroke, 'stroke-width': String(width),
+          'stroke-linecap': 'round', 'stroke-linejoin': 'round', ...extra
+        });
+      }
+      if (boxStyle === 'box' || boxStyle === 'pill') {
+        return makeElement('svg:rect', {
+          x: posX, y: posY, width: boxW, height: boxH, rx: radius,
+          fill: 'none', stroke, 'stroke-width': String(width), ...extra
+        });
+      }
+      return null;
+    };
+
+    const result = {};
+
+    if (useShadow) {
+      const shadowG = makeElement('svg:g', { transform: 'translate(2, 2)', style: { pointerEvents: 'none' } }, [
+        makeFrame('rgba(10, 15, 25, 0.95)', borderW + 2.0),
+        !isEditing ? makeSvgText({ fill: 'rgba(10, 15, 25, 0.92)' }) : null
+      ].filter(Boolean));
+      comp.shadowLayer.appendChild(shadowG);
+      result.shadow = shadowG;
+    }
+
+    if (useNeon) {
+      const glowG = makeElement('svg:g', { style: { pointerEvents: 'none', opacity: String(glowOpacity) } }, [
+        makeFrame(col, borderW + curveGlowPad, { style: { filter: 'url(#qa-neon-glow)' } }),
+        !isEditing ? makeSvgText({
+          fill: col, stroke: glowSpread > 0 ? col : 'none',
+          'stroke-width': String(glowSpread), 'stroke-linejoin': 'round',
+          style: { filter: 'url(#qa-text-glow)' }
+        }) : null
+      ].filter(Boolean));
+      comp.glowLayer.appendChild(glowG);
+      result.glow = glowG;
+    }
+
+    const showBackdrop = Boolean(p.textBoxBgEnabled && (p.textBoxBgOpacity === undefined || p.textBoxBgOpacity > 0.02));
+    const bgBlur = p.textBoxBgBlur !== undefined ? p.textBoxBgBlur : 4.0;
+    const fgChildren = [
+      showBackdrop ? makeElement('svg:rect', {
+        x: posX - 3, y: posY - 2, width: boxW + 6, height: boxH + 4, rx: boxStyle === 'pill' ? '20' : '8',
+        fill: p.textBoxBgColor || '#090d16', 'fill-opacity': String(p.textBoxBgOpacity ?? 0.55), stroke: 'none',
+        style: { pointerEvents: 'none', ...(bgBlur > 0 ? { filter: 'url(#qa-text-bg-blur)' } : {}) }
+      }) : null,
+      makeElement('svg:rect', { x: posX, y: posY, width: boxW, height: boxH, rx: radius, fill: 'rgba(255, 255, 255, 0.001)', stroke: 'none' }),
+      drawSelectionRect ? makeElement('svg:rect', {
+        x: posX - 3, y: posY - 3, width: boxW + 6, height: boxH + 6, rx: '6',
+        fill: 'none', stroke: '#00f2fe', 'stroke-width': '1.5', 'stroke-dasharray': '3,3',
+        style: { filter: 'drop-shadow(0 0 6px #00f2fe)', pointerEvents: 'none' }
+      }) : null,
+      makeFrame(textFill, borderW, useNeon ? { style: { filter: 'url(#qa-neon-core)' } } : {}),
+      !isEditing && useHalo ? makeSvgText({
+        fill: 'rgba(7, 10, 19, 0.90)', stroke: 'rgba(7, 10, 19, 0.90)',
+        'stroke-width': '2.8', 'stroke-linejoin': 'round', style: { pointerEvents: 'none' }
+      }) : null,
+      !isEditing ? makeSvgText({
+        fill: textFill, ...(useNeon ? { style: { filter: 'url(#qa-neon-core)' } } : {})
+      }) : null
+    ].filter(Boolean);
+
+    result.fg = makeElement('svg:g', {
+      ...(id ? { id } : {}),
+      className,
+      style: { cursor: 'move', userSelect: 'none' },
+      title: 'Click to edit text • Drag to reposition'
+    }, fgChildren);
+
+    return result;
+  }
 }
 
 globalThis.QuoraTextManager = QuoraTextManager;

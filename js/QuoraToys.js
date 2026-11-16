@@ -940,48 +940,40 @@ class QuoraToys {
     if (!this.solutionCanvas || !this.sourceImage) return;
 
     const tf = this._getCanvasTransform();
+    const w = tf.cropW, h = tf.cropH;
     this.solutionCanvas.width = tf.canvasWidth;
     this.solutionCanvas.height = tf.canvasHeight;
     const ctx = this.solutionCanvas.getContext('2d');
 
-    const w = tf.cropW;
-    const h = tf.cropH;
+    const makeSnap = (sx, sy) => {
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(this.sourceImage, sx, sy, w, h, 0, 0, w, h);
+      return c;
+    };
 
-    const cropCanvas = document.createElement('canvas');
-    cropCanvas.width = w;
-    cropCanvas.height = h;
-    const cropCtx = cropCanvas.getContext('2d');
-    cropCtx.drawImage(this.sourceImage, tf.cropX, tf.cropY, w, h, 0, 0, w, h);
-
-    const baseCanvas = document.createElement('canvas');
-    baseCanvas.width = w;
-    baseCanvas.height = h;
-    const baseCtx = baseCanvas.getContext('2d');
-    let baseOriginX = tf.cropX;
-    let baseOriginY = tf.cropY;
+    const cropCanvas = makeSnap(tf.cropX, tf.cropY);
+    let baseOriginX = tf.cropX, baseOriginY = tf.cropY;
     if (this.overlayDialog && this.overlayViewport && this.mainImgElement) {
       const mainRect = this.mainImgElement.getBoundingClientRect();
       const ovRect = this.overlayViewport.getBoundingClientRect();
       baseOriginX = (ovRect.left - mainRect.left) / this.zoom;
       baseOriginY = (ovRect.top - mainRect.top) / this.zoom;
     }
-    baseCtx.drawImage(this.sourceImage, baseOriginX, baseOriginY, w, h, 0, 0, w, h);
+    const baseCanvas = makeSnap(baseOriginX, baseOriginY);
 
     ctx.clearRect(0, 0, tf.canvasWidth, tf.canvasHeight);
-
     if (this.solutionBgMode === 'gradient') {
-      const bgGrad = ctx.createLinearGradient(0, 0, tf.canvasWidth, tf.canvasHeight);
-      bgGrad.addColorStop(0, '#090d16');
-      bgGrad.addColorStop(1, '#0f172a');
-      ctx.fillStyle = bgGrad;
+      const grad = ctx.createLinearGradient(0, 0, tf.canvasWidth, tf.canvasHeight);
+      grad.addColorStop(0, '#090d16');
+      grad.addColorStop(1, '#0f172a');
+      ctx.fillStyle = grad;
       ctx.fillRect(0, 0, tf.canvasWidth, tf.canvasHeight);
     } else if (this.solutionBgMode === 'color') {
       ctx.fillStyle = this.solutionBgColor;
       ctx.fillRect(0, 0, tf.canvasWidth, tf.canvasHeight);
     }
-    // 'transparent' leaves the alpha channel completely clear outside the scene
 
-    // Scene Container
     ctx.save();
     ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
     ctx.shadowBlur = 16;
@@ -1005,90 +997,48 @@ class QuoraToys {
     ctx.lineWidth = 1.5;
     ctx.strokeRect(tf.offsetX, tf.offsetY, w, h);
 
-    // Anchors & Tangents
     this.diffCircles.forEach(diff => {
-      const origX = diff.cropX + tf.offsetX;
-      const origY = diff.cropY + tf.offsetY;
-      const dragX = diff.dragX + tf.offsetX;
-      const dragY = diff.dragY + tf.offsetY;
+      const ox = diff.cropX + tf.offsetX, oy = diff.cropY + tf.offsetY;
+      const dx = diff.dragX + tf.offsetX, dy = diff.dragY + tf.offsetY;
       const r = diff.radius;
       const col = diff.color || this.solutionOutlineColor;
 
-      const isDragged = Math.hypot(dragX - origX, dragY - origY) > (r * 1.05);
-
       if (this.solutionBlendAnchor) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(origX, origY, r, 0, Math.PI * 2);
-        ctx.clip();
-        ctx.drawImage(cropCanvas, origX - diff.cropX, origY - diff.cropY);
-        ctx.globalAlpha = 0.5;
-        ctx.drawImage(baseCanvas, origX - diff.cropX, origY - diff.cropY);
-        ctx.restore();
+        this._drawClippedCircle(ctx, cropCanvas, ox, oy, r, ox - diff.cropX, oy - diff.cropY, 1.0);
+        this._drawClippedCircle(ctx, baseCanvas, ox, oy, r, ox - diff.cropX, oy - diff.cropY, 0.5);
       }
 
-      if (isDragged) {
+      if (Math.hypot(dx - ox, dy - oy) > r * 1.05) {
         ctx.save();
         ctx.strokeStyle = col;
         ctx.lineWidth = 2;
         ctx.setLineDash([4, 4]);
         ctx.beginPath();
-        ctx.arc(origX, origY, r, 0, Math.PI * 2);
+        ctx.arc(ox, oy, r, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
       }
-    });
 
-    // Callout Magnifier Pairs
-    this.diffCircles.forEach((diff, idx) => {
-      const origX = diff.cropX;
-      const origY = diff.cropY;
-      const dragX = diff.dragX + tf.offsetX;
-      const dragY = diff.dragY + tf.offsetY;
-      const r = diff.radius;
-      const col = diff.color || this.solutionOutlineColor;
+      const ang = Math.hypot(diff.dragX - diff.cropX, diff.dragY - diff.cropY) >= 0.5
+        ? Math.atan2(diff.dragY - diff.cropY, diff.dragX - diff.cropX) + Math.PI / 2 : 0;
+      const cosA = Math.cos(ang), sinA = Math.sin(ang);
+      const c1x = dx - r * cosA, c1y = dy - r * sinA;
+      const c2x = dx + r * cosA, c2y = dy + r * sinA;
 
-      const ang = (Math.hypot(diff.dragX - diff.cropX, diff.dragY - diff.cropY) >= 0.5)
-        ? Math.atan2(diff.dragY - diff.cropY, diff.dragX - diff.cropX) + Math.PI / 2
-        : 0;
+      this._drawClippedCircle(ctx, cropCanvas, c1x, c1y, r, c1x - diff.cropX, c1y - diff.cropY);
+      this._drawClippedCircle(ctx, baseCanvas, c2x, c2y, r, c2x - diff.cropX, c2y - diff.cropY);
 
-      const cosA = Math.cos(ang);
-      const sinA = Math.sin(ang);
-      const c1x = dragX - r * cosA;
-      const c1y = dragY - r * sinA;
-      const c2x = dragX + r * cosA;
-      const c2y = dragY + r * sinA;
-
-      // Circle 1 (Image A)
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(c1x, c1y, r, 0, Math.PI * 2);
-      ctx.clip();
-      ctx.drawImage(cropCanvas, c1x - origX, c1y - origY);
-      ctx.restore();
-
-      // Circle 2 (Image B)
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(c2x, c2y, r, 0, Math.PI * 2);
-      ctx.clip();
-      ctx.drawImage(baseCanvas, c2x - origX, c2y - origY);
-      ctx.restore();
-
-      // Outlines
       ctx.save();
       ctx.strokeStyle = col;
       ctx.lineWidth = this.solutionOutlineWidth;
-      ctx.beginPath();
-      ctx.arc(c1x, c1y, r, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(c2x, c2y, r, 0, Math.PI * 2);
-      ctx.stroke();
+      [[c1x, c1y], [c2x, c2y]].forEach(([cx, cy]) => {
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+      });
       ctx.restore();
     });
   }
-
   openSolutionStudio() {
     if (this.solutionDialog) {
       this.solutionDialog.bringToFront();
@@ -1257,6 +1207,16 @@ class QuoraToys {
         }
       }, 180);
     }
+
+  _drawClippedCircle(ctx, img, cx, cy, r, drawX, drawY, alpha = 1.0) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.clip();
+    if (alpha !== 1.0) ctx.globalAlpha = alpha;
+    ctx.drawImage(img, drawX, drawY);
+    ctx.restore();
+  }
 }
 
 globalThis.QuoraToys = QuoraToys;
