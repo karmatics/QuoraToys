@@ -129,250 +129,262 @@ class QuoraAnnotationComponent {
   }
 
   build(container) {
-      this.initPreferences();
-      const st = this.stageState;
-      this.ensureFontLoaded(st.fontFamily);
-      const isHosted = Boolean(document.querySelector('.dr-nav-bar'));
+        this.initPreferences();
+        const st = this.stageState;
+        this.ensureFontLoaded(st.fontFamily);
+        const isHosted = Boolean(document.querySelector('.dr-nav-bar'));
 
-      const navBtn = (label, opts = {}, onClick) => {
-        const { primary, style, ...rest } = opts;
-        return makeElement('button', {
-          className: `dr-nav-btn ${primary ? 'primary' : ''}`,
-          style: { padding: '2px 8px', fontSize: '10.5px', ...style },
-          onclick: onClick,
-          ...rest
-        }, label);
-      };
+        const navBtn = (label, opts = {}, onClick) => {
+          const { primary, style, ...rest } = opts;
+          return makeElement('button', {
+            className: `dr-nav-btn ${primary ? 'primary' : ''}`,
+            style: { padding: '2px 8px', fontSize: '10.5px', ...style },
+            onclick: onClick,
+            ...rest
+          }, label);
+        };
 
-      const makeSegGroup = (labelText, buttons) => makeElement('div', {
-        style: {
-          display: 'inline-flex', alignItems: 'center', gap: '2px',
-          background: '#070a13', border: '1px solid #1e293b', borderRadius: '16px', padding: '2px'
-        }
-      }, [
-        labelText ? makeElement('span', { style: { fontSize: '9.5px', color: '#64748b', padding: '0 5px', fontWeight: 'bold' } }, labelText) : null,
-        ...buttons
-      ].filter(Boolean));
-
-      const localFileInput = makeElement('input', {
-        type: 'file', accept: 'image/*', style: { display: 'none' },
-        onchange: (e) => {
-          const f = e.target.files?.[0];
-          if (!f) return;
-          const reader = new FileReader();
-          reader.onload = (ev) => {
-            const img = new Image();
-            img.onload = () => this.addNewImagePlate(img, 60, 60);
-            img.src = ev.target.result;
-          };
-          reader.readAsDataURL(f);
-        }
-      });
-
-      const header = makeElement('div', {
-        style: {
-          padding: '5px 10px', background: 'rgba(15, 23, 42, 0.96)', borderBottom: '1px solid #1e293b',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px', flexShrink: '0'
-        }
-      }, [
-        makeElement('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, [
-          makeElement('span', { style: { fontSize: '15px' } }, '🎨'),
-          makeElement('strong', { style: { fontSize: '12.5px', color: '#00f2fe' } }, 'QuoraToys Studio'),
-          makeElement('span', {
-            id: 'qa-status-pill',
-            style: { fontSize: '10px', background: 'rgba(0, 242, 254, 0.12)', color: '#94a3b8', padding: '2px 8px', borderRadius: '12px' }
-          }, 'Drag to draw • Back up to erase • Click "Note…" or curve to type')
-        ]),
-        makeElement('div', { style: { display: 'flex', gap: '5px', alignItems: 'center', flexWrap: 'wrap' } }, [
-          navBtn('✨ Clean UI', { style: { padding: '3px 9px', color: '#ffd700', borderColor: 'rgba(255, 215, 0, 0.45)' }, title: 'Launch Clean Studio UI' }, () => {
-            if (typeof QuoraCleanStudioDialog !== 'undefined') QuoraCleanStudioDialog.open({ sourceComponent: this });
-          }),
-          navBtn('✨ Style & Settings', { style: { padding: '3px 9px', color: '#00f2fe', borderColor: 'rgba(0, 242, 254, 0.45)' }, title: 'Typography, glow & export settings' }, () => this.openAestheticTunerDialog()),
-          navBtn('📑 Layers', { style: { padding: '3px 8px', color: '#00e676', borderColor: 'rgba(0, 230, 118, 0.4)' } }, () => this.openLayerHierarchyDialog()),
-          navBtn('🧩 Spot Diff', { style: { padding: '3px 8px', color: '#38bdf8', borderColor: 'rgba(56, 189, 248, 0.4)' } }, () => this.openSpotDiffWorkflow()),
-          navBtn('📁 Image', { style: { padding: '3px 8px', color: '#cbd5e1' } }, () => this.imageManager.promptAddImageWorkflow(st, localFileInput)),
-          navBtn('📖 Docs', { style: { padding: '3px 8px', color: '#c084fc', borderColor: 'rgba(192, 132, 252, 0.45)' } }, () => {
-            if (globalThis._quoraToysAppInstance?.openDocsView) globalThis._quoraToysAppInstance.openDocsView('studio');
-            else window.open('documentation.html', '_blank');
-          }),
-          navBtn('📋 Copy PNG', { primary: true, style: { padding: '3px 10px', fontWeight: 'bold', background: '#238636', borderColor: '#2ea043' }, title: 'Copy PNG [Ctrl+C]' }, (e) => this.copyCompositeToClipboard(e.currentTarget, 'native', false)),
-          navBtn('💾', { style: { padding: '3px 7px', color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.45)' }, title: 'Save PNG file' }, (e) => this.copyCompositeToClipboard(e.currentTarget, 'native', true))
-        ])
-      ]);
-
-      const setTool = (mode) => {
-        st.activeTool = mode;
-        this.toolBtns.curve?.classList.toggle('primary', mode === 'curve');
-        this.toolBtns.paint?.classList.toggle('primary', mode === 'paint');
-        this.brushControlsRibbon.style.display = mode === 'paint' ? 'flex' : 'none';
-        this.showKnotToast(mode === 'curve' ? '🪢 Curve Tool Active' : '🖌️ Paint / Eraser Active');
-      };
-
-      this.toolBtns = {
-        curve: navBtn('🪢 Curve', { primary: true }, () => setTool('curve')),
-        paint: navBtn('🖌️ Paint', { style: { color: '#f59e0b' } }, () => setTool('paint'))
-      };
-      this.styleBtns = {
-        classic: navBtn('🖋️ Ink', { primary: st.lineStyle !== 'neon', title: 'Solid ink stroke with crisp drop shadow' }, () => this.setLineStyle('classic')),
-        neon: navBtn('💡 Neon', { primary: st.lineStyle === 'neon', title: 'Luminous glowing plasma stroke' }, () => this.setLineStyle('neon'))
-      };
-
-      const curArrow = st.arrowMode || (st.hasArrow ? 'tip' : 'none');
-      this.arrowModeBtns = {};
-      [
-        ['none', 'Off', 'No arrowhead [A]'],
-        ['tip', '➔ Tip', 'Arrow at start [A]'],
-        ['tail', '⬅ Tail', 'Arrow at end [A]'],
-        ['both', '↔', 'Arrows at both ends [A]']
-      ].forEach(([id, lbl, title]) => {
-        this.arrowModeBtns[id] = navBtn(lbl, { primary: curArrow === id, style: { padding: '2px 7px', fontSize: '10px' }, title }, () => this.setArrowMode(id));
-      });
-
-      const curArrowStyle = st.arrowStyle || 'concave';
-      this.arrowStyleBtns = {};
-      [
-        ['concave', 'Swept', 'Classic swept concave arrowhead'],
-        ['architectural', 'Arch', 'Tight architectural drafting arrowhead'],
-        ['dot', '● Dot', 'Architectural leader dot termination']
-      ].forEach(([id, lbl, title]) => {
-        this.arrowStyleBtns[id] = navBtn(lbl, { primary: curArrowStyle === id, style: { padding: '2px 7px', fontSize: '10px' }, title }, () => this.setArrowStyle(id));
-      });
-
-      this.fontSizeBadge = makeElement('span', { style: { color: '#ffd700', fontWeight: 'bold', fontSize: '10px', minWidth: '30px', textAlign: 'center' } }, `${st.fontSize || 20}px`);
-      this.widthValueLbl = makeElement('span', { style: { color: '#00f2fe', fontWeight: 'bold', fontSize: '10px', minWidth: '34px', textAlign: 'center' } }, `${st.curveStrokeWidth || 3.2}px`);
-      this.loopBtn = navBtn('○ Loop', { style: { color: '#00f2fe' }, title: 'Toggle closed loop ring [L]' }, () => this.toggleLoopMode());
-
-      this.colorIndicatorDot = makeElement('span', {
-        style: {
-          width: '12px', height: '12px', borderRadius: '3px',
-          background: st.currentColor || '#00e676', display: 'inline-block',
-          border: '1px solid rgba(255,255,255,0.85)'
-        }
-      });
-      this.colorPickerBtn = makeElement('button', {
-        className: 'dr-nav-btn',
-        style: { padding: '2px 8px', fontSize: '10.5px', display: 'inline-flex', alignItems: 'center', gap: '5px', borderColor: 'rgba(0, 242, 254, 0.45)' },
-        title: 'Color Palette [Keys 1-6]',
-        onclick: (e) => this.launchColorPicker('curve', e.currentTarget)
-      }, [this.colorIndicatorDot, makeElement('span', { style: { fontWeight: '700' } }, 'Color')]);
-
-      const ribbon = makeElement('div', {
-        style: {
-          padding: '4px 10px', background: 'rgba(11, 17, 32, 0.98)', borderBottom: '1px solid #1e293b',
-          display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', fontSize: '10.5px', color: '#cbd5e1', flexShrink: '0'
-        }
-      }, [
-        makeSegGroup('', [this.toolBtns.curve, this.toolBtns.paint]),
-        makeSegGroup('Style:', [this.styleBtns.classic, this.styleBtns.neon]),
-        makeSegGroup('Arrow:', Object.values(this.arrowModeBtns)),
-        makeSegGroup('Tip:', Object.values(this.arrowStyleBtns)),
-        makeSegGroup('', [
-          navBtn('💬 Text', { title: 'Add or edit note [T or Enter]' }, () => this.triggerTextOnActiveOrCanvas()),
-          navBtn('A-', { style: { padding: '2px 6px', fontSize: '10px' }, title: 'Smaller text' }, () => this.adjustFontSize(-2)),
-          this.fontSizeBadge,
-          navBtn('A+', { style: { padding: '2px 6px', fontSize: '10px' }, title: 'Larger text' }, () => this.adjustFontSize(2))
-        ]),
-        makeSegGroup('Width:', [
-          navBtn('−', { style: { padding: '2px 6px', fontSize: '10px' } }, () => this.cycleStrokeWidth(-0.5)),
-          this.widthValueLbl,
-          navBtn('+', { style: { padding: '2px 6px', fontSize: '10px' } }, () => this.cycleStrokeWidth(0.5))
-        ]),
-        this.colorPickerBtn,
-        this.loopBtn,
-        navBtn('⇄ Flip', { style: { padding: '2px 7px', fontSize: '10px', color: '#ffd700' }, title: 'Swap arrow & text ends [X]' }, () => this.swapActiveCurveTerminals()),
-        navBtn('📏 Line', { style: { padding: '2px 7px', fontSize: '10px', color: '#38bdf8' }, title: 'Straighten curve into line [S]' }, () => this.executeKeyInCommand('straighten')),
-        navBtn('⌨️ Keys', { style: { padding: '2px 7px', color: '#94a3b8' } }, () => {
-          const h = document.getElementById('qa-keyin-matrix-hud');
-          if (h) h.style.display = h.style.display === 'none' ? 'flex' : 'none';
-          else this.setupKeyInMatrixHud();
-        }),
-        navBtn('↺ Undo', { style: { color: '#f59e0b', marginLeft: 'auto' } }, () => this.undoLastAnnotation())
-      ]);
-
-      const brushSizeLabel = makeElement('span', {}, `Size: ${st.brushSize}px`);
-      const softnessLabel = makeElement('span', {}, `Feather: ${st.brushSoftness}px`);
-      this.brushControlsRibbon = makeElement('div', {
-        style: {
-          padding: '5px 12px', background: 'rgba(24, 15, 30, 0.94)', borderBottom: '1px solid rgba(245, 158, 11, 0.25)',
-          display: 'none', alignItems: 'center', gap: '10px', fontSize: '11px', color: '#f8fafc', flexWrap: 'wrap', flexShrink: '0'
-        }
-      }, [
-        makeElement('strong', { style: { color: '#f59e0b' } }, 'Brush:'),
-        makeElement('select', {
-          style: { background: '#0d1117', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.4)', borderRadius: '4px', padding: '2px 6px', fontSize: '10.5px', fontFamily: 'monospace', outline: 'none' },
-          onchange: (e) => { st.brushMode = e.target.value; }
+        const makeSegGroup = (labelText, buttons) => makeElement('div', {
+          style: {
+            display: 'inline-flex', alignItems: 'center', gap: '2px',
+            background: '#070a13', border: '1px solid #1e293b', borderRadius: '16px', padding: '2px'
+          }
         }, [
-          makeElement('option', { value: 'freehand' }, '🖌️ Freehand Mask'),
-          makeElement('option', { value: 'erase' }, '🧹 Erase Image Alpha'),
-          makeElement('option', { value: 'rect' }, '◻ Rect Mask'),
-          makeElement('option', { value: 'oval' }, '⭕ Oval Mask')
-        ]),
-        makeElement('input', {
-          type: 'range', min: '8', max: '140', value: String(st.brushSize),
-          style: { width: '80px', accentColor: '#f59e0b', cursor: 'pointer' },
-          oninput: (e) => { st.brushSize = parseInt(e.target.value, 10); brushSizeLabel.textContent = `Size: ${st.brushSize}px`; }
-        }),
-        brushSizeLabel,
-        makeElement('input', {
-          type: 'range', min: '0', max: '25', value: String(st.brushSoftness),
-          style: { width: '80px', accentColor: '#00f2fe', cursor: 'pointer' },
-          oninput: (e) => { st.brushSoftness = parseInt(e.target.value, 10); softnessLabel.textContent = `Feather: ${st.brushSoftness}px`; this.updateSvgBlurFilter(); }
-        }),
-        softnessLabel
-      ]);
+          labelText ? makeElement('span', { style: { fontSize: '9.5px', color: '#64748b', padding: '0 5px', fontWeight: 'bold' } }, labelText) : null,
+          ...buttons
+        ].filter(Boolean));
 
-      this.sceneCanvas = makeElement('canvas', { style: { position: 'absolute', top: 0, left: 0, display: 'block', borderRadius: '4px' } });
-      this.svgDefs = makeElement('svg:defs');
-      this.diffSvgLayer = makeElement('svg:g', { className: 'qa-diff-tangents', style: { pointerEvents: 'none' } });
-      this.paintLayer = makeElement('svg:g', { className: 'qa-blockout-paint-layer', style: { pointerEvents: 'none' } });
-      this.glowLayer = makeElement('svg:g', { className: 'qa-glow-hover-layer', style: { pointerEvents: 'none' } });
-      this.shadowLayer = makeElement('svg:g', { className: 'qa-crisp-shadows', style: { pointerEvents: 'none' } });
-      this.strokeLayer = makeElement('svg:g', { className: 'qa-crisp-strokes', style: { pointerEvents: 'none' } });
-      this.textBadgesLayer = makeElement('svg:g', { className: 'qa-curve-attached-text' });
-      this.controlsLayer = makeElement('svg:g', { className: 'qa-interactive-controls' });
-      this.hudDialLayer = makeElement('svg:g', { className: 'qa-heads-up-dial-layer', style: { pointerEvents: 'auto' } });
+        const localFileInput = makeElement('input', {
+          type: 'file', accept: 'image/*', style: { display: 'none' },
+          onchange: (e) => {
+            const f = e.target.files?.[0];
+            if (!f) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+              const img = new Image();
+              img.onload = () => this.addNewImagePlate(img, 60, 60);
+              img.src = ev.target.result;
+            };
+            reader.readAsDataURL(f);
+          }
+        });
+        this._localFileInput = localFileInput;
 
-      this.svgSurface = makeElement('svg:svg', {
-        id: 'quora-vector-svg',
-        style: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', overflow: 'visible', pointerEvents: 'auto' }
-      }, [
-        this.svgDefs, this.diffSvgLayer, this.paintLayer, this.glowLayer, this.shadowLayer,
-        this.strokeLayer, this.textBadgesLayer, this.controlsLayer, this.hudDialLayer
-      ]);
-      this.updateSvgBlurFilter();
+        const header = makeElement('div', {
+          style: {
+            padding: '5px 10px', background: 'rgba(15, 23, 42, 0.96)', borderBottom: '1px solid #1e293b',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px', flexShrink: '0'
+          }
+        }, [
+          makeElement('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, [
+            makeElement('span', { style: { fontSize: '15px' } }, '🎨'),
+            makeElement('strong', { style: { fontSize: '12.5px', color: '#00f2fe' } }, 'QuoraToys Studio'),
+            makeElement('span', {
+              id: 'qa-status-pill',
+              style: { fontSize: '10px', background: 'rgba(0, 242, 254, 0.12)', color: '#94a3b8', padding: '2px 8px', borderRadius: '12px' }
+            }, 'Drag to draw • Pull points to bend • Click "Note…" or curve for text • Drop/Ctrl+V images')
+          ]),
+          makeElement('div', { style: { display: 'flex', gap: '5px', alignItems: 'center', flexWrap: 'wrap' } }, [
+            navBtn('❓ Guide', { style: { padding: '3px 9px', color: '#ffd700', borderColor: 'rgba(255, 215, 0, 0.45)' }, title: 'Toggle Quick-Start Guide' }, () => this.toggleWelcomeOverlay()),
+            navBtn('✨ Clean UI', { style: { padding: '3px 9px', color: '#ffd700', borderColor: 'rgba(255, 215, 0, 0.45)' }, title: 'Launch Clean Studio UI' }, () => {
+              if (typeof QuoraCleanStudioDialog !== 'undefined') QuoraCleanStudioDialog.open({ sourceComponent: this });
+            }),
+            navBtn('✨ Style & Settings', { style: { padding: '3px 9px', color: '#00f2fe', borderColor: 'rgba(0, 242, 254, 0.45)' }, title: 'Typography, glow & export settings' }, () => this.openAestheticTunerDialog()),
+            navBtn('📑 Layers', { style: { padding: '3px 8px', color: '#00e676', borderColor: 'rgba(0, 230, 118, 0.4)' } }, () => this.openLayerHierarchyDialog()),
+            navBtn('🧩 Spot Diff', { style: { padding: '3px 8px', color: '#38bdf8', borderColor: 'rgba(56, 189, 248, 0.4)' } }, () => this.openSpotDiffWorkflow()),
+            navBtn('📁 Image', { style: { padding: '3px 8px', color: '#cbd5e1' } }, () => this.imageManager.promptAddImageWorkflow(st, localFileInput)),
+            navBtn('📖 Docs', { style: { padding: '3px 8px', color: '#c084fc', borderColor: 'rgba(192, 132, 252, 0.45)' } }, () => {
+              if (globalThis._quoraToysAppInstance?.openDocsView) globalThis._quoraToysAppInstance.openDocsView('studio');
+              else window.open('documentation.html', '_blank');
+            }),
+            navBtn('📋 Copy PNG', { primary: true, style: { padding: '3px 10px', fontWeight: 'bold', background: '#238636', borderColor: '#2ea043' }, title: 'Copy PNG [Ctrl+C]' }, (e) => this.copyCompositeToClipboard(e.currentTarget, 'native', false)),
+            navBtn('💾', { style: { padding: '3px 7px', color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.45)' }, title: 'Save PNG file' }, (e) => this.copyCompositeToClipboard(e.currentTarget, 'native', true))
+          ])
+        ]);
 
-      this.stageBox = makeElement('div', {
-        id: 'quora-composite-stage',
-        style: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'transparent', overflow: 'visible' }
-      }, [this.sceneCanvas, this.svgSurface]);
-      this.setupEdgePullHandles();
+        const setTool = (mode) => {
+          st.activeTool = mode;
+          this.toolBtns.curve?.classList.toggle('primary', mode === 'curve');
+          this.toolBtns.paint?.classList.toggle('primary', mode === 'paint');
+          this.brushControlsRibbon.style.display = mode === 'paint' ? 'flex' : 'none';
+          this.showKnotToast(mode === 'curve' ? '🪢 Curve Tool Active' : '🖌️ Paint / Eraser Active');
+        };
 
-      this.zoomScaffold = makeElement('div', {
-        style: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', transformOrigin: '0 0' }
-      }, [this.stageBox]);
+        this.toolBtns = {
+          curve: navBtn('🪢 Curve', { primary: true }, () => setTool('curve')),
+          paint: navBtn('🖌️ Paint', { style: { color: '#f59e0b' } }, () => setTool('paint'))
+        };
+        this.styleBtns = {
+          classic: navBtn('🖋️ Ink', { primary: st.lineStyle !== 'neon', title: 'Solid ink stroke with crisp drop shadow' }, () => this.setLineStyle('classic')),
+          neon: navBtn('💡 Neon', { primary: st.lineStyle === 'neon', title: 'Luminous glowing plasma stroke' }, () => this.setLineStyle('neon'))
+        };
 
-      this.viewport = makeElement('div', {
-        style: {
-          position: 'relative', width: '100%', flex: '1', minHeight: '0', overflow: 'hidden',
-          background: 'radial-gradient(circle at 50% 25%, #151e33 0%, #0b0f19 100%)', display: 'block', padding: '0', boxSizing: 'border-box'
-        }
-      }, [this.zoomScaffold]);
+        const curArrow = st.arrowMode || (st.hasArrow ? 'tip' : 'none');
+        this.arrowModeBtns = {};
+        [
+          ['none', 'Off', 'No arrowhead [A]'],
+          ['tip', '➔ Tip', 'Arrow at start [A]'],
+          ['tail', '⬅ Tail', 'Arrow at end [A]'],
+          ['both', '↔', 'Arrows at both ends [A]']
+        ].forEach(([id, lbl, title]) => {
+          this.arrowModeBtns[id] = navBtn(lbl, { primary: curArrow === id, style: { padding: '2px 7px', fontSize: '10px' }, title }, () => this.setArrowMode(id));
+        });
 
-      const wrap = makeElement('div', {
-        style: {
-          background: '#070a13', border: isHosted ? '1px solid #1e293b' : 'none',
-          borderRadius: isHosted ? '8px' : '0', overflow: 'hidden', boxShadow: '0 16px 40px rgba(0,0,0,0.65)',
-          display: 'flex', flexDirection: 'column', fontFamily: 'monospace', width: '100%',
-          height: isHosted ? 'calc(100vh - 68px)' : '100vh', minHeight: '540px', margin: '0', boxSizing: 'border-box'
-        }
-      }, [localFileInput, header, ribbon, this.brushControlsRibbon, this.viewport]);
+        const curArrowStyle = st.arrowStyle || 'concave';
+        this.arrowStyleBtns = {};
+        [
+          ['concave', 'Swept', 'Classic swept concave arrowhead'],
+          ['architectural', 'Arch', 'Tight architectural drafting arrowhead'],
+          ['dot', '● Dot', 'Architectural leader dot termination']
+        ].forEach(([id, lbl, title]) => {
+          this.arrowStyleBtns[id] = navBtn(lbl, { primary: curArrowStyle === id, style: { padding: '2px 7px', fontSize: '10px' }, title }, () => this.setArrowStyle(id));
+        });
 
-      this.setupInteractions();
-      this.setupZoomWheel();
-      this.setupPasteAndDropListener();
-      this.renderStage();
-      container.appendChild(wrap);
-    }
+        this.fontSizeBadge = makeElement('span', { style: { color: '#ffd700', fontWeight: 'bold', fontSize: '10px', minWidth: '30px', textAlign: 'center' } }, `${st.fontSize || 20}px`);
+        this.widthValueLbl = makeElement('span', { style: { color: '#00f2fe', fontWeight: 'bold', fontSize: '10px', minWidth: '34px', textAlign: 'center' } }, `${st.curveStrokeWidth || 3.2}px`);
+        this.loopBtn = navBtn('○ Loop', { style: { color: '#00f2fe' }, title: 'Toggle closed loop ring [L]' }, () => this.toggleLoopMode());
+
+        this.colorIndicatorDot = makeElement('span', {
+          style: {
+            width: '12px', height: '12px', borderRadius: '3px',
+            background: st.currentColor || '#00e676', display: 'inline-block',
+            border: '1px solid rgba(255,255,255,0.85)'
+          }
+        });
+        this.colorPickerBtn = makeElement('button', {
+          className: 'dr-nav-btn',
+          style: { padding: '2px 8px', fontSize: '10.5px', display: 'inline-flex', alignItems: 'center', gap: '5px', borderColor: 'rgba(0, 242, 254, 0.45)' },
+          title: 'Color Palette [Keys 1-6]',
+          onclick: (e) => this.launchColorPicker('curve', e.currentTarget)
+        }, [this.colorIndicatorDot, makeElement('span', { style: { fontWeight: '700' } }, 'Color')]);
+
+        const ribbon = makeElement('div', {
+          style: {
+            padding: '4px 10px', background: 'rgba(11, 17, 32, 0.98)', borderBottom: '1px solid #1e293b',
+            display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', fontSize: '10.5px', color: '#cbd5e1', flexShrink: '0'
+          }
+        }, [
+          makeSegGroup('', [this.toolBtns.curve, this.toolBtns.paint]),
+          makeSegGroup('Style:', [this.styleBtns.classic, this.styleBtns.neon]),
+          makeSegGroup('Arrow:', Object.values(this.arrowModeBtns)),
+          makeSegGroup('Tip:', Object.values(this.arrowStyleBtns)),
+          makeSegGroup('', [
+            navBtn('💬 Text', { title: 'Add or edit note [T or Enter]' }, () => this.triggerTextOnActiveOrCanvas()),
+            navBtn('A-', { style: { padding: '2px 6px', fontSize: '10px' }, title: 'Smaller text' }, () => this.adjustFontSize(-2)),
+            this.fontSizeBadge,
+            navBtn('A+', { style: { padding: '2px 6px', fontSize: '10px' }, title: 'Larger text' }, () => this.adjustFontSize(2))
+          ]),
+          makeSegGroup('Width:', [
+            navBtn('−', { style: { padding: '2px 6px', fontSize: '10px' } }, () => this.cycleStrokeWidth(-0.5)),
+            this.widthValueLbl,
+            navBtn('+', { style: { padding: '2px 6px', fontSize: '10px' } }, () => this.cycleStrokeWidth(0.5))
+          ]),
+          this.colorPickerBtn,
+          this.loopBtn,
+          navBtn('⇄ Flip', { style: { padding: '2px 7px', fontSize: '10px', color: '#ffd700' }, title: 'Swap arrow & text ends [X]' }, () => this.swapActiveCurveTerminals()),
+          navBtn('📏 Line', { style: { padding: '2px 7px', fontSize: '10px', color: '#38bdf8' }, title: 'Straighten curve into line [S]' }, () => this.executeKeyInCommand('straighten')),
+          navBtn('⌨️ Keys', { style: { padding: '2px 7px', color: '#94a3b8' } }, () => {
+            const h = document.getElementById('qa-keyin-matrix-hud');
+            if (h) h.style.display = h.style.display === 'none' ? 'flex' : 'none';
+            else this.setupKeyInMatrixHud();
+          }),
+          navBtn('↺ Undo', { style: { color: '#f59e0b', marginLeft: 'auto' } }, () => this.undoLastAnnotation())
+        ]);
+
+        const brushSizeLabel = makeElement('span', {}, `Size: ${st.brushSize}px`);
+        const softnessLabel = makeElement('span', {}, `Feather: ${st.brushSoftness}px`);
+        this.brushControlsRibbon = makeElement('div', {
+          style: {
+            padding: '5px 12px', background: 'rgba(24, 15, 30, 0.94)', borderBottom: '1px solid rgba(245, 158, 11, 0.25)',
+            display: 'none', alignItems: 'center', gap: '10px', fontSize: '11px', color: '#f8fafc', flexWrap: 'wrap', flexShrink: '0'
+          }
+        }, [
+          makeElement('strong', { style: { color: '#f59e0b' } }, 'Brush:'),
+          makeElement('select', {
+            style: { background: '#0d1117', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.4)', borderRadius: '4px', padding: '2px 6px', fontSize: '10.5px', fontFamily: 'monospace', outline: 'none' },
+            onchange: (e) => { st.brushMode = e.target.value; }
+          }, [
+            makeElement('option', { value: 'freehand' }, '🖌️ Freehand Mask'),
+            makeElement('option', { value: 'erase' }, '🧹 Erase Image Alpha'),
+            makeElement('option', { value: 'rect' }, '◻ Rect Mask'),
+            makeElement('option', { value: 'oval' }, '⭕ Oval Mask')
+          ]),
+          makeElement('input', {
+            type: 'range', min: '8', max: '140', value: String(st.brushSize),
+            style: { width: '80px', accentColor: '#f59e0b', cursor: 'pointer' },
+            oninput: (e) => { st.brushSize = parseInt(e.target.value, 10); brushSizeLabel.textContent = `Size: ${st.brushSize}px`; }
+          }),
+          brushSizeLabel,
+          makeElement('input', {
+            type: 'range', min: '0', max: '25', value: String(st.brushSoftness),
+            style: { width: '80px', accentColor: '#00f2fe', cursor: 'pointer' },
+            oninput: (e) => { st.brushSoftness = parseInt(e.target.value, 10); softnessLabel.textContent = `Feather: ${st.brushSoftness}px`; this.updateSvgBlurFilter(); }
+          }),
+          softnessLabel
+        ]);
+
+        this.sceneCanvas = makeElement('canvas', { style: { position: 'absolute', top: 0, left: 0, display: 'block', borderRadius: '4px' } });
+        this.svgDefs = makeElement('svg:defs');
+        this.diffSvgLayer = makeElement('svg:g', { className: 'qa-diff-tangents', style: { pointerEvents: 'none' } });
+        this.paintLayer = makeElement('svg:g', { className: 'qa-blockout-paint-layer', style: { pointerEvents: 'none' } });
+        this.glowLayer = makeElement('svg:g', { className: 'qa-glow-hover-layer', style: { pointerEvents: 'none' } });
+        this.shadowLayer = makeElement('svg:g', { className: 'qa-crisp-shadows', style: { pointerEvents: 'none' } });
+        this.strokeLayer = makeElement('svg:g', { className: 'qa-crisp-strokes', style: { pointerEvents: 'none' } });
+        this.textBadgesLayer = makeElement('svg:g', { className: 'qa-curve-attached-text' });
+        this.controlsLayer = makeElement('svg:g', { className: 'qa-interactive-controls' });
+        this.hudDialLayer = makeElement('svg:g', { className: 'qa-heads-up-dial-layer', style: { pointerEvents: 'auto' } });
+
+        this.svgSurface = makeElement('svg:svg', {
+          id: 'quora-vector-svg',
+          style: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', overflow: 'visible', pointerEvents: 'auto' }
+        }, [
+          this.svgDefs, this.diffSvgLayer, this.paintLayer, this.glowLayer, this.shadowLayer,
+          this.strokeLayer, this.textBadgesLayer, this.controlsLayer, this.hudDialLayer
+        ]);
+        this.updateSvgBlurFilter();
+
+        this.stageBox = makeElement('div', {
+          id: 'quora-composite-stage',
+          style: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'transparent', overflow: 'visible' }
+        }, [this.sceneCanvas, this.svgSurface]);
+        this.setupEdgePullHandles();
+
+        this.zoomScaffold = makeElement('div', {
+          style: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', transformOrigin: '0 0' }
+        }, [this.stageBox]);
+
+        this._welcomeOverlay = this._buildWelcomeOverlay();
+
+        this.viewport = makeElement('div', {
+          style: {
+            position: 'relative', width: '100%', flex: '1', minHeight: '0', overflow: 'hidden',
+            background: 'radial-gradient(circle at 50% 25%, #151e33 0%, #0b0f19 100%)', display: 'block', padding: '0', boxSizing: 'border-box'
+          }
+        }, [this.zoomScaffold, this._welcomeOverlay]);
+
+        this.viewport.addEventListener('mousedown', (e) => {
+          if (!e.target.closest('.qa-welcome-action-btn')) {
+            this._forceShowWelcome = false;
+            this._welcomeDismissed = true;
+            this._syncWelcomeOverlay();
+          }
+        }, true);
+
+        const wrap = makeElement('div', {
+          style: {
+            background: '#070a13', border: isHosted ? '1px solid #1e293b' : 'none',
+            borderRadius: isHosted ? '8px' : '0', overflow: 'hidden', boxShadow: '0 16px 40px rgba(0,0,0,0.65)',
+            display: 'flex', flexDirection: 'column', fontFamily: 'monospace', width: '100%',
+            height: isHosted ? 'calc(100vh - 68px)' : '100vh', minHeight: '540px', margin: '0', boxSizing: 'border-box'
+          }
+        }, [localFileInput, header, ribbon, this.brushControlsRibbon, this.viewport]);
+
+        this.setupInteractions();
+        this.setupZoomWheel();
+        this.setupPasteAndDropListener();
+        this.renderStage();
+        container.appendChild(wrap);
+      }
   updateSvgBlurFilter() {
       if (typeof applyCss === 'function') {
         applyCss(`
@@ -1254,67 +1266,68 @@ class QuoraAnnotationComponent {
   }
 
   renderStage() {
-      if (!this.imageManager) this.imageManager = new QuoraImageManager(this);
-      if (!this.textManager) this.textManager = new QuoraTextManager(this);
+        if (!this.imageManager) this.imageManager = new QuoraImageManager(this);
+        if (!this.textManager) this.textManager = new QuoraTextManager(this);
 
-      const tf = this.computeAutoBounds();
-      this.stageBox.style.width = `${tf.totalW}px`;
-      this.stageBox.style.height = `${tf.totalH}px`;
+        const tf = this.computeAutoBounds();
+        this.stageBox.style.width = `${tf.totalW}px`;
+        this.stageBox.style.height = `${tf.totalH}px`;
 
-      const sizeChanged = (this.sceneCanvas.width !== tf.totalW || this.sceneCanvas.height !== tf.totalH);
-      this.sceneCanvas.width = tf.totalW;
-      this.sceneCanvas.height = tf.totalH;
-      if (sizeChanged) this.updateSvgBlurFilter();
+        const sizeChanged = (this.sceneCanvas.width !== tf.totalW || this.sceneCanvas.height !== tf.totalH);
+        this.sceneCanvas.width = tf.totalW;
+        this.sceneCanvas.height = tf.totalH;
+        if (sizeChanged) this.updateSvgBlurFilter();
 
-      const ctx = this.sceneCanvas.getContext('2d');
-      ctx.clearRect(0, 0, tf.totalW, tf.totalH);
+        const ctx = this.sceneCanvas.getContext('2d');
+        ctx.clearRect(0, 0, tf.totalW, tf.totalH);
 
-      if (this.stageState.canvasBgMode === 'matte') {
-        ctx.fillStyle = this.stageState.canvasBgColor || '#090d16';
-        ctx.fillRect(0, 0, tf.totalW, tf.totalH);
-      }
+        if (this.stageState.canvasBgMode === 'matte') {
+          ctx.fillStyle = this.stageState.canvasBgColor || '#090d16';
+          ctx.fillRect(0, 0, tf.totalW, tf.totalH);
+        }
 
-      (this.stageState.placedImages || []).forEach(plate => {
-        if (plate._hasAlphaEdits) {
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(plate.x, plate.y, plate.width, plate.height);
-          ctx.clip();
-          const sq = 10;
-          for (let cy = plate.y; cy < plate.y + plate.height; cy += sq) {
-            for (let cx = plate.x; cx < plate.x + plate.width; cx += sq) {
-              const odd = ((Math.floor((cx - plate.x) / sq) + Math.floor((cy - plate.y) / sq)) % 2) === 1;
-              ctx.fillStyle = odd ? '#1e293b' : '#0f172a';
-              ctx.fillRect(cx, cy, sq, sq);
+        (this.stageState.placedImages || []).forEach(plate => {
+          if (plate._hasAlphaEdits) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(plate.x, plate.y, plate.width, plate.height);
+            ctx.clip();
+            const sq = 10;
+            for (let cy = plate.y; cy < plate.y + plate.height; cy += sq) {
+              for (let cx = plate.x; cx < plate.x + plate.width; cx += sq) {
+                const odd = ((Math.floor((cx - plate.x) / sq) + Math.floor((cy - plate.y) / sq)) % 2) === 1;
+                ctx.fillStyle = odd ? '#1e293b' : '#0f172a';
+                ctx.fillRect(cx, cy, sq, sq);
+              }
             }
+            ctx.restore();
           }
+
+          ctx.save();
+          ctx.globalAlpha = (plate.opacity !== undefined) ? plate.opacity : 1.0;
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+          ctx.shadowBlur = 12;
+          ctx.drawImage(plate.img, plate.x, plate.y, plate.width, plate.height);
           ctx.restore();
+        });
+
+        this.renderDiffCallouts();
+
+        this.textBadgesLayer.innerHTML = '';
+        (this.stageState.annotations || []).forEach(ann => {
+          if (ann.type === 'text_badge') {
+            this.renderDirectTextBadgeSvg(ann);
+          } else if (ann.type === 'curve' && ann.beziers?.length > 0) {
+            this.textManager.renderCurveAttachedTextSvg(ann, this.textBadgesLayer, this.stageState);
+          }
+        });
+
+        this.imageManager.renderControls(this.controlsLayer, this.stageState);
+        if (this.hudDialLayer && typeof this.imageManager.renderExportBoundsOverlay === 'function') {
+          this.imageManager.renderExportBoundsOverlay(this.hudDialLayer, this.stageState);
         }
-
-        ctx.save();
-        ctx.globalAlpha = (plate.opacity !== undefined) ? plate.opacity : 1.0;
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
-        ctx.shadowBlur = 12;
-        ctx.drawImage(plate.img, plate.x, plate.y, plate.width, plate.height);
-        ctx.restore();
-      });
-
-      this.renderDiffCallouts();
-
-      this.textBadgesLayer.innerHTML = '';
-      (this.stageState.annotations || []).forEach(ann => {
-        if (ann.type === 'text_badge') {
-          this.renderDirectTextBadgeSvg(ann);
-        } else if (ann.type === 'curve' && ann.beziers?.length > 0) {
-          this.textManager.renderCurveAttachedTextSvg(ann, this.textBadgesLayer, this.stageState);
-        }
-      });
-
-      this.imageManager.renderControls(this.controlsLayer, this.stageState);
-      if (this.hudDialLayer && typeof this.imageManager.renderExportBoundsOverlay === 'function') {
-        this.imageManager.renderExportBoundsOverlay(this.hudDialLayer, this.stageState);
+        this._syncWelcomeOverlay();
       }
-    }
   renderCurveAttachedTextSvg(ann) {
       if (!this.textManager) this.textManager = new QuoraTextManager(this);
       return this.textManager.renderCurveAttachedTextSvg(ann, this.textBadgesLayer, this.stageState);
@@ -2617,6 +2630,140 @@ class QuoraAnnotationComponent {
       const labels = { concave: 'Swept Arrow', architectural: 'Architectural Dart', dot: '● Leader Dot' };
       this.showKnotToast(`Tip: ${labels[valid]}`);
     }
+
+  _buildWelcomeOverlay() {
+        const tips = [
+          {
+            icon: '〰️',
+            col: '#00f2fe',
+            title: 'Drag to Draw Curves & Arrows',
+            desc: 'Click & drag anywhere on the canvas! The 32px string-tether smooths hand wobble. Back up into the cursor ring to erase, or hold Shift for straight lines.'
+          },
+          {
+            icon: '🎯',
+            col: '#00e676',
+            title: 'Pull Points & Bend Curves',
+            desc: 'Grab any curve segment to bend it like a rubber wire, drag glowing knots to reshape, click midpoint dots to split, or Alt+Drag to move a whole arrow.'
+          },
+          {
+            icon: '💬',
+            col: '#ffd700',
+            title: 'Turn On Text & Toggle Styles',
+            desc: 'Click any curve (or its pale "Note…" box), double-click the canvas, or press T / Enter to type callouts. Switch Arrow (Tip/Tail/Both), Ink/Neon, Loop & Colors above.'
+          },
+          {
+            icon: '🖼️',
+            col: '#c084fc',
+            title: 'Drop or Paste Images (Ctrl+V)',
+            desc: 'Drag & drop image files or web pictures right onto this canvas, or press Ctrl+V to paste a screenshot. Use Paint → Erase Alpha, then hit Copy PNG for Quora!'
+          }
+        ];
+
+        const card = makeElement('div', {
+          style: {
+            maxWidth: '640px', width: '100%',
+            background: 'rgba(11, 17, 32, 0.90)',
+            border: '1.5px solid rgba(0, 242, 254, 0.4)',
+            borderRadius: '14px',
+            padding: '18px 20px',
+            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.75), 0 0 28px rgba(0, 242, 254, 0.12)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            color: '#f8fafc',
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            display: 'flex', flexDirection: 'column', gap: '12px',
+            pointerEvents: 'none'
+          }
+        }, [
+          makeElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' } }, [
+            makeElement('div', {}, [
+              makeElement('div', { style: { fontFamily: 'monospace', fontSize: '10.5px', fontWeight: '800', color: '#00f2fe', letterSpacing: '0.08em', textTransform: 'uppercase' } }, '✨ Quick Start — Start Drawing Anywhere Around or Over This Card'),
+              makeElement('h2', { style: { fontSize: '1.25rem', fontWeight: '800', margin: '3px 0 0 0', color: '#f8fafc' } }, 'Kinetic Curve & Image Markup Studio')
+            ]),
+            makeElement('button', {
+              className: 'dr-nav-btn qa-welcome-action-btn',
+              style: { pointerEvents: 'auto', padding: '3px 9px', fontSize: '11px', color: '#94a3b8' },
+              onclick: (e) => {
+                e.stopPropagation();
+                this._welcomeDismissed = true;
+                this._forceShowWelcome = false;
+                this._syncWelcomeOverlay();
+              }
+            }, '✕ Hide')
+          ]),
+
+          makeElement('div', {
+            style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '10px' }
+          }, tips.map(t => makeElement('div', {
+            style: {
+              background: 'rgba(6, 10, 20, 0.8)', border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderLeft: `3px solid ${t.col}`, borderRadius: '8px', padding: '9px 11px'
+            }
+          }, [
+            makeElement('strong', { style: { display: 'block', fontSize: '12px', color: t.col, marginBottom: '3px' } }, `${t.icon} ${t.title}`),
+            makeElement('div', { style: { fontSize: '11.5px', color: '#cbd5e1', lineHeight: '1.45' } }, t.desc)
+          ]))),
+
+          makeElement('div', {
+            style: {
+              background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.35)',
+              borderRadius: '8px', padding: '8px 12px', fontSize: '11.5px', color: '#fde68a',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px'
+            }
+          }, [
+            makeElement('span', {}, '🎬 Video Tutorial Coming Soon — A guided walkthrough showing curves, point pulling, text callouts, and image markup is on the way.'),
+            makeElement('span', { style: { fontFamily: 'monospace', fontSize: '10.5px', color: '#f59e0b', fontWeight: 'bold' } }, 'Click & drag anywhere to begin!')
+          ]),
+
+          makeElement('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' } }, [
+            makeElement('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', pointerEvents: 'auto' } }, [
+              makeElement('button', {
+                className: 'dr-nav-btn primary qa-welcome-action-btn',
+                style: { padding: '5px 12px', fontSize: '11px' },
+                onclick: (e) => { e.stopPropagation(); this._localFileInput?.click(); }
+              }, '📁 Drop or Choose Image'),
+              makeElement('button', {
+                className: 'dr-nav-btn qa-welcome-action-btn',
+                style: { padding: '5px 12px', fontSize: '11px', color: '#00f2fe', borderColor: 'rgba(0, 242, 254, 0.45)' },
+                onclick: (e) => { e.stopPropagation(); this.pasteFromClipboardAction(); }
+              }, '📥 Paste Clipboard (Ctrl+V)')
+            ]),
+            makeElement('span', { style: { fontFamily: 'monospace', fontSize: '10.5px', color: '#64748b' } }, 'Reopen anytime with ❓ Guide')
+          ])
+        ]);
+
+        return makeElement('div', {
+          id: 'qa-welcome-guide-overlay',
+          style: {
+            position: 'absolute', inset: '0', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '18px', zIndex: '35', pointerEvents: 'none'
+          }
+        }, [card]);
+      }
+
+  _syncWelcomeOverlay() {
+        if (!this._welcomeOverlay) return;
+        const st = this.stageState;
+        const hasContent = (st.placedImages?.length > 0) || (st.annotations?.length > 0) || (st.diffCallouts?.length > 0);
+        if (hasContent && !this._forceShowWelcome) {
+          this._welcomeOverlay.style.display = 'none';
+          return;
+        }
+        this._welcomeOverlay.style.display = (this._forceShowWelcome || (!hasContent && !this._welcomeDismissed)) ? 'flex' : 'none';
+      }
+
+  toggleWelcomeOverlay() {
+        if (!this._welcomeOverlay) return;
+        const isShown = this._welcomeOverlay.style.display !== 'none';
+        if (isShown) {
+          this._forceShowWelcome = false;
+          this._welcomeDismissed = true;
+        } else {
+          this._forceShowWelcome = true;
+          this._welcomeDismissed = false;
+        }
+        this._syncWelcomeOverlay();
+      }
 }
 
 globalThis.QuoraAnnotationComponent = QuoraAnnotationComponent;

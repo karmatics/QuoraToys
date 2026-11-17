@@ -144,69 +144,78 @@ class QuoraCleanStudioDialog {
   }
 
   launch() {
-      this._injectStyles();
-      const w = Math.min(1180, Math.max(680, window.innerWidth - 70));
-      const h = Math.min(760, Math.max(480, window.innerHeight - 60));
+        this._injectStyles();
+        const w = Math.min(1180, Math.max(680, window.innerWidth - 70));
+        const h = Math.min(760, Math.max(480, window.innerHeight - 60));
 
-      const root = makeElement('div', { className: 'qcs-root' });
-      this._buildTopBar(root);
+        const root = makeElement('div', { className: 'qcs-root' });
+        this._buildTopBar(root);
 
-      const workspace = makeElement('div', { className: 'qcs-workspace' });
-      this.railEl = makeElement('div', { className: 'qcs-rail' });
-      this._renderToolRail();
+        const workspace = makeElement('div', { className: 'qcs-workspace' });
+        this.railEl = makeElement('div', { className: 'qcs-rail' });
+        this._renderToolRail();
 
-      this.viewport = makeElement('div', { className: 'qcs-viewport' });
-      this.zoomScaffold = makeElement('div', {
-        style: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', transformOrigin: '0 0' }
-      });
-      this.stageWrap = makeElement('div', {
-        style: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }
-      });
+        this.viewport = makeElement('div', { className: 'qcs-viewport' });
+        this.zoomScaffold = makeElement('div', {
+          style: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', transformOrigin: '0 0' }
+        });
+        this.stageWrap = makeElement('div', {
+          style: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }
+        });
 
-      this.zoomScaffold.appendChild(this.stageWrap);
-      this.viewport.appendChild(this.zoomScaffold);
+        this.zoomScaffold.appendChild(this.stageWrap);
+        this.viewport.appendChild(this.zoomScaffold);
 
-      this.toastEl = makeElement('div', { className: 'qcs-toast' });
-      this.inspectorBar = makeElement('div', { className: 'qcs-inspector-bar' });
-      this.settingsPopover = this._buildSettingsPopover();
+        this.toastEl = makeElement('div', { className: 'qcs-toast' });
+        this.inspectorBar = makeElement('div', { className: 'qcs-inspector-bar' });
+        this.settingsPopover = this._buildSettingsPopover();
+        this.welcomePromptEl = this._buildWelcomePrompt();
 
-      this.viewport.append(this.toastEl, this.inspectorBar, this.settingsPopover);
-      workspace.append(this.railEl, this.viewport);
-      root.appendChild(workspace);
+        this.viewport.append(this.toastEl, this.welcomePromptEl, this.inspectorBar, this.settingsPopover);
+        this.viewport.addEventListener('mousedown', (e) => {
+          if (!e.target.closest('.qcs-welcome-action, .qcs-inspector-bar, .qcs-settings-popover')) {
+            this._welcomeHidden = true;
+            this._syncWelcomePrompt();
+          }
+        }, true);
 
-      const dialogMaker = (typeof UITools !== 'undefined' && typeof UITools.makeDialog === 'function')
-        ? UITools.makeDialog
-        : (opts => new DialogBox(opts));
+        workspace.append(this.railEl, this.viewport);
+        root.appendChild(workspace);
 
-      this.dialog = dialogMaker({
-        title: '✨ QuoraToys Clean Studio (Extensible UI)',
-        size: [w, h],
-        position: [Math.max(16, Math.round((window.innerWidth - w) / 2)), Math.max(16, Math.round((window.innerHeight - h) / 2))],
-        noPadding: true,
-        allowMaximize: true,
-        stateId: 'quora_clean_studio_v1',
-        contentElement: root,
-        onClose: () => this._cleanup()
-      });
+        const dialogMaker = (typeof UITools !== 'undefined' && typeof UITools.makeDialog === 'function')
+          ? UITools.makeDialog
+          : (opts => new DialogBox(opts));
 
-      this.renderer = new StudioSvgRenderer(this.engine, this.stageWrap, {
-        onEditText: (ann, anchorPt, forcedEdge) => this._openInlineText(ann, anchorPt, forcedEdge),
-        onTextMouseDown: (ann, e) => this._handleTextBadgeDrag(ann, e),
-        onKnotMouseDown: (curve, idx, e) => this._handleKnotDrag(curve, idx, e),
-        onTangentMouseDown: (curve, idx, side, e) => this._handleTangentDrag(curve, idx, side, e),
-        onKnotContextMenu: (curve, idx, e) => this._openKnotMenu(curve, idx, e),
-        onMidpointMouseDown: (curve, segIdx, e) => this._handleMidpointSplitDrag(curve, segIdx, e),
-        onImageMouseDown: (plate, e) => this._handleImageDrag(plate, e),
-        onImageGripMouseDown: (plate, cornerId, e) => this._handleImageResize(plate, cornerId, e),
-        onCalloutGripMouseDown: (ann, cornerId, e) => this._handleCalloutResize(ann, cornerId, e)
-      });
+        this.dialog = dialogMaker({
+          title: '✨ QuoraToys Clean Studio (Extensible UI)',
+          size: [w, h],
+          position: [Math.max(16, Math.round((window.innerWidth - w) / 2)), Math.max(16, Math.round((window.innerHeight - h) / 2))],
+          noPadding: true,
+          allowMaximize: true,
+          stateId: 'quora_clean_studio_v1',
+          contentElement: root,
+          onClose: () => this._cleanup()
+        });
 
-      this._bindEvents();
-      this._subscribeEngine();
-      this.renderer.render();
-      this._renderInspector();
-      this._applyViewportTransform();
-    }
+        this.renderer = new StudioSvgRenderer(this.engine, this.stageWrap, {
+          onEditText: (ann, anchorPt, forcedEdge) => this._openInlineText(ann, anchorPt, forcedEdge),
+          onTextMouseDown: (ann, e) => this._handleTextBadgeDrag(ann, e),
+          onKnotMouseDown: (curve, idx, e) => this._handleKnotDrag(curve, idx, e),
+          onTangentMouseDown: (curve, idx, side, e) => this._handleTangentDrag(curve, idx, side, e),
+          onKnotContextMenu: (curve, idx, e) => this._openKnotMenu(curve, idx, e),
+          onMidpointMouseDown: (curve, segIdx, e) => this._handleMidpointSplitDrag(curve, segIdx, e),
+          onImageMouseDown: (plate, e) => this._handleImageDrag(plate, e),
+          onImageGripMouseDown: (plate, cornerId, e) => this._handleImageResize(plate, cornerId, e),
+          onCalloutGripMouseDown: (ann, cornerId, e) => this._handleCalloutResize(ann, cornerId, e)
+        });
+
+        this._bindEvents();
+        this._subscribeEngine();
+        this.renderer.render();
+        this._renderInspector();
+        this._applyViewportTransform();
+        this._syncWelcomePrompt();
+      }
   _buildTopBar(root) {
     const fileInput = makeElement('input', {
       type: 'file', accept: 'image/*', style: { display: 'none' },
@@ -771,28 +780,29 @@ class QuoraCleanStudioDialog {
       }
     });
   }
-  _subscribeEngine() {
-    this._unsubs = [
-      this.engine.on('state:change', () => {
-        this.renderer.render();
-        this._renderInspector();
-        this.exportBoundsChip.style.display = this.engine.state.exportRect ? 'inline-flex' : 'none';
-      }),
-      this.engine.on('tool:change', () => {
-        this._renderToolRail();
-        this._renderInspector();
-        const tool = this.engine.getTool(this.engine.state.activeTool);
-        this.viewport.style.cursor = tool?.cursor || 'crosshair';
-      }),
-      this.engine.on('history:change', ({ canUndo, canRedo }) => {
-        this.undoBtn.disabled = !canUndo;
-        this.redoBtn.disabled = !canRedo;
-      }),
-      this.engine.on('viewport:change', () => this._applyViewportTransform()),
-      this.engine.on('toast', (msg) => this._showToast(msg))
-    ];
-  }
 
+  _subscribeEngine() {
+      this._unsubs = [
+        this.engine.on('state:change', () => {
+          this.renderer.render();
+          this._renderInspector();
+          this._syncWelcomePrompt();
+          this.exportBoundsChip.style.display = this.engine.state.exportRect ? 'inline-flex' : 'none';
+        }),
+        this.engine.on('tool:change', () => {
+          this._renderToolRail();
+          this._renderInspector();
+          const tool = this.engine.getTool(this.engine.state.activeTool);
+          this.viewport.style.cursor = tool?.cursor || 'crosshair';
+        }),
+        this.engine.on('history:change', ({ canUndo, canRedo }) => {
+          this.undoBtn.disabled = !canUndo;
+          this.redoBtn.disabled = !canRedo;
+        }),
+        this.engine.on('viewport:change', () => this._applyViewportTransform()),
+        this.engine.on('toast', (msg) => this._showToast(msg))
+      ];
+    }
   _getStagePt(e) {
     const rect = this.stageWrap.getBoundingClientRect();
     const z = this.engine.state.zoom || 1.0;
@@ -1470,6 +1480,55 @@ class QuoraCleanStudioDialog {
     window.addEventListener('mousemove', handleMove);
     window.addEventListener('mouseup', handleUp);
   }
+
+  _buildWelcomePrompt() {
+        const card = makeElement('div', {
+          style: {
+            maxWidth: '580px', width: '100%',
+            background: 'rgba(11, 17, 32, 0.90)',
+            border: '1.5px solid rgba(0, 242, 254, 0.4)',
+            borderRadius: '14px', padding: '16px 18px',
+            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(12px)', color: '#f8fafc',
+            display: 'flex', flexDirection: 'column', gap: '10px', pointerEvents: 'none'
+          }
+        }, [
+          makeElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
+            makeElement('strong', { style: { fontSize: '13.5px', color: '#00f2fe' } }, '✨ Quick Start — Drag Anywhere on the Canvas to Begin'),
+            makeElement('button', {
+              className: 'qcs-btn qcs-welcome-action',
+              style: { pointerEvents: 'auto', padding: '2px 8px' },
+              onclick: (e) => { e.stopPropagation(); this._welcomeHidden = true; this._syncWelcomePrompt(); }
+            }, '✕')
+          ]),
+          makeElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px', fontSize: '11.5px', color: '#cbd5e1', lineHeight: '1.45' } }, [
+            makeElement('div', {}, [makeElement('strong', { style: { color: '#00f2fe', display: 'block' } }, '〰️ Drag to Draw Curves & Arrows'), 'Pull smoothly with the 32px tether; back up to erase. Hold Shift for straight arrows.']),
+            makeElement('div', {}, [makeElement('strong', { style: { color: '#00e676', display: 'block' } }, '🎯 Pull Points & Reshape'), 'Switch to Select [V] or drag knots, tangent rays, and midpoint dots directly.']),
+            makeElement('div', {}, [makeElement('strong', { style: { color: '#ffd700', display: 'block' } }, '💬 Turn On Text & Styles'), 'Pick Text [T] or click any curve’s "Note…" box. Toggle Arrow, Ink/Neon, Loop & Colors below.']),
+            makeElement('div', {}, [makeElement('strong', { style: { color: '#c084fc', display: 'block' } }, '🖼️ Drop or Paste Images'), 'Drop an image file onto the canvas or press Ctrl+V, then Copy PNG when done.'])
+          ]),
+          makeElement('div', {
+            style: {
+              background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.35)',
+              borderRadius: '8px', padding: '7px 10px', fontSize: '11px', color: '#fde68a'
+            }
+          }, '🎬 Video Tutorial Coming Soon — A short interactive walkthrough showing curves, point pulling, text, and image markup is on the way.')
+        ]);
+
+        return makeElement('div', {
+          style: {
+            position: 'absolute', inset: '0', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '16px', paddingBottom: '68px', zIndex: '45', pointerEvents: 'none'
+          }
+        }, [card]);
+      }
+
+  _syncWelcomePrompt() {
+        if (!this.welcomePromptEl) return;
+        const st = this.engine.state;
+        const hasContent = (st.placedImages?.length > 0) || (st.annotations?.length > 0);
+        this.welcomePromptEl.style.display = (!hasContent && !this._welcomeHidden) ? 'flex' : 'none';
+      }
 }
 
 globalThis.QuoraCleanStudioDialog = QuoraCleanStudioDialog;
